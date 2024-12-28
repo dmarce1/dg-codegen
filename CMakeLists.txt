@@ -6,27 +6,35 @@ find_package(HDF5 REQUIRED COMPONENTS C CXX)
 find_package(HPX REQUIRED)
 
 set(AT_NDIM "3" CACHE STRING "Number of spatial dimensions")
+set(AT_LEGENDRE_MAX_ORDER "32" CACHE STRING "Sets maximum order for Legendre polynomials")
 set(AT_CHECK_REALS "1" CACHE STRING "Whether to check Real number operations for errors.")
 
-set(ALL_FLAGS  -I${PROJECT_SOURCE_DIR}/include -DNDIM=${AT_NDIM} -DCHECK_REALS=${AT_CHECK_REALS} -Wall)
+set(ALL_FLAGS  -Wall -I${PROJECT_SOURCE_DIR}/include -DNDIM=${AT_NDIM} -DCHECK_REALS=${AT_CHECK_REALS} -DLEGENDRE_MAX_ORDER=${AT_LEGENDRE_MAX_ORDER})
 set(CXX_FLAGS  ${ALL_FLAGS} -march=native )
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
 	src/main.cpp
+	src/test.cpp
+	src/LegendreP.cpp
 ) 
 
 set(astrotiger_header
+	include/Complex.hpp
+	include/Integrate.hpp
 	include/Matrix.hpp
 	include/Numbers.hpp
+	include/LegendreP.hpp
+	include/Polynomial.hpp
 	include/Real.hpp
-	include/Vector.hpp
 	include/Utilities.hpp
+	include/Vector.hpp
 ) 
 
 add_hpx_executable(
   astrotiger
   DEPENDENCIES
+  stdc++_libbacktrace
   SOURCES
     ${astrotiger_src}
   HEADERS

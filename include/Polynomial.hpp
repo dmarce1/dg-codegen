@@ -12,83 +12,111 @@
 #include <map>
 #include <cmath>
 #include <math.h>
+#include <string>
+#include <vector>
 
 #include "Complex.hpp"
 #include "Vector.hpp"
 
 namespace Math {
 
-template<typename Type, int Degree = 0>
-struct Polynomial: public std::array<Type, Degree + 1> {
-	using base_type = std::array<Type, Degree + 1>;
-	Polynomial(Type init = Type(0)) {
-		(*this)[0] = init;
-		for (int n = 1; n <= Degree; n++) {
-			(*this)[n] = Type(0);
-		}
+template<typename Type>
+struct Polynomial: public std::vector<Type> {
+	using base_type = std::vector<Type>;
+	Polynomial(Type d) {
+		this->Polynomial::operator[](0) = d;
+	}
+	Polynomial() = default;
+	~Polynomial() = default;
+	Polynomial(base_type const &other) :
+			base_type(other) {
+	}
+	Polynomial(Polynomial const&) = default;
+	Polynomial& operator=(Polynomial const&) = default;
+	int degree() const {
+		return base_type::size() - 1;
 	}
 	Type operator()(Type const &x) const {
 		Polynomial const &a = *this;
-		Type f = Type(a[Degree]);
-		for (int n = Degree - 1; n >= 0; n--) {
+		Type f = Type(a[degree()]);
+		for (int n = degree() - 1; n >= 0; n--) {
 			f = x * f + a[n];
 		}
 		return f;
 	}
-	Complex<Type> operator()(Complex<Type> const &x) const {
+	Polynomial<Type> operator()(Polynomial<Type> const &x) const {
 		Polynomial const &a = *this;
-		Complex<Type> f = Type(a[Degree]);
-		for (int n = Degree - 1; n >= 0; n--) {
+		Polynomial<Type> f = Type(a[degree()]);
+		for (int n = degree() - 1; n >= 0; n--) {
 			f = x * f + a[n];
 		}
 		return f;
 	}
-	template<int M>
-	Polynomial<Type, std::max(M, Degree)> operator+(Polynomial<Type, M> const &B) const {
-		constexpr int N = Degree;
-		constexpr int MaxNM = std::max(N, M);
-		constexpr int MinNM = std::min(N, M);
-		Polynomial const &A = *this;
-		Polynomial<Type, MaxNM> C;
-		for (int l = 0; l <= MinNM; l++) {
-			C[l] = A[l] + B[l];
+	Complex operator()(Complex const &x) const {
+		Polynomial const &a = *this;
+		Complex f = Complex(Type(a[degree()]));
+		for (int n = degree() - 1; n >= 0; n--) {
+			f = x * f + a[n];
 		}
-		for (int n = MinNM + 1; n <= N; n++) {
-			C[n] = A[n];
+		return f;
+	}
+	Type& operator[](int i) {
+		if (int(base_type::size()) <= i) {
+			const int oldSize = base_type::size();
+			base_type::resize(i + 1);
+			for (int n = oldSize; n < int(base_type::size()); n++) {
+				base_type::operator[](n) = Type(0);
+			}
 		}
-		for (int m = MinNM + 1; m <= M; m++) {
-			C[m] = B[m];
+		return base_type::operator[](i);
+	}
+	Type operator[](int i) const {
+		if (int(base_type::size()) <= i) {
+			return Type(0);
+		} else {
+			return base_type::operator[](i);
 		}
-		return C;
+	}
+	Polynomial<Type> operator+(Polynomial<Type> const &B) const {
+		Polynomial<Type> A = *this;
+		int const deg = std::max(A.degree(), B.degree());
+		for (int l = 0; l <= deg; l++) {
+			A[l] += B[l];
+		}
+		return A;
 	}
 	Polynomial operator-() const {
 		Polynomial A = *this;
-		for (int n = 0; n <= Degree; n++) {
+		for (int n = 0; n <= degree(); n++) {
 			A[n] = -A[n];
 		}
 		return A;
 	}
-	template<int M>
-	auto operator*(Polynomial<Type, M> const &B) const {
-		constexpr int N = Degree;
+	Polynomial operator*(Polynomial<Type> const &B) const {
 		Polynomial const &A = *this;
-		Polynomial<Type, N + M> C;
+		Polynomial<Type> C;
+		int const M = A.degree();
+		int const N = B.degree();
+		C.resize(N + M + 1);
 		for (int n = 0; n <= N + M; n++) {
+			C[n] = Type(0);
 			for (int m = std::max(0, n - N); m <= std::min(n, M); m++) {
 				C[n] += A[m] * B[n - m];
 			}
 		}
 		return C;
 	}
-	Polynomial& operator*=(Polynomial<Type, 0> const &B) {
-		Polynomial A = *this;
-		for (int n = 0; n <= Degree; n++) {
-			A[n] *= B[0];
-		}
+	Polynomial operator*=(Polynomial<Type> const &A) {
+		*this = *this * A;
 		return *this;
 	}
-	auto operator-(auto const &other) const {
-		return *this + -other;
+	auto operator-(auto const &B) const {
+		Polynomial<Type> A = *this;
+		int const deg = std::max(A.degree(), B.degree());
+		for (int l = 0; l <= deg; l++) {
+			A[l] -= B[l];
+		}
+		return A;
 	}
 	auto& operator+=(auto const &other) {
 		*this = *this + other;
@@ -99,10 +127,11 @@ struct Polynomial: public std::array<Type, Degree + 1> {
 		return *this;
 	}
 	std::string toString() const {
+		using std::to_string;
 		std::string str;
 		str += "(";
 		for (int n = 0; n < int(base_type::size()); n++) {
-			str += std::to_string((*this)[n]);
+			str += to_string((*this)[n]);
 			if (n + 1 < int(base_type::size())) {
 				str += ", ";
 			}
@@ -110,45 +139,101 @@ struct Polynomial: public std::array<Type, Degree + 1> {
 		str += ")";
 		return str;
 	}
+	Polynomial& operator>>=(int m) {
+		Polynomial &A = *this;
+		for (int n = m; n <= degree(); n++) {
+			A[n - m] = A[n];
+		}
+		A.resize(degree() + 1 - m);
+		return *this;
+	}
+	Polynomial& operator<<=(int m) {
+		Polynomial &A = *this;
+		A.resize(degree() + 1 + m);
+		int n = degree();
+		for (; n >= m; n--) {
+			A[n] = A[n - m];
+		}
+		for (; n >= 0; n--) {
+			A[n] = Type(0);
+		}
+		return *this;
+	}
+	Polynomial operator>>(int m) const {
+		auto A = *this;
+		A >>= m;
+		return A;
+	}
+	Polynomial operator<<(int m) const {
+		auto A = *this;
+		A <<= m;
+		return A;
+	}
+	Polynomial truncate_lo(int m) const {
+		Polynomial A = *this;
+		for (int n = 0; n < m; n++) {
+			A[n] = Type(0);
+		}
+		return A;
+	}
+	Polynomial truncate_hi(int m) const {
+		Polynomial A = *this;
+		A.resize(degree() + 1 - m);
+		return A;
+	}
 };
 
-template<typename Type, int N, int M>
-auto polynomialDivision(Polynomial<Type, N> D, Polynomial<Type, M> I) {
-	Polynomial<Type, N - M> Q;
-	Polynomial<Type, M - 1> R;
+template<typename Type>
+auto polynomialDivision(Polynomial<Type> const &D, Polynomial<Type> const &I) {
+	int const N = D.degree();
+	int const M = I.degree();
+	Polynomial<Type> Q;
+	Polynomial<Type> R = D;
 	for (int n = N; n >= M; n--) {
-		Type const q = D[n] / I[M];
-		D[n] -= D[n];
+		Type const q = R[n] / I[M];
+		R[n] = Type(0);
 		for (int m = 1; m <= M; m++) {
-			D[n - m] -= q * I[M - m];
+			R[n - m] -= q * I[M - m];
 		}
 		Q[n - M] = q;
 	}
-	for (int n = 0; n < M; n++) {
-		R[n] = D[n];
-	}
 	struct div_t {
-		Polynomial<Type, N - M> quot;
-		Polynomial<Type, M - 1> rem;
+		Polynomial<Type> quot;
+		Polynomial<Type> rem;
 	};
 	return div_t { Q, R };
 }
 
-template<typename Type, int N>
-Polynomial<Type, N - 1> polynomialDerivative(Polynomial<Type, N> const &F) {
-	Polynomial<Type, N - 1> dfdx;
-	for (int n = 0; n < N; n++) {
+template<typename Type>
+Polynomial<Type> polynomialDerivative(Polynomial<Type> const &F) {
+	Polynomial<Type> dfdx(Type(0));
+	for (int n = 0; n < F.degree(); n++) {
 		dfdx[n] = Type(n + 1) * F[n + 1];
 	}
 	return dfdx;
 }
 
-template<typename Type, int Degree>
-Type polynomialFindRoot(Polynomial<Type, Degree> const &F, Type guess = 0.5) {
+template<typename Type>
+Polynomial<Type> polynomialAntiDerivative(Polynomial<Type> const &dfdx) {
+	Polynomial<Type> f;
+	for (int n = 0; n <= dfdx.degree(); n++) {
+		f[n + 1] = dfdx[n] / Type(n + 1);
+	}
+	return f;
+}
+
+template<typename Type>
+Type polynomialIntegrate(Polynomial<Type> const &f, Type const &a, Type const &b) {
+	auto const F = polynomialAntiDerivative(f);
+	return F(b) - F(a);
+}
+
+template<typename Type>
+Type polynomialFindRoot(Polynomial<Type> const &F, Type guess = 0.5) {
 	constexpr int maxIters = 64;
 	constexpr Type tolerance = Type(100) * std::numeric_limits<Type>::epsilon();
 	auto const dFdx = polynomialDerivative(F);
-	auto const normInv = abs(Type(1) / F[Degree]);
+	auto const normInv = abs(Type(1) / F.back());
 	Type x = guess;
 	for (int iterCount = 0; iterCount < maxIters; iterCount++) {
 		auto const f = F(x);
@@ -164,25 +249,18 @@ Type polynomialFindRoot(Polynomial<Type, Degree> const &F, Type guess = 0.5) {
 	throw;
 }
 
-template<typename Type, int Degree>
-Complex<Type> polynomialFindComplexRoot(Polynomial<Type, Degree> const &F,
-		Complex<Type> guess = Complex<Type>(0.5, 0.1)) { constexpr
-	int maxIters = 64;
-	constexpr Type tolerance = Type(100) * std::numeric_limits<Type>::epsilon();
+template<typename Type>
+Complex polynomialFindComplexRoot(Polynomial<Type> const &F, Complex guess = Complex(0.5, 0.1)) { constexpr
+	int maxIters = 1000;
+	const Type tolerance = Type(1000 * std::numeric_limits<double>::epsilon());
 	auto const dFdx = polynomialDerivative(F);
-//auto const d2Fdx2 = polynomialDerivative(dFdx);
-	auto const normInv = std::abs(Type(1) / F[Degree]);
-	Complex<Type> x = guess;
+	auto const normInv = abs(Type(1) / F.back());
+	Complex x = guess;
 	for (int iterCount = 0; iterCount < maxIters; iterCount++) {
-		Complex<Type> const f = F(x);
-		//	Complex<Type> const d2fdx2 = d2Fdx2(x);
-		Complex<Type> const dfdx = dFdx(x);
-		Complex<Type> dx;
+		Complex const f = F(x);
+		Complex const dfdx = dFdx(x);
+		Complex dx;
 		dx = -f / dfdx;
-		//if (abs(d2fdx2 * dx) > abs(dfdx)) {
-		//	dx /= abs(dx);
-		//	dx *= abs(f / (dx * d2fdx2));
-		//}
 		x += dx;
 		Type const error = abs(f) * normInv;
 		if (error < tolerance) {
@@ -193,59 +271,58 @@ Complex<Type> polynomialFindComplexRoot(Polynomial<Type, Degree> const &F,
 	throw;
 }
 
-template<class T = double>
+template<class T>
 T randOne() {
-	static constexpr T one = 1;
-	static constexpr T two = 2;
-	static constexpr T norm = one / (T(RAND_MAX) + one);
+	static const T one = T(1);
+	static const T two = T(2);
+	static const T norm = one / (T(RAND_MAX) + one);
 	return norm * (two * T(rand()) + one) - one;
 }
 
-template<typename Type, int Degree>
-std::array<Complex<Type>, Degree> polynomialFindAllRoots(Polynomial<Type, Degree> const &F) {
-	if constexpr (Degree == 0) {
-		return std::array<Complex<Type>, 0>();
-	} else if constexpr (Degree == 1) {
-		std::array<Complex<Type>, 1> root;
-		root[0] = -F[0] / F[1];
+template<typename Type>
+std::vector<Complex> polynomialFindAllRoots(Polynomial<Type> const &F) {
+	if (F.degree() == 0) {
+		return std::vector<Complex>();
+	} else if (F.degree() == 1) {
+		std::vector<Complex> root(1, Complex(-F[0] / F[1]));
 		return root;
 	} else {
-		static constexpr Type tinyEps = Type(100) * std::numeric_limits<Type>::epsilon();
-		std::array<Complex<Type>, Degree> roots;
+		static const Type tinyEps = Type(1000.0 * std::numeric_limits<double>::epsilon());
+		std::vector<Complex> roots;
 		Type upperBound = Type(0);
-		Type const scaleInv = fabs(Type(1) / F[Degree]);
-		for (int n = 0; n < Degree; n++) {
-			Type const toPower = Type(1) / Type(Degree - n);
-			Type const thisBound = pow(fabs(F[n]) * scaleInv, toPower);
+		Type const scaleInv = abs(Type(1) / F.back());
+		for (int n = 0; n < F.degree(); n++) {
+			Type const toPower = Type(1) / Type(F.degree() - n);
+			Type const thisBound = pow(abs(F[n]) * scaleInv, toPower);
 			upperBound = std::max(upperBound, thisBound);
 		}
 		upperBound *= Type(2);
 		Type const lowerBound = Type(1) / upperBound;
-		Type const theta = M_PI * randOne();
-		Type const radius = fabs(randOne()) * (upperBound - lowerBound) + lowerBound;
-		Complex<Type> z = radius * exp(1.0_Imag * theta);
+		Type const theta = Type(M_PI) * randOne<Type>();
+		Type const radius = abs(randOne<Type>()) * (upperBound - lowerBound) + lowerBound;
+		Complex z = radius * exp(1.0_Imag * theta);
 		z = polynomialFindComplexRoot(F, z);
-		roots.back() = z;
-		Polynomial<Type, 1> xmz;
-		xmz[0] = -z.real();
+		roots.push_back(z);
+		Polynomial<Type> xmz;
 		xmz[1] = Type(1);
-		if (std::abs(z.imaginary()) < tinyEps) {
+		xmz[0] = -z.real();
+		if (abs(z.imaginary()) < tinyEps) {
 			auto const divResult = polynomialDivision(F, xmz);
-			auto const nextArray = polynomialFindAllRoots(divResult.quot);
-			for (int n = 0; n < Degree - 1; n++) {
-				roots[n] = nextArray[n];
+			auto const nextRoots = polynomialFindAllRoots(divResult.quot);
+			for (auto const &r : nextRoots) {
+				roots.push_back(r);
 			}
 		} else {
-			Polynomial<Type, 2> xmz2;
+			Polynomial<Type> xmz2;
 			xmz2[0] = norm(z);
 			xmz2[1] = Type(-2) * z.real();
 			xmz2[2] = Type(1);
 			z = conj(z);
-			roots[Degree - 2] = conj(roots[Degree - 1]);
+			roots.push_back(z);
 			auto const divResult = polynomialDivision(F, xmz2);
-			auto const nextArray = polynomialFindAllRoots(divResult.quot);
-			for (int n = 0; n < Degree - 2; n++) {
-				roots[n] = nextArray[n];
+			auto const nextRoots = polynomialFindAllRoots(divResult.quot);
+			for (auto const &r : nextRoots) {
+				roots.push_back(r);
 			}
 		}
 		return roots;

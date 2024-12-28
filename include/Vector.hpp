@@ -9,8 +9,9 @@
 #define INCLUDE_VECTOR_HPP_
 
 #include <array>
+#include <cstddef>
 
-#include "Matrix.hpp"
+#include "Utilities.hpp"
 
 namespace Math {
 
@@ -117,17 +118,16 @@ Vector<Type, Ndim> constantVector(Type constant) {
 
 template<typename Type, int Ndim>
 Type vectorDotProduct(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
-	return matrixTranspose(B) * A;
+	Type product = Type(0);
+	for (int d = 0; d < Ndim; d++) {
+		product += A[d] * B[d];
+	}
+	return product;
 }
 
 template<typename Type, int Ndim>
 Type vectorNorm(Vector<Type, Ndim> const &A) {
 	return vectorDotProduct(A, A);
-}
-
-template<typename Type, int Ndim>
-SquareMatrix<Type, Ndim> vectorTensorProduct(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
-	return A * matrixTranspose(B);
 }
 
 template<typename Type, int Ndim>
