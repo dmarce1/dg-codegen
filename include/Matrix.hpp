@@ -357,7 +357,7 @@ std::string to_string(Matrix<Type, RowCount, ColumnCount> const &M) {
 }
 
 template<typename Type, int N>
-Matrix<Type, 1, N> toColumnVector(Vector<Type, N> const &vec) {
+Matrix<Type, N, 1> toColumnVector(Vector<Type, N> const &vec) {
 	Matrix<Type, N, 1> C;
 	for (int r = 0; r < N; r++) {
 		C[r, 0] = vec[r];

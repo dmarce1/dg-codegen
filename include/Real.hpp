@@ -146,7 +146,7 @@ struct Real {
 		return a;
 	}
 	friend Real sqrt(Real a) {
-	//	nonneg_check(a);
+		nonneg_check(a);
 		debug_check(a);
 		a.value = std::sqrt(a.value);
 		return a;
