@@ -154,8 +154,27 @@ struct Real {
 	friend Real pow(Real a, Real b) {
 		nonneg_check(a);
 		debug_check(a);
+		debug_check(b);
 		a.value = std::pow(a.value, b.value);
 		return a;
+	}
+	friend Real pow(Real x, int n) {
+		nonneg_check(x);
+		debug_check(x);
+		if (n < 0) {
+			return Real(1) / pow(x, -n);
+		} else {
+			Real y = Real(1);
+			Real xn = x;
+			while (n) {
+				if (n & 1) {
+					y *= xn;
+				}
+				xn *= xn;
+				n >>= 1;
+			}
+			return y;
+		}
 	}
 	friend Real max(Real a, Real b) {
 		debug_check(a);

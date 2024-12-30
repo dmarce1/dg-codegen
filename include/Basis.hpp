@@ -11,35 +11,66 @@
 #include "LegendreP.hpp"
 #include "Numbers.hpp"
 #include "Real.hpp"
+#include "Vector.hpp"
 
 #include <functional>
 
-template<int P>
+template<int N>
+struct QuadratureRules {
+	Math::Vector<Real, N> x;
+	Math::Vector<Real, N> w;
+};
+
+template<int N>
+QuadratureRules<N> gaussLobattoRules() {
+	Real const one(1);
+	Real const two(2);
+	QuadratureRules<N> rules;
+	Legendre::Polynomials<N - 1> legendreP;
+	auto const Pn = legendreP(N - 1);
+	auto const dPndx = polynomialDerivative(Pn);
+	auto const xRoots = Math::polynomialFindAllRoots(dPndx);
+	rules.x[0] = -one;
+	rules.w[0] = one;
+	for (int n = 0; n < N - 2; n++) {
+		Real const xi = xRoots[n].real();
+		rules.x[n + 1] = xi;
+		rules.w[n + 1] = one / sqr(Pn(xi));
+	}
+	rules.x[N - 1] = one;
+	rules.w[N - 1] = one;
+	rules.w *= two / Real(N * (N - 1));
+	return rules;
+}
+
+template<int O>
 struct Basis {
-	Basis() {
-		Legendre::Polynomials<P> polys;
-		for (int n = 0; n < P; n++) {
-			Math::Polynomial<Real> X;
-			X[1] = Real(2);
-			Pn[n] = polys(n)(X);
+	Basis(Real dx_) :
+			dx(dx_) {
+		Real const two(2.0);
+		Real const one(1.0);
+		Real const half(0.5);
+		Legendre::Polynomials<O> legendreP;
+		Math::Polynomial<Real> x;
+		x[1] = Real(1);
+		for (int n = 0; n < O; n++) {
+			Real const norm = pow(dx, n) / Real(Math::binomial(2 * n, n));
+			Pn[n] = legendreP(n);
+			Pn[n] = norm * Pn[n](two * x / dx);
 			dPndx[n] = Math::polynomialDerivative(Pn[n]);
-			auto const Pn2 = Pn[n] * Pn[n];
-			M[n] = Math::polynomialIntegrate(Pn2, -Real(0.5), +Real(0.5));
-			pt[n] = Real(0.5) * polys.point(n);
-			wt[n] = Real(0.5) * polys.weight(n);
+			a[n] = pow(dx, n + 1) / polynomialIntegrate(Pn[n] * Pn[n], -half * dx, half * dx);
+			pt[n] = half * dx * legendreP.point(n);
+			wt[n] = half * dx * legendreP.weight(n);
 		}
 	}
 	Real function(int n, Real x) const {
 		return Pn[n](x);
 	}
-	Polynomial<Real> function(int n) const {
-		return Pn[n];
-	}
 	Real derivative(int n, Real x) const {
 		return dPndx[n](x);
 	}
-	Real boundaryValue(int n, int sgn) const {
-		return Pn[n](Real(sgn));
+	Real coeff(int n) const {
+		return a[n];
 	}
 	Real qPoint(int n) const {
 		return pt[n];
@@ -47,18 +78,19 @@ struct Basis {
 	Real qWeight(int n) const {
 		return wt[n];
 	}
-	Real mass(int n) const {
-		return M[n];
+	Polynomial<Real> function(int n) const {
+		return Pn[n];
 	}
-	Real massInv(int n) const {
-		return Real(1) / M[n];
+	Vector<Real, O> const& coeffs() const {
+		return a;
 	}
 private:
-	Vector<Math::Polynomial<Real>, P> Pn;
-	Vector<Math::Polynomial<Real>, P> dPndx;
-	Vector<Real, P> M;
-	Vector<Real, P> pt;
-	Vector<Real, P> wt;
+	Vector<Math::Polynomial<Real>, O> Pn;
+	Vector<Math::Polynomial<Real>, O> dPndx;
+	Vector<Real, O> a;
+	Vector<Real, O> pt;
+	Vector<Real, O> wt;
+	Real dx;
 };
 
 #endif /* INCLUDE_BASIS_HPP_ */

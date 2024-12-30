@@ -25,7 +25,7 @@ constexpr int rho_i = 0;
 constexpr int vel_i = 1;
 constexpr int eps_i = 2;
 
-#define fGamma (7.0 / 5.0)
+#define fGamma (5.0 / 3.0)
 #define Nfield 3
 
 template<typename Type, int Ndim>
@@ -181,16 +181,8 @@ struct HLLCSolver {
 		Type const pR = (gam - one) * rhoR * epsR;
 		Type const aL = sqrt(gam * pL * rhoInvL);
 		Type const aR = sqrt(gam * pR * rhoInvR);
-		Type const eta0 = (gam + one) / (two * gam);
-		Type const z = (gam - one) / (two * gam);
-		Type const pRz = pow(pR, z);
-		Type const pLz = pow(pL, z);
-		Type const pz = (aL + aR - half * (gam - one) * (uR - uL)) * pLz * pRz / (aL * pRz + aR * pLz);
-		Type const p0 = pow(max(zero, pz), one / z);
-		Type const qL = (p0 < pL) ? one : sqrt(one + eta0 * (p0 / pL - one));
-		Type const qR = (p0 < pR) ? one : sqrt(one + eta0 * (p0 / pR - one));
-		Type const sL = uL - qL * aL;
-		Type const sR = uR + qR * aR;
+		Type const sL = min(uL - aL, uR - aR);
+		Type const sR = max(uL + aL, uR + aR);
 		Type const wL = rhoL * (sL - uL);
 		Type const wR = rhoR * (sR - uR);
 		Type const s0 = (pR - pL + wL * uL - wR * uR) / (wL - wR);
@@ -217,6 +209,18 @@ struct HLLCSolver {
 		return rc;
 	}
 };
+/*Type const eta0 = (gam + one) / (two * gam);
+Type const z = (gam - one) / (two * gam);
+Type const pRz = pow(pR, z);
+Type const pLz = pow(pL, z);
+Type const pz = (aL + aR - half * (gam - one) * (uR - uL)) * pLz * pRz / (aL * pRz + aR * pLz);
+Type const p0 = pow(max(zero, pz), one / z);
+Type const qL = (p0 < pL) ? one : sqrt(one + eta0 * (p0 / pL - one));
+Type const qR = (p0 < pR) ? one : sqrt(one + eta0 * (p0 / pR - one));
+Type const sL = uL - qL * aL;
+Type const sR = uR + qR * aR;*/
+
+
 /*
  template<typename Type, int Ndim>
  struct RoeSolver {

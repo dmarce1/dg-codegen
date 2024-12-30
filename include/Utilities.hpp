@@ -45,7 +45,7 @@
 	}                                                                        \
 	CLASS operator OPERATOR##=(SCALAR const &B) {                            \
     	CLASS &A = *this;                                                    \
-		for (int n = 0; n < size(); n++) {                                   \
+		for (int n = 0; n < int(size()); n++) {                              \
 			A[n] OPERATOR##= B;                                              \
 		}                                                                    \
 		return *this;                                                        \
@@ -55,7 +55,7 @@
 	CLASS operator OPERATOR () const {                    \
         CLASS C;                                          \
 		CLASS const &A = *this;                           \
-		for (int n = 0; n < size(); n++) {                \
+		for (int n = 0; n < int(size()); n++) {           \
 			C[n] = OPERATOR A[n];                         \
 		}                                                 \
 		return C;                                         \

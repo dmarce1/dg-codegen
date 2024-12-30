@@ -77,14 +77,6 @@ struct Polynomial: public std::vector<Type> {
 			return base_type::operator[](i);
 		}
 	}
-	Polynomial<Type> operator+(Polynomial<Type> const &B) const {
-		Polynomial<Type> A = *this;
-		int const deg = std::max(A.degree(), B.degree());
-		for (int l = 0; l <= deg; l++) {
-			A[l] += B[l];
-		}
-		return A;
-	}
 	Polynomial operator-() const {
 		Polynomial A = *this;
 		for (int n = 0; n <= degree(); n++) {
@@ -92,9 +84,25 @@ struct Polynomial: public std::vector<Type> {
 		}
 		return A;
 	}
+	Polynomial operator+(Polynomial const &B) const {
+		Polynomial A = *this;
+		int const deg = std::max(A.degree(), B.degree());
+		for (int l = 0; l <= deg; l++) {
+			A[l] += B[l];
+		}
+		return A;
+	}
+	Polynomial operator-(auto const &B) const {
+		Polynomial A = *this;
+		int const deg = std::max(A.degree(), B.degree());
+		for (int l = 0; l <= deg; l++) {
+			A[l] -= B[l];
+		}
+		return A;
+	}
 	Polynomial operator*(Polynomial<Type> const &B) const {
 		Polynomial const &A = *this;
-		Polynomial<Type> C;
+		Polynomial C;
 		int const M = A.degree();
 		int const N = B.degree();
 		C.resize(N + M + 1);
@@ -106,24 +114,24 @@ struct Polynomial: public std::vector<Type> {
 		}
 		return C;
 	}
+	Polynomial& operator+=(auto const &other) {
+		*this = *this + other;
+		return *this;
+	}
+	Polynomial& operator-=(auto const &other) {
+		*this = *this - other;
+		return *this;
+	}
 	Polynomial operator*=(Polynomial<Type> const &A) {
 		*this = *this * A;
 		return *this;
 	}
-	auto operator-(auto const &B) const {
-		Polynomial<Type> A = *this;
-		int const deg = std::max(A.degree(), B.degree());
-		for (int l = 0; l <= deg; l++) {
-			A[l] -= B[l];
-		}
-		return A;
-	}
-	auto& operator+=(auto const &other) {
-		*this = *this + other;
+	Polynomial& operator*=(Type const &a) const {
+		*this = a * *this;
 		return *this;
 	}
-	auto& operator-=(auto const &other) {
-		*this = *this - other;
+	Polynomial& operator/=(Type const &a) const {
+		*this = a / *this;
 		return *this;
 	}
 	std::string toString() const {
@@ -139,49 +147,26 @@ struct Polynomial: public std::vector<Type> {
 		str += ")";
 		return str;
 	}
-	Polynomial& operator>>=(int m) {
-		Polynomial &A = *this;
-		for (int n = m; n <= degree(); n++) {
-			A[n - m] = A[n];
-		}
-		A.resize(degree() + 1 - m);
-		return *this;
-	}
-	Polynomial& operator<<=(int m) {
-		Polynomial &A = *this;
-		A.resize(degree() + 1 + m);
-		int n = degree();
-		for (; n >= m; n--) {
-			A[n] = A[n - m];
-		}
-		for (; n >= 0; n--) {
-			A[n] = Type(0);
-		}
-		return *this;
-	}
-	Polynomial operator>>(int m) const {
-		auto A = *this;
-		A >>= m;
-		return A;
-	}
-	Polynomial operator<<(int m) const {
-		auto A = *this;
-		A <<= m;
-		return A;
-	}
-	Polynomial truncate_lo(int m) const {
-		Polynomial A = *this;
-		for (int n = 0; n < m; n++) {
-			A[n] = Type(0);
-		}
-		return A;
-	}
-	Polynomial truncate_hi(int m) const {
-		Polynomial A = *this;
-		A.resize(degree() + 1 - m);
-		return A;
-	}
 };
+
+template<typename Type>
+Polynomial<Type> operator*(Type const &a, Polynomial<Type> const &B) {
+	Polynomial<Type> C;
+	for (int n = 0; n <= B.degree(); n++) {
+		C[n] = a * B[n];
+	}
+	return C;
+}
+
+template<typename Type>
+Polynomial<Type> operator*(Polynomial<Type> const &B, Type const &a) {
+	return a * B;
+}
+
+template<typename Type>
+Polynomial<Type> operator/(Polynomial<Type> const &B, Type const &a) {
+	return B * (Real(1) / a);
+}
 
 template<typename Type>
 auto polynomialDivision(Polynomial<Type> const &D, Polynomial<Type> const &I) {
