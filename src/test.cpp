@@ -124,6 +124,8 @@ void compute2() {
 	fclose(fp);
 }
 
+#include <stdio.h>
+
 void compute() {
 	HLLCSolver<Real, 1> riemann;
 	std::vector<Vector<state_type, P>> U(N);

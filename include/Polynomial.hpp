@@ -24,7 +24,7 @@ template<typename Type>
 struct Polynomial: public std::vector<Type> {
 	using base_type = std::vector<Type>;
 	Polynomial(Type d) {
-		this->Polynomial::operator[](0) = d;
+		*this = std::vector<Type>(1, Type(d));
 	}
 	Polynomial() = default;
 	~Polynomial() = default;
@@ -62,16 +62,14 @@ struct Polynomial: public std::vector<Type> {
 	}
 	Type& operator[](int i) {
 		if (int(base_type::size()) <= i) {
-			const int oldSize = base_type::size();
-			base_type::resize(i + 1);
-			for (int n = oldSize; n < int(base_type::size()); n++) {
-				base_type::operator[](n) = Type(0);
-			}
+			base_type::resize(i + 1, Type(0));
 		}
 		return base_type::operator[](i);
 	}
 	Type operator[](int i) const {
 		if (int(base_type::size()) <= i) {
+			std::cout << std::to_string(std::stacktrace::current());
+			abort();
 			return Type(0);
 		} else {
 			return base_type::operator[](i);
@@ -86,16 +84,14 @@ struct Polynomial: public std::vector<Type> {
 	}
 	Polynomial operator+(Polynomial const &B) const {
 		Polynomial A = *this;
-		int const deg = std::max(A.degree(), B.degree());
-		for (int l = 0; l <= deg; l++) {
+		for (int l = 0; l <= B.degree(); l++) {
 			A[l] += B[l];
 		}
 		return A;
 	}
 	Polynomial operator-(auto const &B) const {
 		Polynomial A = *this;
-		int const deg = std::max(A.degree(), B.degree());
-		for (int l = 0; l <= deg; l++) {
+		for (int l = 0; l <= B.degree(); l++) {
 			A[l] -= B[l];
 		}
 		return A;
@@ -122,7 +118,7 @@ struct Polynomial: public std::vector<Type> {
 		*this = *this - other;
 		return *this;
 	}
-	Polynomial operator*=(Polynomial<Type> const &A) {
+	Polynomial& operator*=(Polynomial<Type> const &A) {
 		*this = *this * A;
 		return *this;
 	}
