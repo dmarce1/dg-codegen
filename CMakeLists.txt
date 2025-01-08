@@ -17,10 +17,12 @@ set(astrotiger_src
 	src/main.cpp
 	src/test.cpp
 	src/LegendreP.cpp
+	src/Sod.cpp
 ) 
 
 set(astrotiger_header
 	include/Complex.hpp
+	include/Sod.hpp
 	include/Integrate.hpp
 	include/Matrix.hpp
 	include/Numbers.hpp

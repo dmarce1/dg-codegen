@@ -60,12 +60,13 @@
 		}                                                 \
 		return C;                                         \
 	}
-#define USE_STANDARD_ARITHMETIC(CLASS, TYPE) \
-	BINARY_OPERATOR_MEMBER(CLASS, +)         \
-	BINARY_OPERATOR_MEMBER(CLASS, -)         \
-	UNARY_OPERATOR_MEMBER(CLASS, +)          \
-	UNARY_OPERATOR_MEMBER(CLASS, -)          \
-    BINARY_OPERATOR_MEMBER_SCALAR(CLASS, TYPE, *)
+#define USE_STANDARD_ARITHMETIC(CLASS, TYPE)      \
+	BINARY_OPERATOR_MEMBER(CLASS, +)              \
+	BINARY_OPERATOR_MEMBER(CLASS, -)              \
+	UNARY_OPERATOR_MEMBER(CLASS, +)               \
+	UNARY_OPERATOR_MEMBER(CLASS, -)               \
+    BINARY_OPERATOR_MEMBER_SCALAR(CLASS, TYPE, *) \
+    BINARY_OPERATOR_MEMBER_SCALAR(CLASS, TYPE, /)
 
 #define USE_STANDARD_DEFAULTS(CLASS)          \
 	constexpr CLASS() = default;              \

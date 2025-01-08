@@ -1,12 +1,5 @@
-/*
- * Quadrature.hpp
- *
- *  Created on: Dec 27, 2024
- *      Author: dmarce1
- */
-
-#ifndef INCLUDE_BASIS_HPP_
-#define INCLUDE_BASIS_HPP_
+#ifndef INCLUDE_QUADRATURE_HPP_
+#define INCLUDE_QUADRATURE_HPP_
 
 #include "LegendreP.hpp"
 #include "Numbers.hpp"
@@ -19,6 +12,14 @@ template<int N>
 struct QuadratureRules {
 	Math::Vector<Real, N> x;
 	Math::Vector<Real, N> w;
+	bool withEndpoints;
+	Real integrate(std::function<Real(Real)> const &f, Real dx) const {
+		Real I = Real(0);
+		for (int n = 0; n < N; n++) {
+			I += f(Real(0.5) * x[n] * dx) * w[n] * Real(0.5) * dx;
+		}
+		return I;
+	}
 	std::string toString() const {
 		std::string str;
 		for (int n = 0; n < N; n++) {
@@ -32,7 +33,7 @@ struct QuadratureRules {
 	}
 };
 
-Polynomial<Real> openLagrangePolynomial(int n, int j, Real a, Real b) {
+inline Polynomial<Real> openLagrangePolynomial(int n, int j, Real a, Real b) {
 	Real const one(1);
 	Real const half(0.5);
 	Real const zero(0);
@@ -53,7 +54,7 @@ Polynomial<Real> openLagrangePolynomial(int n, int j, Real a, Real b) {
 	return p;
 }
 
-Polynomial<Real> closedLagrangePolynomial(int n, int j, Real a, Real b) {
+inline Polynomial<Real> closedLagrangePolynomial(int n, int j, Real a, Real b) {
 	Real const one(1);
 	Real const zero(0);
 	Polynomial < Real > p(one);
@@ -85,6 +86,7 @@ QuadratureRules<N> closedNewtonCotesRules(Real a = Real(-1), Real b = Real(1)) {
 		auto const pl = closedLagrangePolynomial(N, i, a, b);
 		rules.w[i] = polynomialIntegrate(pl, a, b);
 	}
+	rules.withEndpoints = true;
 	return rules;
 }
 
@@ -107,6 +109,37 @@ QuadratureRules<N> gaussLobattoRules() {
 	rules.x[N - 1] = one;
 	rules.w[N - 1] = one;
 	rules.w *= two / Real(N * (N - 1));
+	rules.withEndpoints = true;
+	return rules;
+}
+
+template<int N>
+QuadratureRules<N> gaussLegendreRules() {
+	Real const half(0.5), one(1.0), two(2.0);
+	QuadratureRules<N> rules;
+	Math::Polynomial<Real> Pnm1, x;
+	x[1] = one;
+	Pnm1[0] = one;
+	auto Pn = x;
+	for (int n = 1; n < N; n++) {
+		auto const aCons = Math::Polynomial<Real>(Real(2 * n + 1) / Real(n + 1));
+		auto const bCons = Math::Polynomial<Real>(Real(n) / Real(n + 1));
+		auto const Pnp1 = aCons * Pn * x - bCons * Pnm1;
+		Pnm1 = std::move(Pn);
+		Pn = std::move(Pnp1);
+	}
+	auto const dPn_dx = Math::polynomialDerivative(Pn);
+	auto const roots = Math::polynomialFindAllRoots(Pn);
+	for (int n = 0; n < N; n++) {
+		rules.x[n] = roots[n].real();
+	}
+	std::sort(rules.x.begin(), rules.x.end());
+	for (int p = 0; p < N; p++) {
+		auto const x = rules.x[p];
+		auto const x2 = sqr(x);
+		rules.w[p] = two / (sqr(dPn_dx(x)) * (one - x2));
+	}
+	rules.withEndpoints = false;
 	return rules;
 }
 
@@ -121,14 +154,24 @@ struct Basis {
 		Math::Polynomial<Real> x;
 		x[1] = Real(1);
 		for (int n = 0; n < O; n++) {
-			Real const norm = pow(dx, n) / Real(Math::binomial(2 * n, n));
+			Real const norm = sqrt(Real(2 * n + 1));
 			Pn[n] = legendreP(n);
 			Pn[n] = norm * Pn[n](two * x / dx);
 			dPndx[n] = Math::polynomialDerivative(Pn[n]);
-			a[n] = pow(dx, n + 1) / polynomialIntegrate(Pn[n] * Pn[n], -half * dx, half * dx);
+			a[n] = dx / polynomialIntegrate(Pn[n] * Pn[n], -half * dx, half * dx);
 			pt[n] = half * dx * legendreP.point(n);
 			wt[n] = half * dx * legendreP.weight(n);
 		}
+	}
+	std::vector<Real> transform(std::function<Real(Real)> const &func) const {
+		std::vector<Real> u(O);
+		for (int l = 0; l < O; l++) {
+			u[l] = Real(0);
+			for (int q = 0; q < O; q++) {
+				u[l] += wt[q] * Pn[l](pt[q]) * func(pt[q]);
+			}
+		}
+		return u;
 	}
 	Real function(int n, Real x) const {
 		return Pn[n](x);
@@ -160,4 +203,4 @@ private:
 	Real dx;
 };
 
-#endif /* INCLUDE_BASIS_HPP_ */
+#endif

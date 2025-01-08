@@ -45,6 +45,18 @@ struct Vector {
 	static constexpr size_t size() {
 		return Ndim;
 	}
+	auto begin() {
+		return values.begin();
+	}
+	auto end() {
+		return values.end();
+	}
+	auto begin() const {
+		return values.begin();
+	}
+	auto end() const {
+		return values.end();
+	}
 private:
 	std::array<Type, Ndim> values;
 };

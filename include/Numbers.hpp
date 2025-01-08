@@ -37,7 +37,7 @@ constexpr auto sqr(auto r) {
 }
 
 template<typename RType, typename IType>
-constexpr typename std::enable_if<std::is_integral_v<RType>, IType>::type Pow(RType const &x, IType const &n) {
+constexpr typename std::enable_if<std::is_integral_v<IType>, RType>::type Pow(RType const &x, IType n) {
 	RType xm = x;
 	RType xn = RType(1);
 	while (n) {

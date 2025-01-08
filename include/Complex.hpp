@@ -24,10 +24,13 @@ Complex exp(Complex const&);
 
 struct Complex {
 	using Type = Real;
-	constexpr Complex() :
+	Complex() :
 			x(), y() {
 	}
-	explicit constexpr Complex(Type const &_value) :
+	Complex(Type const &_value) :
+			x(_value), y(0) {
+	}
+	Complex(int const &_value) :
 			x(_value), y(0) {
 	}
 	constexpr Complex(Type const &_x, Type const &_y) :
@@ -122,13 +125,14 @@ private:
 
 
 inline Complex exp(Complex const &z) {
-	Real const theta = Real(2.0 * M_PI) * z.imaginary();
+	Real const theta = z.imaginary();
 	Real const radius = z.real();
 	Real const expR = exp(radius);
 	Real const expCos = cos(theta);
 	Real const expSin = sin(theta);
 	return Complex(expR * expCos, expR * expSin);
 }
+
 
 
 inline Complex conj(Complex z) {
@@ -191,5 +195,6 @@ inline Complex operator-=(Complex &C, Type const &R) {
 constexpr Math::Complex operator""_Imag(long double a) {
 	return Math::Complex(0.0_Real, Math::Real(a));
 }
+
 
 #endif /* INCLUDE_COMPLEX_HPP_ */

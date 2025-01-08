@@ -18,22 +18,24 @@
 
 namespace Math {
 
+#define CHECK_REALS1 false
+
 struct Real {
 	using Type = double;
 	constexpr Real() {
-		if constexpr (CHECK_REALS) {
+		if constexpr (CHECK_REALS1) {
 			value = std::numeric_limits<Type>::signaling_NaN();
 		}
 	}
 	explicit Real(double a) {
 		value = Type(a);
-		debug_check(*this);
 	}
 	Real& operator=(Real const &a) {
 		value = a.value;
-		debug_check(a);
-		debug_check(*this);
 		return *this;
+	}
+	operator Type() const {
+		return value;
 	}
 	Real operator+() const {
 		debug_check(*this);
@@ -194,7 +196,7 @@ struct Real {
 private:
 	Type value;
 	static void nonneg_check(Real a) {
-		if constexpr (CHECK_REALS) {
+		if constexpr (CHECK_REALS1) {
 			if (a.value < 0.0) {
 				std::string errorString = "FATAL ERROR: Illegal operation on negative number.\n";
 				errorString += "Stack trace:\n";
@@ -206,7 +208,7 @@ private:
 		}
 	}
 	static void zero_check(Real a) {
-		if constexpr (CHECK_REALS) {
+		if constexpr (CHECK_REALS1) {
 			if (a.value == 0.0) {
 				std::string errorString = "FATAL ERROR: Divide by zero\n";
 				errorString += "Stack trace:\n";
@@ -218,7 +220,7 @@ private:
 		}
 	}
 	static void debug_check(Real a) {
-		if constexpr (CHECK_REALS) {
+		if constexpr (CHECK_REALS1) {
 			if (!std::isfinite(a.value)) {
 				std::string errorString = "FATAL ERROR: Operation on NaN\n";
 				errorString += "Stack trace:\n";
