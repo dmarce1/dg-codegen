@@ -12,11 +12,10 @@
 #include <array>
 #include <iostream>
 #include <string>
+#include <stacktrace>
 #include <type_traits>
 
-#include "Numbers.hpp"
 #include "Utilities.hpp"
-#include "Vector.hpp"
 
 namespace Math {
 
@@ -34,8 +33,12 @@ struct Matrix {
 	static constexpr std::size_t size() {
 		return ColumnCount * RowCount;
 	}
-	Matrix(std::initializer_list<Type> const &initList) {
-		std::copy(initList.begin(), initList.end(), values.begin());
+	Matrix(std::array<std::array<Type, ColumnCount>, RowCount> const &initList) {
+		for (int n = 0; n < RowCount; n++) {
+			for (int m = 0; m < ColumnCount; m++) {
+				operator[](n, m) = initList[n][m];
+			}
+		}
 	}
 	Matrix(Type const &init) {
 		for (int n = 0; n != size(); n++) {
@@ -62,12 +65,59 @@ struct Matrix {
 	}
 private:
 	std::array<Type, size()> values;
-	Type& operator[](int n) {
-		return values[n];
+};
+
+template<typename Type, int RowCount>
+struct Matrix<Type, RowCount, 1> {
+	USE_STANDARD_DEFAULTS(Matrix)
+	USE_STANDARD_ARITHMETIC(Matrix, Type)
+	;/**/
+	static constexpr std::size_t size() {
+		return RowCount;
+	}
+	Matrix(std::array<std::array<Type, 1>, RowCount> const &initList) {
+		for (int n = 0; n < RowCount; n++) {
+			operator[](n) = initList[n][0];
+		}
+	}
+	Matrix(std::array<Type, RowCount> const &initList) {
+		for (int n = 0; n < RowCount; n++) {
+			operator[](n) = initList[n];
+		}
+	}
+	Matrix(Type const &init) {
+		for (int n = 0; n != size(); n++) {
+			values[n] = init;
+		}
+	}
+	Type& operator[](int n, int m) {
+		assert(m == 0);
+		return operator[](n);
+	}
+	Type operator[](int n, int m) const {
+		assert(m == 0);
+		return operator[](n);
 	}
 	Type operator[](int n) const {
 		return values[n];
 	}
+	Type& operator[](int n) {
+		return values[n];
+	}
+	auto begin() const {
+		return values.begin();
+	}
+	auto end() const {
+		return values.end();
+	}
+	auto begin() {
+		return values.begin();
+	}
+	auto end() {
+		return values.end();
+	}
+private:
+	std::array<Type, RowCount> values;
 };
 
 template<typename Type>
@@ -93,6 +143,32 @@ struct Matrix<Type, 1, 1> {
 private:
 	Type value;
 };
+
+template<typename Type, int Ndim>
+using Vector = Matrix<Type, Ndim, 1>;
+
+template<typename Type, int Ndim>
+SquareMatrix<Type, Ndim> identityMatrix() {
+	SquareMatrix<Type, Ndim> identity;
+	for (int n = 0; n < Ndim; n++) {
+		for (int m = 0; m < Ndim; m++) {
+			identity[n, m] = Type(n == m);
+		}
+	}
+	return identity;
+}
+
+template<typename Type, int Ndim>
+SquareMatrix<Type, Ndim> zeroMatrix() {
+	SquareMatrix<Type, Ndim> Z;
+	Type const zero = Type(0);
+	for (int n = 0; n < Ndim; n++) {
+		for (int m = 0; m < Ndim; m++) {
+			Z[n, m] = zero;
+		}
+	}
+	return Z;
+}
 
 template<typename T, int N, int M, int L>
 Matrix<T, N, L> operator*(Matrix<T, N, M> const &A, Matrix<T, M, L> const &B) {
@@ -124,18 +200,18 @@ SquareMatrix<Type, Ndim> operator*=(SquareMatrix<Type, Ndim> &A, SquareMatrix<Ty
 
 template<typename Type, int RowCount, int ColumnCount>
 auto matrixRow(Matrix<Type, RowCount, ColumnCount> const &A, int r) {
-	Vector<Type, ColumnCount> row;
+	Matrix<Type, 1, ColumnCount> row;
 	for (int c = 0; c < ColumnCount; c++) {
-		row[c] = A[r, c];
+		row[0, c] = A[r, c];
 	}
 	return row;
 }
 
 template<typename Type, int RowCount, int ColumnCount>
 auto matrixColumn(Matrix<Type, RowCount, ColumnCount> const &A, int c) {
-	Vector<Type, RowCount> column;
+	Matrix<Type, RowCount, 1> column;
 	for (int r = 0; r < RowCount; r++) {
-		column[r] = A[r, c];
+		column[r, 0] = A[r, c];
 	}
 	return column;
 }
@@ -173,20 +249,61 @@ SquareMatrix<Type, Ndim - 1> subMatrix(SquareMatrix<Type, Ndim> const &A, int ro
 	return subMatrix;
 }
 
+template<typename T, int R>
+T matrixInverse(SquareMatrix<T, R> &A) {
+	T const zero(0);
+	T const one(1);
+	T matrixDeterminant = one;
+	auto D = identityMatrix<T, R>();
+	for (int i = 0; i < R; ++i) {
+		T pivot = A[i, i];
+		if (pivot == zero) {
+			int k = i;
+			do {
+				k++;
+				if (k >= R) {
+					return zero;
+				}
+				pivot = A[k, i];
+			} while (pivot == zero);
+			bool isSingular = true;
+			for (int j = 0; j < R; ++j) {
+				if (A[i, j] != zero) {
+					isSingular = false;
+				}
+				std::swap(A[i, j], A[k, j]);
+				std::swap(D[i, j], D[k, j]);
+			}
+			matrixDeterminant = -matrixDeterminant;
+			if (isSingular) {
+				return zero;
+			}
+		}
+		T const iPivot = one / pivot;
+		for (int j = 0; j < R; ++j) {
+			A[i, j] *= iPivot;
+			D[i, j] *= iPivot;
+		}
+		matrixDeterminant *= pivot;
+		for (int k = 0; k < R; ++k) {
+			if (k != i) {
+				T const factor = A[k, i];
+				for (int j = 0; j < R; ++j) {
+					A[k, j] -= factor * A[i, j];
+					D[k, j] -= factor * D[i, j];
+				}
+			}
+		}
+	}
+	return matrixDeterminant;
+}
+
 template<typename Type, int Ndim>
-Type matrixDeterminant(SquareMatrix<Type, Ndim> const &A) {
+Type matrixDeterminant(SquareMatrix<Type, Ndim> A) {
 	if constexpr (Ndim == 1) {
 		return A[0, 0];
 	} else {
-		Type sum = Type(0);
-		Type result = Type(0);
-		Type sgn = Type(1);
-		for (int c = 0; c < Ndim; c++) {
-			result += sgn * A[0, c] * matrixDeterminant(subMatrix(A, 0, c));
-			sgn = -sgn;
-		}
-		return result;
-
+		return matrixInverse(A);
 	}
 }
 
@@ -216,11 +333,6 @@ SquareMatrix<Type, Ndim> matrixAdjoint(SquareMatrix<Type, Ndim> const &A) {
 	return matrixTranspose(matrixCofactor(A));
 }
 
-template<typename Type, int Ndim>
-SquareMatrix<Type, Ndim> matrixInverse(SquareMatrix<Type, Ndim> const &A) {
-	return matrixAdjoint(A) * (Type(1) / matrixDeterminant(A));
-}
-
 template<typename Type, int P, int Q, int M, int N>
 Matrix<Type, P * M, Q * N> matrixKroneckerProduct(Matrix<Type, P, Q> const &A, Matrix<Type, M, N> const &B) {
 	Matrix<Type, P * M, Q * N> C;
@@ -238,92 +350,56 @@ Matrix<Type, P * M, Q * N> matrixKroneckerProduct(Matrix<Type, P, Q> const &A, M
 	return C;
 }
 
-template<typename Type, int Ndim>
-SquareMatrix<Type, Ndim> identityMatrix() {
-	SquareMatrix<Type, Ndim> identity;
-	for (int n = 0; n < Ndim; n++) {
-		for (int m = 0; m < Ndim; m++) {
-			identity[n, m] = Type(n == m);
+template<typename T, int N>
+void matrixQRDecomposition(SquareMatrix<T, N> const &A, SquareMatrix<T, N> &Q, SquareMatrix<T, N> &R) {
+	T const one(1);
+	R = A;
+	Q = identityMatrix<T, N>();
+	for (int j = 0; j < N; j++) {
+		for (int i = j + 1; i < N; i++) {
+			SquareMatrix<T, N> G = identityMatrix<T, N>();
+			T const x = R[j, j];
+			T const y = R[i, j];
+			T const hinv = one / sqrt(sqr(x) + sqr(y));
+			T const c = x * hinv;
+			T const s = -y * hinv;
+			G[j, j] = G[i, i] = c;
+			G[i, j] = s;
+			G[j, i] = -s;
+			R = G * R;
+			Q = G * Q;
 		}
 	}
-	return identity;
+	Q = matrixTranspose(Q);
 }
 
-template<typename T, int N>
-void matrixSwapRow(SquareMatrix<T, N> &A, int row1, int row2) {
-	for (int col = 0; col < N; col++) {
-		std::swap(A[row1, col], A[row2, col]);
-	}
-}
-
-template<typename T, int N>
-void matrixScaleRow(SquareMatrix<T, N> &A, int row, T scale) {
-	for (int col = 0; col < N; col++) {
-		A[row, col] *= scale;
-	}
-}
-
-template<typename T, int N>
-void matrixSubtractRow(SquareMatrix<T, N> &A, int row1, int row2) {
-	for (int col = 0; col < N; col++) {
-		A[row1, col] -= A[row2, col];
-	}
-}
-
-template<typename T, int N>
-void matrixSubtractRow(SquareMatrix<T, N> &A, int row1, int row2, T coefficient) {
-	for (int col = 0; col < N; col++) {
-		A[row1, col] -= coefficient * A[row2, col];
-	}
-}
-
-template<typename T, int N>
-struct matrixReduction_t {
-	T det;
-};
-
-template<typename T, int N>
-matrixReduction_t<T, N> matrixRowReduction(SquareMatrix<T, N> &A, SquareMatrix<T, N> &D) {
-	D = identityMatrix<T, N>();
-	T det = T(1);
-	for (int l = 0; l < N; l++) {
-		T scale = A[l, l];
-		T scaleInv = T(1) / scale;
-		det *= scale;
-		matrixScaleRow(A, l, scaleInv);
-		std::cout << to_string(A) << "\n\n";
-		matrixScaleRow(D, l, scaleInv);
-		for (int n = l + 1; n < N; n++) {
-			scale = A[n, l];
-			if (scale != T(0)) {
-				scaleInv = T(1) / scale;
-				det *= scale;
-				matrixScaleRow(A, n, scaleInv);
-				std::cout << to_string(A) << "\n\n";
-				matrixScaleRow(D, n, scaleInv);
-				matrixSubtractRow(A, n, l);
-				std::cout << to_string(A) << "\n\n";
-				matrixSubtractRow(D, n, l);
+template<typename T, int R>
+SquareMatrix<T, R> matrixLUDecomposition(SquareMatrix<T, R> const &A, SquareMatrix<T, R> &L, SquareMatrix<T, R> &U) {
+	const T zero(0);
+	SquareMatrix<T, R> P = identityMatrix<T, R>();
+	L = P;
+	U = A;
+	for (int i = 0; i < R; ++i) {
+		int k = i;
+		while (U[i, i] == zero) {
+			k++;
+			for (int j = 0; j < R; ++j) {
+				std::swap(U[i, j], U[k, j]);
+				std::swap(P[i, j], P[k, j]);
+			}
+		}
+		for (int k = i + 1; k < R; ++k) {
+			L[k, i] = U[k, i] / U[i, i];
+			for (int j = 0; j < R; ++j) {
+				U[k, j] -= L[k, i] * U[i, j];
 			}
 		}
 	}
-	for (int l = 0; l < N; l++) {
-		det *= A[l, l];
-	}
-	for (int l = 0; l < N - 1; l++) {
-		for (int n = l + 1; n < N; n++) {
-			T scale = A[l, n];
-			matrixSubtractRow(A, l, n, scale);
-			matrixSubtractRow(D, l, n, scale);
-		}
-	}
-	matrixReduction_t<T, N> rc;
-	rc.det = det;
-	return rc;
+	return matrixTranspose(P);
 }
 
 template<typename Type, int RowCount, int ColumnCount>
-std::string to_string(Matrix<Type, RowCount, ColumnCount> const &M) {
+std::string toString(Matrix<Type, RowCount, ColumnCount> const &M) {
 	using std::to_string;
 	int maxLength = 0;
 	std::string result;
@@ -354,47 +430,6 @@ std::string to_string(Matrix<Type, RowCount, ColumnCount> const &M) {
 		result += hLine;
 	}
 	return result;
-}
-
-template<typename Type, int N>
-Matrix<Type, N, 1> toColumnVector(Vector<Type, N> const &vec) {
-	Matrix<Type, N, 1> C;
-	for (int r = 0; r < N; r++) {
-		C[r, 0] = vec[r];
-	}
-	return C;
-}
-
-template<typename Type, int N>
-Matrix<Type, 1, N> toRowVector(Vector<Type, N> const &vec) {
-	Matrix<Type, 1, N> R;
-	for (int c = 0; c < N; c++) {
-		R[0, c] = vec[c];
-	}
-	return R;
-}
-
-template<typename Type, int N>
-Vector<Type, N> toVector(Matrix<Type, 1, N> const &R) {
-	Vector<Type, N> vec;
-	for (int c = 0; c < N; c++) {
-		vec[c] = R[0, c];
-	}
-	return vec;
-}
-
-template<typename Type, int N>
-Vector<Type, N> toVector(Matrix<Type, N, 1> const &C) {
-	Vector<Type, N> vec;
-	for (int r = 0; r < N; r++) {
-		vec[r] = C[r, 0];
-	}
-	return vec;
-}
-
-template<typename Type, int Ndim>
-SquareMatrix<Type, Ndim> vectorTensorProduct(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
-	return A * matrixTranspose(B);
 }
 
 }

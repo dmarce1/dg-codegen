@@ -8,70 +8,90 @@
 #ifndef INCLUDE_LEGENDREP_HPP_
 #define INCLUDE_LEGENDREP_HPP_
 
-#include <hpx/hpx.hpp>
 #include "Real.hpp"
 #include "Polynomial.hpp"
 
-namespace Legendre {
-
-template<int Order>
-struct Polynomials {
-	Polynomials() {
-		Math::Polynomial<Real> one, x;
-		one[0] = 1.0_Real;
-		x[1] = 1.0_Real;
-		auto pnm1 = one;
-		auto pn = x;
-		legendreP.push_back(one);
-		legendreP.push_back(x);
-		for (int n = 1; n <= Order; n++) {
-			auto const aCons = Math::Polynomial<Real>(Real(2 * n + 1) / Real(n + 1));
-			auto const bCons = Math::Polynomial<Real>(Real(n) / Real(n + 1));
-			auto const pnp1 = aCons * pn * x - bCons * pnm1;
-			pnm1 = std::move(pn);
-			pn = std::move(pnp1);
-			legendreP.push_back(pn);
+Real legendreP(int n, Real x) {
+	Real const one(1.0);
+	if (n == 0) {
+		return one;
+	} else if (n == 1) {
+		return x;
+	} else {
+		Real Pnm1, Pn;
+		Pnm1 = one;
+		Pn = x;
+		for (int l = 1; l < n; l++) {
+			Real const a = Real(2 * l + 1) / Real(l + 1);
+			Real const b = Real(l) / Real(l + 1);
+			Real const Pnp1 = a * Pn * x - b * Pnm1;
+			Pnm1 = Pn;
+			Pn = Pnp1;
 		}
-
-		dLegendreP.push_back(Math::polynomialDerivative(legendreP[0]));
-		for (int n = 1; n <= Order; n++) {
-			dLegendreP.push_back(Math::polynomialDerivative(legendreP[n]));
-		}
-		auto const roots = Math::polynomialFindAllRoots(legendreP[Order]);
-		for (auto const &pt : roots) {
-			quadPos.push_back(pt.real());
-		}
-		std::sort(quadPos.begin(), quadPos.end());
-		auto const dPdx = dLegendreP[Order];
-		for (int p = 0; p < Order; p++) {
-			auto const x = quadPos[p];
-			auto const x2 = sqr(x);
-			quadWt.push_back(Real(2) / (sqr(dPdx(x)) * (Real(1) - x2)));
-		}
+		return Pn;
 	}
-	Real valueAt(int n, Real x) const {
-		return legendreP[n](x);
-	}
-	Real derivativeAt(int n, Real x) const {
-		return dLegendreP[n](x);
-	}
-	Real point(int n) const {
-		return quadPos[n];
-	}
-	Real weight(int n) const {
-		return quadWt[n];
-	}
-	Math::Polynomial<Real> operator()( int n) const {
-		return legendreP[n];
-	}
-private:
-	std::vector<Math::Polynomial<Real>> legendreP;
-	std::vector<Math::Polynomial<Real>> dLegendreP;
-	std::vector<Real> quadPos;
-	std::vector<Real> quadWt;
 }
-;
 
+Real dLegendrePdX(int n, Real x) {
+	Real const zero(0), one(1), three(3);
+	if (n == 0) {
+		return zero;
+	} else if (n == 1) {
+		return one;
+	} else {
+		Real Pnm1, Pn;
+		Real dPnm1dX, dPndX;
+		Pnm1 = one;
+		Pn = x;
+		dPndX = one;
+		for (int l = 1; l < n - 1; l++) {
+			Real const a = Real(l + 1);
+			Real const ainv = one / a;
+			Real const b = Real(2 * l + 1) * ainv;
+			Real const c = Real(l) * ainv;
+			Real const Pnp1 = b * Pn * x - c * Pnm1;
+			Real const dPnp1dX = a * Pn + x * dPndX;
+			Pnm1 = Pn;
+			Pn = Pnp1;
+			dPndX = dPnp1dX;
+		}
+		return Real(n) * Pn + x * dPndX;
+	}
+}
+
+Real d2LegendrePdX2(int n, Real x) {
+	Real const zero(0), one(1), three(3);
+	if (n <= 1) {
+		return zero;
+	} else if (n == 2) {
+		return three;
+	} else {
+		Real Pnm1, Pn;
+		Real dPnm1dX, dPndX;
+		Real d2Pnm1dX2, d2PndX2;
+		Pnm1 = one;
+		Pn = x;
+		dPndX = one;
+		d2PndX2 = three;
+		for (int l = 1; l < n - 2; l++) {
+			Real const a = Real(l + 1);
+			Real const ainv = one / a;
+			Real const b = Real(2 * l + 1) * ainv;
+			Real const c = Real(l) * ainv;
+			Real const d = Real(l + 2);
+			Real const Pnp1 = b * Pn * x - c * Pnm1;
+			Real const dPnp1dX = a * Pn + x * dPndX;
+			Real const d2Pnp1dX2 = d * dPndX + x * d2PndX2;
+			Pnm1 = Pn;
+			Pn = Pnp1;
+			dPndX = dPnp1dX;
+			d2PndX2 = d2Pnp1dX2;
+		}
+		Real const dPnp1dX = Real(n - 1) * Pn + x * dPndX;
+		d2PndX2 = Real(n) * dPndX + x * d2PndX2;
+		dPndX = dPnp1dX;
+		return Real(n + 1) * dPndX + x * d2PndX2;
+	}
 }
 
 #endif /* INCLUDE_LEGENDREP_HPP_ */

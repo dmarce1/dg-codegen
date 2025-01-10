@@ -127,7 +127,9 @@ SquareMatrix<Type, Nfield> roeToEigenvectors(const HydroState<Type, Ndim> &roe) 
 
 template<typename Type, int Ndim>
 HydroState<Type, Ndim> stateToChar(const HydroState<Type, Ndim> &dU, const HydroState<Type, Ndim> &prim) {
-	return toVector(matrixInverse(primToEigenvectors<Type, Ndim>(prim)) * toColumnVector(dU));
+	auto iA = primToEigenvectors<Type, Ndim>(prim);
+	matrixInverse(iA);
+	return iA * dU;
 }
 template<typename Type, int Ndim>
 HydroState<Type, Ndim> primToRoe(const HydroState<Type, Ndim> &primL, const HydroState<Type, Ndim> &primR) {
@@ -210,16 +212,15 @@ struct HLLCSolver {
 	}
 };
 /*Type const eta0 = (gam + one) / (two * gam);
-Type const z = (gam - one) / (two * gam);
-Type const pRz = pow(pR, z);
-Type const pLz = pow(pL, z);
-Type const pz = (aL + aR - half * (gam - one) * (uR - uL)) * pLz * pRz / (aL * pRz + aR * pLz);
-Type const p0 = pow(max(zero, pz), one / z);
-Type const qL = (p0 < pL) ? one : sqrt(one + eta0 * (p0 / pL - one));
-Type const qR = (p0 < pR) ? one : sqrt(one + eta0 * (p0 / pR - one));
-Type const sL = uL - qL * aL;
-Type const sR = uR + qR * aR;*/
-
+ Type const z = (gam - one) / (two * gam);
+ Type const pRz = pow(pR, z);
+ Type const pLz = pow(pL, z);
+ Type const pz = (aL + aR - half * (gam - one) * (uR - uL)) * pLz * pRz / (aL * pRz + aR * pLz);
+ Type const p0 = pow(max(zero, pz), one / z);
+ Type const qL = (p0 < pL) ? one : sqrt(one + eta0 * (p0 / pL - one));
+ Type const qR = (p0 < pR) ? one : sqrt(one + eta0 * (p0 / pR - one));
+ Type const sL = uL - qL * aL;
+ Type const sR = uR + qR * aR;*/
 
 /*
  template<typename Type, int Ndim>

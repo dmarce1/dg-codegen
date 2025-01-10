@@ -132,6 +132,11 @@ struct Real {
 		a.value = std::fabs(a.value);
 		return a;
 	}
+	friend Real expm1(Real a) {
+		debug_check(a);
+		a.value = std::expm1(a.value);
+		return a;
+	}
 	friend Real exp(Real a) {
 		debug_check(a);
 		a.value = std::exp(a.value);
@@ -145,6 +150,18 @@ struct Real {
 	friend Real sin(Real a) {
 		debug_check(a);
 		a.value = std::sin(a.value);
+		return a;
+	}
+	friend Real acos(Real a) {
+		debug_check(a);
+		range_check( -Real(1), a, Real(1));
+		a.value = std::acos(a.value);
+		return a;
+	}
+	friend Real asin(Real a) {
+		debug_check(a);
+		range_check( -Real(1), a, Real(1));
+		a.value = std::asin(a.value);
 		return a;
 	}
 	friend Real sqrt(Real a) {
@@ -223,6 +240,18 @@ private:
 		if constexpr (CHECK_REALS1) {
 			if (!std::isfinite(a.value)) {
 				std::string errorString = "FATAL ERROR: Operation on NaN\n";
+				errorString += "Stack trace:\n";
+				errorString += std::to_string(std::stacktrace::current());
+				std::cout << errorString;
+				abort();
+//				throw std::invalid_argument(errorString);
+			}
+		}
+	}
+	static void range_check(Real a, Real b, Real c) {
+		if constexpr (CHECK_REALS1) {
+			if ((b < a) || (b > c)) {
+				std::string errorString = "FATAL ERROR: Range violation\n";
 				errorString += "Stack trace:\n";
 				errorString += std::to_string(std::stacktrace::current());
 				std::cout << errorString;

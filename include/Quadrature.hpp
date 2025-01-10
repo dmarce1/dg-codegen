@@ -33,174 +33,145 @@ struct QuadratureRules {
 	}
 };
 
-inline Polynomial<Real> openLagrangePolynomial(int n, int j, Real a, Real b) {
-	Real const one(1);
-	Real const half(0.5);
-	Real const zero(0);
-	Polynomial < Real > p(one);
-	Polynomial < Real > X;
-	X[1] = one;
-	Real h = (b - a) / Real(n);
-	Real xj = (Real(j) + half) * h;
-	for (int m = 0; m <= n; m++) {
-		if (m != j) {
-			Real xm = Real(m) * h + a;
-			Polynomial<Real> const X0(xm);
-			Polynomial<Real> const dX = X - X0;
-			auto const inv = one / (xj - xm);
-			p = inv * p * dX;
-		}
-	}
-	return p;
-}
-
-inline Polynomial<Real> closedLagrangePolynomial(int n, int j, Real a, Real b) {
+template<int N>
+Math::Vector<Polynomial<Real>, N> lagrangePolynomials(Math::Vector<Real, N> const &X) {
 	Real const one(1);
 	Real const zero(0);
-	Polynomial < Real > p(one);
-	Polynomial < Real > X;
-	X[1] = one;
-	Real h = (b - a) / Real(n - 1);
-	Real xj = Real(j) * h + a;
-	for (int m = 0; m < n; m++) {
-		if (m != j) {
-			Real xm = Real(m) * h + a;
-			Polynomial<Real> const X0(xm);
-			Polynomial<Real> const dX = X - X0;
-			auto const inv = one / (xj - xm);
-			p = inv * p * dX;
+	Polynomial < Real > x1;
+	x1[1] = one;
+	Math::Vector<Polynomial<Real>, N> polys;
+	for (int j = 0; j < N; j++) {
+		Polynomial < Real > p(one);
+		Real xj = X[j];
+		for (int m = 0; m < N; m++) {
+			if (m != j) {
+				Real const xm = X[m];
+				Polynomial<Real> const x0(xm);
+				Polynomial<Real> const dx = x1 - x0;
+				auto const inv = one / (xj - xm);
+				p = inv * p * dx;
+			}
 		}
+		polys[j] = p;
 	}
-	return p;
+	return polys;
 }
 
 template<int N>
 QuadratureRules<N> closedNewtonCotesRules(Real a = Real(-1), Real b = Real(1)) {
-	Real const half(0.5);
-	Real const one(1);
-	Real const two(2);
 	Real const h = (b - a) / Real(N - 1);
 	QuadratureRules<N> rules;
 	for (int i = 0; i < N; i++) {
 		rules.x[i] = a + Real(i) * h;
-		auto const pl = closedLagrangePolynomial(N, i, a, b);
-		rules.w[i] = polynomialIntegrate(pl, a, b);
+	}
+	auto const L = lagrangePolynomials<N>(rules.x);
+	for (int i = 0; i < N; i++) {
+		rules.w[i] = polynomialIntegrate(L[i], a, b);
 	}
 	rules.withEndpoints = true;
 	return rules;
 }
 
 template<int N>
-QuadratureRules<N> gaussLobattoRules() {
-	Real const one(1);
-	Real const two(2);
+QuadratureRules<N> openNewtonCotesRules(Real a = Real(-1), Real b = Real(1)) {
+	Real const h = (b - a) / Real(N + 1);
 	QuadratureRules<N> rules;
-	Legendre::Polynomials<N - 1> legendreP;
-	auto const Pn = legendreP(N - 1);
-	auto const dPndx = polynomialDerivative(Pn);
-	auto const xRoots = Math::polynomialFindAllRoots(dPndx);
-	rules.x[0] = -one;
-	rules.w[0] = one;
-	for (int n = 0; n < N - 2; n++) {
-		Real const xi = xRoots[n].real();
-		rules.x[n + 1] = xi;
-		rules.w[n + 1] = one / sqr(Pn(xi));
+	for (int i = 0; i < N; i++) {
+		rules.x[i] = a + Real(i + 1) * h;
 	}
-	rules.x[N - 1] = one;
-	rules.w[N - 1] = one;
-	rules.w *= two / Real(N * (N - 1));
-	rules.withEndpoints = true;
+	auto const L = lagrangePolynomials<N>(rules.x);
+	for (int i = 0; i < N; i++) {
+		rules.w[i] = polynomialIntegrate(L[i], a, b);
+	}
+	rules.withEndpoints = false;
 	return rules;
 }
 
 template<int N>
 QuadratureRules<N> gaussLegendreRules() {
 	Real const half(0.5), one(1.0), two(2.0);
+	Real const toler((1 << (2 + std::ilogb(N) / 3)) * std::numeric_limits<double>::epsilon());
 	QuadratureRules<N> rules;
-	Math::Polynomial<Real> Pnm1, x;
-	x[1] = one;
-	Pnm1[0] = one;
-	auto Pn = x;
-	for (int n = 1; n < N; n++) {
-		auto const aCons = Math::Polynomial<Real>(Real(2 * n + 1) / Real(n + 1));
-		auto const bCons = Math::Polynomial<Real>(Real(n) / Real(n + 1));
-		auto const Pnp1 = aCons * Pn * x - bCons * Pnm1;
-		Pnm1 = std::move(Pn);
-		Pn = std::move(Pnp1);
-	}
-	auto const dPn_dx = Math::polynomialDerivative(Pn);
-	auto const roots = Math::polynomialFindAllRoots(Pn);
-	for (int n = 0; n < N; n++) {
-		rules.x[n] = roots[n].real();
-	}
-	std::sort(rules.x.begin(), rules.x.end());
-	for (int p = 0; p < N; p++) {
-		auto const x = rules.x[p];
-		auto const x2 = sqr(x);
-		rules.w[p] = two / (sqr(dPn_dx(x)) * (one - x2));
+	Real const dx = one / Real(N);
+	Real const pi = Real(M_PI);
+	for (int l = 0; l < N; l++) {
+		Real dTheta;
+		Real theta = pi * (one - (Real(l) + half) * dx);
+		do {
+			Real const cosTheta = cos(theta);
+			Real const sinTheta = sin(theta);
+			Real const Pn = legendreP(N, cosTheta);
+			Real const dPnDx = dLegendrePdX(N, cosTheta);
+			Real const iDen = one / (sinTheta * dPnDx);
+			dTheta = Pn * iDen;
+			theta += dTheta;
+		} while (abs(dTheta) > toler);
+		Real const x = cos(theta);
+		rules.x[l] = x;
+		rules.w[l] = two / (sqr(dLegendrePdX(N, x)) * (one - sqr(x)));
 	}
 	rules.withEndpoints = false;
 	return rules;
 }
 
-template<int O>
-struct Basis {
-	Basis(Real dx_) :
-			dx(dx_) {
-		Real const two(2.0);
-		Real const one(1.0);
-		Real const half(0.5);
-		Legendre::Polynomials<O> legendreP;
-		Math::Polynomial<Real> x;
-		x[1] = Real(1);
-		for (int n = 0; n < O; n++) {
-			Real const norm = sqrt(Real(2 * n + 1));
-			Pn[n] = legendreP(n);
-			Pn[n] = norm * Pn[n](two * x / dx);
-			dPndx[n] = Math::polynomialDerivative(Pn[n]);
-			a[n] = dx / polynomialIntegrate(Pn[n] * Pn[n], -half * dx, half * dx);
-			pt[n] = half * dx * legendreP.point(n);
-			wt[n] = half * dx * legendreP.weight(n);
+template<int P>
+QuadratureRules<P> clenshawCurtisRules() {
+	constexpr int N = P - 1;
+	Real const zero(0), half(0.5), one(1), two(2), pi(M_PI);
+	Real const Ninv = one / Real(N);
+	Real const piNinv = pi * Ninv;
+	QuadratureRules<P> rules;
+	Vector < Real, N / 2 + 1 > d;
+	d[0] = one;
+	for (int k = 1; k <= N / 2; k++) {
+		d[k] = two / Real(1 - sqr(2 * k));
+	}
+	for (int n = 0; n <= N / 2; n++) {
+		Real const c = (Real(n != 0) + one);
+		Real w = zero;
+		for (int k = 0; k <= N / 2; k++) {
+			w += c * d[k] * cos(Real(2 * n * k) * piNinv) * Ninv;
 		}
+		rules.w[n] = w;
 	}
-	std::vector<Real> transform(std::function<Real(Real)> const &func) const {
-		std::vector<Real> u(O);
-		for (int l = 0; l < O; l++) {
-			u[l] = Real(0);
-			for (int q = 0; q < O; q++) {
-				u[l] += wt[q] * Pn[l](pt[q]) * func(pt[q]);
-			}
-		}
-		return u;
+	for (int k = 0; k < N - k; k++) {
+		rules.w[N - k] = rules.w[k];
 	}
-	Real function(int n, Real x) const {
-		return Pn[n](x);
+	for (int k = 0; k <= N; k++) {
+		rules.x[k] = cos(pi * Real(k) / Real(N));
 	}
-	Real derivative(int n, Real x) const {
-		return dPndx[n](x);
+	return rules;
+}
+
+template<int N>
+QuadratureRules<N> gaussLobattoRules() {
+	Real const half(0.5), one(1.0), two(2.0);
+	Real const toler((3 << (1 + (std::ilogb(N)) / 3)) * std::numeric_limits<double>::epsilon());
+	QuadratureRules<N> rules;
+	Real const dx = one / Real(N);
+	Real const pi = Real(M_PI);
+	for (int l = 1; l < N - 1; l++) {
+		Real dTheta;
+		Real theta = pi * (one - (Real(l) + half) * dx);
+		do {
+			Real const cosTheta = cos(theta);
+			Real const sinTheta = sin(theta);
+			Real const cotTheta = cosTheta / sinTheta;
+			Real const dPnDx = dLegendrePdX(N - 1, cosTheta);
+			Real const d2PnDx2 = d2LegendrePdX2(N - 1, cosTheta);
+			Real const iDen = one / (sinTheta * d2PnDx2 - dPnDx * cotTheta);
+			dTheta = dPnDx * iDen;
+			theta += dTheta;
+		} while (abs(dTheta) > toler);
+		Real const x = cos(theta);
+		rules.x[l] = x;
+		rules.w[l] = two / (Real(N * (N - 1)) * sqr(legendreP(N - 1, x)));
 	}
-	Real coeff(int n) const {
-		return a[n];
-	}
-	Real qPoint(int n) const {
-		return pt[n];
-	}
-	Real qWeight(int n) const {
-		return wt[n];
-	}
-	Polynomial<Real> function(int n) const {
-		return Pn[n];
-	}
-	Vector<Real, O> const& coeffs() const {
-		return a;
-	}
-private:
-	Vector<Math::Polynomial<Real>, O> Pn;
-	Vector<Math::Polynomial<Real>, O> dPndx;
-	Vector<Real, O> a;
-	Vector<Real, O> pt;
-	Vector<Real, O> wt;
-	Real dx;
-};
+	rules.x[0] = -one;
+	rules.x[N - 1] = one;
+	rules.w[0] = rules.w[N - 1] = two / (Real(N * (N - 1)));
+	rules.withEndpoints = true;
+	return rules;
+}
 
 #endif
