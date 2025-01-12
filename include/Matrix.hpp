@@ -125,6 +125,9 @@ struct Matrix<Type, 1, 1> {
 	USE_STANDARD_DEFAULTS(Matrix)
 	USE_STANDARD_ARITHMETIC(Matrix, Type)
 	;/**/
+	Matrix(Type const &init) {
+		value = init;
+	}
 	static constexpr std::size_t size() {
 		return 1;
 	}
@@ -132,6 +135,12 @@ struct Matrix<Type, 1, 1> {
 		return value;
 	}
 	Type operator[](int, int) const {
+		return value;
+	}
+	Type operator[](int n) const {
+		return value;
+	}
+	Type& operator[](int n) {
 		return value;
 	}
 	operator Type() const {

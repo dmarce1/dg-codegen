@@ -18,7 +18,7 @@
 
 namespace Math {
 
-#define CHECK_REALS1 false
+#define CHECK_REALS1 CHECK_REALS
 
 struct Real {
 	using Type = double;
@@ -27,14 +27,14 @@ struct Real {
 			value = std::numeric_limits<Type>::signaling_NaN();
 		}
 	}
-	explicit Real(double a) {
+	constexpr explicit Real(double a) {
 		value = Type(a);
 	}
 	Real& operator=(Real const &a) {
 		value = a.value;
 		return *this;
 	}
-	operator Type() const {
+	constexpr operator Type() const {
 		return value;
 	}
 	Real operator+() const {

@@ -8,10 +8,14 @@
 
 #include <functional>
 
+namespace Quadrature {
+
+using namespace Math;
+
 template<int N>
 struct QuadratureRules {
-	Math::Vector<Real, N> x;
-	Math::Vector<Real, N> w;
+	Vector<Real, N> x;
+	Vector<Real, N> w;
 	bool withEndpoints;
 	Real integrate(std::function<Real(Real)> const &f, Real dx) const {
 		Real I = Real(0);
@@ -34,12 +38,12 @@ struct QuadratureRules {
 };
 
 template<int N>
-Math::Vector<Polynomial<Real>, N> lagrangePolynomials(Math::Vector<Real, N> const &X) {
+Vector<Polynomial<Real>, N> lagrangePolynomials(Vector<Real, N> const &X) {
 	Real const one(1);
 	Real const zero(0);
 	Polynomial < Real > x1;
 	x1[1] = one;
-	Math::Vector<Polynomial<Real>, N> polys;
+	Vector<Polynomial<Real>, N> polys;
 	for (int j = 0; j < N; j++) {
 		Polynomial < Real > p(one);
 		Real xj = X[j];
@@ -174,4 +178,5 @@ QuadratureRules<N> gaussLobattoRules() {
 	return rules;
 }
 
+}
 #endif

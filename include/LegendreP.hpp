@@ -11,7 +11,9 @@
 #include "Real.hpp"
 #include "Polynomial.hpp"
 
-Real legendreP(int n, Real x) {
+namespace Math {
+
+inline Real legendreP(int n, Real x) {
 	Real const one(1.0);
 	if (n == 0) {
 		return one;
@@ -32,7 +34,7 @@ Real legendreP(int n, Real x) {
 	}
 }
 
-Real dLegendrePdX(int n, Real x) {
+inline Real dLegendrePdX(int n, Real x) {
 	Real const zero(0), one(1), three(3);
 	if (n == 0) {
 		return zero;
@@ -59,7 +61,7 @@ Real dLegendrePdX(int n, Real x) {
 	}
 }
 
-Real d2LegendrePdX2(int n, Real x) {
+inline Real d2LegendrePdX2(int n, Real x) {
 	Real const zero(0), one(1), three(3);
 	if (n <= 1) {
 		return zero;
@@ -92,6 +94,8 @@ Real d2LegendrePdX2(int n, Real x) {
 		dPndX = dPnp1dX;
 		return Real(n + 1) * dPndX + x * d2PndX2;
 	}
+}
+
 }
 
 #endif /* INCLUDE_LEGENDREP_HPP_ */

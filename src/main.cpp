@@ -10,7 +10,6 @@
 #include "Real.hpp"
 #include "Root.hpp"
 #include "Vector.hpp"
-#include "Complex.hpp"
 #include <unordered_map>
 #include <numeric>
 #include <stack>
@@ -19,7 +18,6 @@
 #include <span>
 using namespace std;
 
-#include "Complex.hpp"
 #include "Real.hpp"
 #include "HLLC.hpp"
 #include "Quadrature.hpp"
@@ -27,10 +25,114 @@ using namespace std;
 #include <random>
 #include <vector>
 
+template<int M, int P>
+void compute() {
+	using namespace Hydrodynamics;
+	using eos_type = EquationOfState<Real, 5.0/3.0>;
+	using state_type = ConservedState<Real, 1, eos_type>;
+	using prim_type = PrimitiveState<Real, 1, eos_type>;
+	constexpr int BW = 2;
+	constexpr int N = M + 2 * BW;
+	constexpr int NF = state_type::NFields;
+	Real const dx = Real(1) / Real(M);
+	Real const half = Real(0.5);
+	Real const zero = Real(0.0);
+	Real const one = Real(1.0);
+	std::vector<state_type> U(N);
+	std::vector<state_type> S(N);
+	std::vector<state_type> U0(N);
+	std::vector<state_type> dUdt(N);
+	std::vector<state_type> UL(N);
+	std::vector<state_type> UR(N);
+	std::vector<state_type> F(N);
+	Real tMax = Real(.1);
+	Real t = Real(0);
+	Real dt;
+	for (int n = 0; n < N; n++) {
+		state_type v;
+		if (n > N / 2) {
+			v.D = Real(sod_init.rhor);
+			v.S = zero;
+			v.Tau = Real(sod_init.pr / (sod_init.gamma - 1.0));
+		} else {
+			v.D = Real(sod_init.rhol);
+			v.S = zero;
+			v.Tau = Real(sod_init.pl / (sod_init.gamma - 1.0));
+		}
+		U[n] = state_type(v);
+	}
+	int n = 0;
+	printf("Starting...\n");
+	while (t < tMax) {
+		U0 = U;
+		for (int rk = 0; rk < BW; rk++) {
+			for (int n = 0; n < BW; n++) {
+				U[n] = U[BW];
+				U[N - n - 1] = U[N - BW - 1];
+			}
+			for (int n = 1; n < N - 1; n++) {
+				state_type const up = U[n + 1];
+				state_type const u0 = U[n];
+				state_type const um = U[n - 1];
+				for (int f = 0; f < NF; f++) {
+					S[n][f] = minmod(u0[f] - um[f], up[f] - u0[f]);
+				}
+			}
+			for (int n = 1; n < N - 1; n++) {
+				UL[n + 1] = U[n] + half * S[n];
+				UR[n] = U[n] + half * S[n];
+			}
+			Real lambdaMax = Real(0);
+			for (int n = BW; n < N - BW + 1; n++) {
+				auto const rc = riemannSolver(UL[n], UR[n]);
+				F[n] = rc.flux;
+				lambdaMax = std::max(lambdaMax, rc.signalSpeed);
+			}
+			if (rk == 0) {
+				dt = Real(0.4) * dx / lambdaMax;
+				dt = std::min(dt, tMax - t);
+				printf("%i %e %e %e\n", n, t, dt, lambdaMax);
+			}
+			for (int n = BW; n < N - BW; n++) {
+				dUdt[n] = -(F[n + 1] - F[n]) * (one / dx);
+			}
+			if (rk == 0) {
+				for (int n = BW; n < N - BW; n++) {
+					U[n] += dt * dUdt[n];
+				}
+			} else {
+				for (int n = BW; n < N - BW; n++) {
+					U[n] = half * (U0[n] + U[n] + dt * dUdt[n]);
+				}
+			}
+		}
+		t += dt;
+		n++;
+	}
+	{
+		FILE *fp = fopen("test.txt", "wt");
+		double l1 = 0.0;
+		constexpr sod_init_t sod_init = { 1.0, 0.125, 1.0, 0.1, 5.0 / 3.0 };
+		for (int n = BW; n < N - BW; n++) {
+			sod_state_t sod;
+			double const x = double((n - N / 2) + 0.5) * double(dx);
+			exact_sod(&sod, &sod_init, x, t, dx);
+			double const err = abs(double(U[n].D) - sod.rho);
+			l1 += err * dx;
+			fprintf(fp, "%e %e %e\n", x, U[n].D, sod.rho);
+		}
+		fclose(fp);
+		printf("Error = %12.4e\n", l1);
+	}
+}
+
 int hpx_main(int argc, char *argv[]) {
+	using namespace Math;
+	compute<1024, 2>();
 	return hpx::local::finalize();
 }
 
+namespace Math {
 Real normalDistribution() {
 	static std::default_random_engine gen(42);
 	static std::normal_distribution d { 0.0, 1.0 };
@@ -93,6 +195,7 @@ Real derivative(std::function<Real(Real)> const &f, Real x) {
 	Real const dfdx1 = half * (f(x + dx) - f(x - dx)) * dxinv;
 	Real const dfdx2 = (f(x + half * dx) - f(x - half * dx)) * dxinv;
 	return (four * dfdx2 - dfdx1) * third;
+}
 }
 
 int main(int argc, char *argv[]) {
@@ -158,9 +261,6 @@ int main(int argc, char *argv[]) {
 	 for (int n = 0; n < 5; n++) {
 	 printf("%e ", w[n] - Real(2));
 	 }*/
-	HydroState<Real, 1> dU;
-	HydroState<Real, 1> p;
-	stateToChar<Real, 1>(dU, p);
 
 	auto rc = hpx::init(argc, argv);
 	return rc;

@@ -12,6 +12,8 @@
 
 #include <functional>
 
+namespace Math {
+
 inline Real findRootNewtonRhapson(std::function<Real(Real)> const &F, std::function<Real(Real)> const &dFdx,
 		Real const x0 = Real(0), Real const toler = Real(1e-10)) {
 	Real x = x0;
@@ -23,6 +25,8 @@ inline Real findRootNewtonRhapson(std::function<Real(Real)> const &F, std::funct
 		x += dx;
 	} while (abs(f) > toler);
 	return x;
+}
+
 }
 
 #endif /* INCLUDE_ROOT_HPP_ */

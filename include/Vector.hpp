@@ -16,52 +16,6 @@
 
 namespace Math {
 
-/*template<typename Type, int Ndim>
- struct Vector {
- USE_STANDARD_ARITHMETIC(Vector, Type)
- USE_STANDARD_DEFAULTS(Vector)
- Vector(std::initializer_list<Type> const &list) {
- std::copy(list.begin(), list.end(), values.begin());
- }
- Vector(Type const &init) {
- std::fill(values.begin(), values.end(), init);
- }
- Type& operator[](int i) {
- return values[i];
- }
- Type operator[](int i) const {
- return values[i];
- }
- bool operator<(Vector<Type, Ndim> const &B) const {
- Vector<Type, Ndim> const &A = *this;
- for (int n = 0; n < Ndim; n++) {
- if (A[n] < B[n]) {
- return true;
- } else if (A[n] > B[n]) {
- return false;
- }
- }
- return false;
- }
- static constexpr size_t size() {
- return Ndim;
- }
- auto begin() {
- return values.begin();
- }
- auto end() {
- return values.end();
- }
- auto begin() const {
- return values.begin();
- }
- auto end() const {
- return values.end();
- }
- private:
- std::array<Type, Ndim> values;
- };*/
-
 template<typename Type, int Ndim>
 Vector<Type, Ndim> max(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
 	Vector<Type, Ndim> result;
