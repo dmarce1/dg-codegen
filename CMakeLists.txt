@@ -15,7 +15,7 @@ set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
 	src/main.cpp
-	src/LegendreP.cpp
+	src/Options.cpp
 	src/Sod.cpp
 ) 
 
@@ -26,6 +26,7 @@ set(astrotiger_header
 	include/Matrix.hpp
 	include/Numbers.hpp
 	include/LegendreP.hpp
+	include/Options.hpp
 	include/Polynomial.hpp
 	include/Real.hpp
 	include/Root.hpp

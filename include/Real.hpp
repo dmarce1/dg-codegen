@@ -142,6 +142,11 @@ struct Real {
 		a.value = std::exp(a.value);
 		return a;
 	}
+	friend Real log(Real a) {
+		debug_check(a);
+		a.value = std::log(a.value);
+		return a;
+	}
 	friend Real cos(Real a) {
 		debug_check(a);
 		a.value = std::cos(a.value);

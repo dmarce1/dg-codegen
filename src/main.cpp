@@ -4,10 +4,10 @@
 
 #include <hpx/hpx_init.hpp>
 #include "HLLC.hpp"
-#include "Integrate.hpp"
 #include "LegendreP.hpp"
 #include "Polynomial.hpp"
 #include "Real.hpp"
+#include "Options.hpp"
 #include "Root.hpp"
 #include "Vector.hpp"
 #include <unordered_map>
@@ -28,9 +28,8 @@ using namespace std;
 template<int M, int P>
 void compute() {
 	using namespace Hydrodynamics;
-	using eos_type = EquationOfState<Real, 5.0/3.0>;
-	using state_type = ConservedState<Real, 1, eos_type>;
-	using prim_type = PrimitiveState<Real, 1, eos_type>;
+	using state_type = ConservedState<Real, 1>;
+	using prim_type = PrimitiveState<Real, 1>;
 	constexpr int BW = 2;
 	constexpr int N = M + 2 * BW;
 	constexpr int NF = state_type::NFields;
@@ -45,7 +44,7 @@ void compute() {
 	std::vector<state_type> UL(N);
 	std::vector<state_type> UR(N);
 	std::vector<state_type> F(N);
-	Real tMax = Real(.1);
+	Real tMax = Real(.01);
 	Real t = Real(0);
 	Real dt;
 	for (int n = 0; n < N; n++) {
@@ -53,11 +52,13 @@ void compute() {
 		if (n > N / 2) {
 			v.D = Real(sod_init.rhor);
 			v.S = zero;
-			v.Tau = Real(sod_init.pr / (sod_init.gamma - 1.0));
+			v.E = Real(sod_init.pr / (sod_init.gamma - 1.0));
+			v.tau = Real(energy2Entropy(sod_init.rhor, sod_init.pr / (sod_init.gamma - 1.0)));
 		} else {
 			v.D = Real(sod_init.rhol);
 			v.S = zero;
-			v.Tau = Real(sod_init.pl / (sod_init.gamma - 1.0));
+			v.E = Real(sod_init.pl / (sod_init.gamma - 1.0));
+			v.tau = Real(energy2Entropy(sod_init.rhol, sod_init.pl / (sod_init.gamma - 1.0)));
 		}
 		U[n] = state_type(v);
 	}
@@ -65,6 +66,14 @@ void compute() {
 	printf("Starting...\n");
 	while (t < tMax) {
 		U0 = U;
+		for (int n = BW - 1; n < BW + 1; n++) {
+			const auto maxE = max(max(U0[n].E, U0[n + 1].E), U0[n - 1].E);
+			U[n].dualEnergyUpdate(maxE);
+		}
+		U = U0;
+		for (int n = BW; n < N - BW; n++) {
+
+		}
 		for (int rk = 0; rk < BW; rk++) {
 			for (int n = 0; n < BW; n++) {
 				U[n] = U[BW];
@@ -115,11 +124,12 @@ void compute() {
 		constexpr sod_init_t sod_init = { 1.0, 0.125, 1.0, 0.1, 5.0 / 3.0 };
 		for (int n = BW; n < N - BW; n++) {
 			sod_state_t sod;
+			prim_type V(U[n]);
 			double const x = double((n - N / 2) + 0.5) * double(dx);
 			exact_sod(&sod, &sod_init, x, t, dx);
 			double const err = abs(double(U[n].D) - sod.rho);
 			l1 += err * dx;
-			fprintf(fp, "%e %e %e\n", x, U[n].D, sod.rho);
+			fprintf(fp, "%e %e %e %e %e\n", x, U[n].D, sod.rho, U[n].tau, energy2Entropy(V.rho, V.rho * V.eps));
 		}
 		fclose(fp);
 		printf("Error = %12.4e\n", l1);
@@ -128,6 +138,7 @@ void compute() {
 
 int hpx_main(int argc, char *argv[]) {
 	using namespace Math;
+	processOptions(argc, argv);
 	compute<1024, 2>();
 	return hpx::local::finalize();
 }
