@@ -21,16 +21,18 @@ set(astrotiger_src
 
 set(astrotiger_header
 	include/Complex.hpp
-	include/Sod.hpp
+	include/Constants.hpp
+	include/Hydrodynamics.hpp
 	include/Integrate.hpp
+	include/LegendreP.hpp
 	include/Matrix.hpp
 	include/Numbers.hpp
-	include/LegendreP.hpp
 	include/Options.hpp
 	include/Polynomial.hpp
+	include/Quadrature.hpp
 	include/Real.hpp
 	include/Root.hpp
-	include/Quadrature.hpp
+	include/Sod.hpp
 	include/Utilities.hpp
 	include/Vector.hpp
 ) 

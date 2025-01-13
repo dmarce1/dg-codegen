@@ -3,7 +3,7 @@
  *******************************************************************************/
 
 #include <hpx/hpx_init.hpp>
-#include "HLLC.hpp"
+#include "Hydrodynamics.hpp"
 #include "LegendreP.hpp"
 #include "Polynomial.hpp"
 #include "Real.hpp"
@@ -19,7 +19,6 @@
 using namespace std;
 
 #include "Real.hpp"
-#include "HLLC.hpp"
 #include "Quadrature.hpp"
 #include "Sod.hpp"
 #include <random>

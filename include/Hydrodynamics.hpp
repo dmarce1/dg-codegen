@@ -5,8 +5,8 @@
  *      Author: dmarce1
  */
 
-#ifndef INCLUDE_HLLC_HPP_
-#define INCLUDE_HLLC_HPP_
+#ifndef INCLUDE_HYDRODYNAMICS_HPP_
+#define INCLUDE_HYDRODYNAMICS_HPP_
 
 #include <cmath>
 
@@ -273,4 +273,4 @@ RiemannReturn<Type, Ndim> riemannSolver(ConservedState<Type, Ndim> UL, Conserved
 
 }
 
-#endif /* INCLUDE_HLLC_HPP_ */
+#endif /* INCLUDE_HYDRODYNAMICS_HPP_ */
