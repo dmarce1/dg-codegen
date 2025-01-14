@@ -24,8 +24,10 @@ set(astrotiger_header
 	include/Constants.hpp
 	include/Hydrodynamics.hpp
 	include/Integrate.hpp
+	include/Interval.hpp
 	include/LegendreP.hpp
 	include/Matrix.hpp
+	include/MultiArray.hpp
 	include/Numbers.hpp
 	include/Options.hpp
 	include/Polynomial.hpp

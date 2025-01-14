@@ -19,6 +19,8 @@
 using namespace std;
 
 #include "Real.hpp"
+#include "Interval.hpp"
+#include "MultiArray.hpp"
 #include "Quadrature.hpp"
 #include "Sod.hpp"
 #include <random>
@@ -137,6 +139,9 @@ void compute() {
 
 int hpx_main(int argc, char *argv[]) {
 	using namespace Math;
+	constexpr int Ndim = 3;
+	Interval<size_t, Ndim> I(unitInterval<size_t, Ndim>());
+	MultiArray<Real, Ndim, 5> A(I);
 	processOptions(argc, argv);
 	compute<1024, 2>();
 	return hpx::local::finalize();
