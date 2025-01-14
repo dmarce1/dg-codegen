@@ -17,6 +17,9 @@
 namespace Math {
 
 template<typename Type, int Ndim>
+using Vector = Matrix<Type, Ndim, 1>;
+
+template<typename Type, int Ndim>
 Vector<Type, Ndim> max(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
 	Vector<Type, Ndim> result;
 	for (int n = 0; n < Ndim; n++) {
@@ -126,6 +129,17 @@ constexpr std::enable_if<std::is_integral_v<RType>, IType>::type Pow(Vector<RTyp
 template<typename Type, int Ndim>
 SquareMatrix<Type, Ndim> vectorTensorProduct(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
 	return A * matrixTranspose(B);
+}
+
+template<typename Type, int Ndim>
+Vector<Type, Ndim> vectorIota(Type init = Type(0)) {
+	static constexpr Type one = Type(1);
+	Vector<Type, Ndim> I;
+	I[0] = init;
+	for (int k = 0; k < Ndim - 1; k++) {
+		I[k + 1] = I[k] + one;
+	}
+	return I;
 }
 
 }

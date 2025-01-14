@@ -140,8 +140,11 @@ void compute() {
 int hpx_main(int argc, char *argv[]) {
 	using namespace Math;
 	constexpr int Ndim = 3;
-	Interval<size_t, Ndim> I(unitInterval<size_t, Ndim>());
-	MultiArray<Real, Ndim, 5> A(I);
+	Vector<int, Ndim> dims(std::array<int, Ndim>( { { 5, 5, 5 } }));
+	MultiArray<Real, Ndim> A(dims);
+	auto view1 = A.getDefaultView();
+	auto view2 = A.getDefaultView();
+	view1 = view2;
 	processOptions(argc, argv);
 	compute<1024, 2>();
 	return hpx::local::finalize();

@@ -28,6 +28,9 @@ struct Interval {
 	Interval(Interval &&other) {
 		*this = std::move(other);
 	}
+	Interval(Math::Vector<Type, Ndim> const &e) {
+		*this = e;
+	}
 	Interval(std::array<Type, Ndim> const &b, std::array<Type, Ndim> const &e) {
 		_begin = b;
 		_end = e;
@@ -40,6 +43,11 @@ struct Interval {
 	Interval& operator=(Interval &&other) {
 		_begin = std::move(other._begin);
 		_end = std::move(other._end);
+		return *this;
+	}
+	Interval& operator=(Math::Vector<Type, Ndim> const &e) {
+		_end = e;
+		_begin = Math::zeroVector<Type, Ndim>();
 		return *this;
 	}
 	Interval operator+() const {
@@ -108,24 +116,48 @@ struct Interval {
 	Type& begin(int k = 0) {
 		return _begin[k];
 	}
-	Type& end(int k = 0) {
-		return _end[k];
-	}
 	Type begin(int k = 0) const {
 		return _begin[k];
+	}
+	Interval contract(Type count) const {
+		return expand(-count);
+	}
+	Type& end(int k = 0) {
+		return _end[k];
 	}
 	Type end(int k = 0) const {
 		return _end[k];
 	}
-	Type span(int k) const {
-		return end(k) - begin(k);
-	}
-	Type volume() const {
-		Type v = one;
-		for (int k = 0; k < Ndim; k++) {
-			v *= span(k);
+	Interval expand(Type count) const {
+		Interval I;
+		for( int k = 0; k < Ndim; k++) {
+			I.begin(k) = begin(k) - count;
+			I.end(k) = end(k) + count;
 		}
-		return v;
+		return I;
+	}
+	Interval intersection(Interval const &B) const {
+		Interval const &A = *this;
+		Interval I;
+		for (int k = 0; k < Ndim; k++) {
+			I.begin(k) = max(A.begin(k), B.begin(k));
+			I.end(k) = min(A.end(k), B.end(k));
+			if (I.end(k) < I.begin(k)) {
+				return nullInterval<Type, Ndim>();
+			}
+		}
+		return I;
+	}
+	bool intersects(Interval const &B) const {
+		Interval const &A = *this;
+		for (int k = 0; k < Ndim; k++) {
+			Type const Ibegin = max(A.begin(k), B.begin(k));
+			Type const Iend = min(A.end(k), B.end(k));
+			if (Iend < Ibegin) {
+				return false;
+			}
+		}
+		return true;
 	}
 	int longest() const {
 		int n;
@@ -138,6 +170,9 @@ struct Interval {
 			}
 		}
 		return n;
+	}
+	Type span(int k) const {
+		return end(k) - begin(k);
 	}
 	std::pair<Interval, Interval> split(int k = -1) const {
 		std::pair<Interval, Interval> rc;
@@ -152,28 +187,12 @@ struct Interval {
 		}
 		return rc;
 	}
-	bool intersects(Interval const &B) const {
-		Interval const &A = *this;
+	Type volume() const {
+		Type v = one;
 		for (int k = 0; k < Ndim; k++) {
-			Type const Ibegin = max(A.begin(k), B.begin(k));
-			Type const Iend = min(A.end(k), B.end(k));
-			if (Iend < Ibegin) {
-				return false;
-			}
+			v *= span(k);
 		}
-		return true;
-	}
-	Interval intersection(Interval const &B) const {
-		Interval const &A = *this;
-		Interval I;
-		for (int k = 0; k < Ndim; k++) {
-			I.begin(k) = max(A.begin(k), B.begin(k));
-			I.end(k) = min(A.end(k), B.end(k));
-			if (I.end(k) < I.begin(k)) {
-				return nullInterval<Type, Ndim>();
-			}
-		}
-		return I;
+		return v;
 	}
 	friend Interval operator*(Type a, Interval const &B) {
 		return B * a;
@@ -182,6 +201,7 @@ private:
 	Math::Vector<Type, Ndim> _begin;
 	Math::Vector<Type, Ndim> _end;
 };
+
 
 template<typename Type, int Ndim>
 Interval<Type, Ndim> nullInterval() {

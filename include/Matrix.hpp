@@ -86,7 +86,7 @@ struct Matrix<Type, RowCount, 1> {
 		}
 	}
 	Matrix(Type const &init) {
-		for (int n = 0; n != size(); n++) {
+		for (int n = 0; n != int(size()); n++) {
 			values[n] = init;
 		}
 	}
@@ -152,9 +152,6 @@ struct Matrix<Type, 1, 1> {
 private:
 	Type value;
 };
-
-template<typename Type, int Ndim>
-using Vector = Matrix<Type, Ndim, 1>;
 
 template<typename Type, int Ndim>
 SquareMatrix<Type, Ndim> identityMatrix() {
