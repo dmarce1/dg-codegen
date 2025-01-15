@@ -81,12 +81,6 @@ template<typename Type, int Ndim, typename Container>
 struct ConservedState: public Container {
 	static constexpr int NFields = Ndim + scalarFieldCount;
 	static constexpr Type half = Type(0.5);
-	static HydrodynamicsOptions<Type> const hydroOptions;
-	ContainerResizer<Container, NFields> const createContainer;
-	Type &D;
-	Type &E;
-	Type &tau;
-	Vector<Type, Ndim> &S;
 	ConservedState() :
 			createContainer(*this), D(Container::operator[](0)), E(Container::operator[](1)), tau(
 					Container::operator[](2)), S((Vector<Type, Ndim>&) Container::operator[](3)) {
@@ -118,18 +112,18 @@ struct ConservedState: public Container {
 			tau = energy2Entropy(D, eThermal);
 		}
 	}
+	static HydrodynamicsOptions<Type> const hydroOptions;
+	ContainerResizer<Container, NFields> const createContainer;
+	Type &D;
+	Type &E;
+	Type &tau;
+	Vector<Type, Ndim> &S;
 };
 
 template<typename Type, int Ndim, typename Container>
 struct PrimitiveState: public Container {
 	static constexpr int NFields = Ndim + scalarFieldCount;
 	static constexpr Type zero = Type(0), half = Type(0.5), one = Type(1);
-	static HydrodynamicsOptions<Type> const hydroOptions;
-	ContainerResizer<Container, NFields> const createContainer;
-	Type &rho;
-	Type &eps;
-	Type &s;
-	Vector<Type, Ndim> &v;
 	PrimitiveState() :
 			createContainer(*this), rho(Container::operator[](0)), eps(Container::operator[](1)), s(
 					Container::operator[](2)), v((Vector<Type, Ndim>&) Container::operator[](3)) {
@@ -219,6 +213,12 @@ struct PrimitiveState: public Container {
 		}
 		return R;
 	}
+	static HydrodynamicsOptions<Type> const hydroOptions;
+	ContainerResizer<Container, NFields> const createContainer;
+	Type &rho;
+	Type &eps;
+	Type &s;
+	Vector<Type, Ndim> &v;
 };
 
 template<typename Type, int Ndim, typename Container>
