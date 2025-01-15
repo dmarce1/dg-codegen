@@ -112,7 +112,7 @@ QuadratureRules<N> gaussLegendreRules() {
 		} while (abs(dTheta) > toler);
 		Real const x = cos(theta);
 		rules.x[l] = x;
-		rules.w[l] = two / (sqr(dLegendrePdX(N, x)) * (one - sqr(x)));
+		rules.w[l] = two / (nSquared(dLegendrePdX(N, x)) * (one - nSquared(x)));
 	}
 	rules.withEndpoints = false;
 	return rules;
@@ -128,7 +128,7 @@ QuadratureRules<P> clenshawCurtisRules() {
 	Vector < Real, N / 2 + 1 > d;
 	d[0] = one;
 	for (int k = 1; k <= N / 2; k++) {
-		d[k] = two / Real(1 - sqr(2 * k));
+		d[k] = two / Real(1 - nSquared(2 * k));
 	}
 	for (int n = 0; n <= N / 2; n++) {
 		Real const c = (Real(n != 0) + one);
@@ -169,7 +169,7 @@ QuadratureRules<N> gaussLobattoRules() {
 		} while (abs(dTheta) > toler);
 		Real const x = cos(theta);
 		rules.x[l] = x;
-		rules.w[l] = two / (Real(N * (N - 1)) * sqr(legendreP(N - 1, x)));
+		rules.w[l] = two / (Real(N * (N - 1)) * nSquared(legendreP(N - 1, x)));
 	}
 	rules.x[0] = -one;
 	rules.x[N - 1] = one;

@@ -13,80 +13,49 @@
 #include "Constants.hpp"
 #include "Options.hpp"
 #include "Matrix.hpp"
+#include "Utilities.hpp"
 #include "Vector.hpp"
 
 namespace Hydrodynamics {
 
 using namespace Math;
 
-template<typename Type>
-struct HydrodynamicsOptions;
+static constexpr int scalarFieldCount = 3;
 
 template<typename Type>
+struct HydrodynamicsOptions {
+	Type fluidGamma;
+	Type dualEnergyPressureSwitch;
+	Type dualEnergyUpdateSwitch;
+	HydrodynamicsOptions() {
+		auto const &opts = getOptions();
+		fluidGamma = Type(opts.fluidGamma);
+		dualEnergyPressureSwitch = Type(opts.dualEnergyPressureSwitch);
+		dualEnergyUpdateSwitch = Type(opts.dualEnergyUpdateSwitch);
+	}
+};
+
+template<typename >
 struct EquationOfState;
 
-template<typename, int>
+template<typename T, int N, typename = Vector<T, N + scalarFieldCount>>
 struct ConservedState;
 
-template<typename, int>
+template<typename T, int N, typename = Vector<T, N + scalarFieldCount>>
 struct PrimitiveState;
 
-template<typename Type, int Ndim>
+template<typename, int, typename >
 struct RiemannReturn;
 
-template<typename Type, int Ndim>
-RiemannReturn<Type, Ndim> riemannSolver(ConservedState<Type, Ndim> UL, ConservedState<Type, Ndim> UR, int k = 0);
+template<typename Type, int Ndim, typename Container>
+RiemannReturn<Type, Ndim, Container> riemannSolver(ConservedState<Type, Ndim, Container> UL,
+		ConservedState<Type, Ndim, Container> UR, int k = 0);
 
 template<typename Type>
 Type energy2Entropy(Type rho, Type e);
 
 template<typename Type>
 Type entropy2Energy(Type rho, Type S);
-
-template<typename Type, int Ndim>
-struct ConservedState: public Vector<Type, Ndim + 3> {
-	static constexpr int NFields = Ndim + 3;
-	using base_type = Vector<Type, NFields>;
-	Type &D;
-	Type &E;
-	Type &tau;
-	Vector<Type, Ndim> &S;
-	ConservedState() :
-			D(base_type::operator[](0)), E(base_type::operator[](1)), tau(base_type::operator[](2)), S(
-					(Vector<Type, Ndim>&) base_type::operator[](3)) {
-	}
-	ConservedState(ConservedState<Type, Ndim> const &U) :
-			D(base_type::operator[](0)), E(base_type::operator[](1)), tau(base_type::operator[](2)), S(
-					(Vector<Type, Ndim>&) base_type::operator[](3)) {
-		*((base_type*) this) = (base_type const&) U;
-	}
-	ConservedState& operator=(PrimitiveState<Type, Ndim> const &V) {
-		static constexpr Type half(0.5);
-		D = V.rho;
-		E = V.rho * (V.eps + half * vectorNorm(V.v));
-		S = V.rho * V.v;
-		tau = V.rho * V.s;
-		return *this;
-	}
-	ConservedState& operator=(ConservedState<Type, Ndim> const &U) {
-		*((base_type*) this) = (base_type const&) U;
-		return *this;
-	}
-	ConservedState& operator=(base_type const &U) {
-		(*(base_type*) this) = U;
-		return *this;
-	}
-	void dualEnergyUpdate(Real maxEnergy) {
-		static constexpr Type half(0.5);
-		static HydrodynamicsOptions<Type> const opts;
-		static Type const energySwitch = opts.dualEnergyUpdateSwitch;
-		Type const eThermal = E - half * vectorNorm(S) / D;
-		if (eThermal > energySwitch * maxEnergy) {
-			tau = energy2Entropy(D, eThermal);
-		}
-	}
-};
-
 
 template<typename Type>
 struct EquationOfState {
@@ -103,48 +72,88 @@ struct EquationOfState {
 		dPdEps = gamm1 * rho;
 	}
 	Type soundSpeed(Type rho, Type eps) const {
-		Type const c2 = dPdRho + P * dPdEps / sqr(rho);
+		Type const c2 = dPdRho + P * dPdEps / nSquared(rho);
 		return sqrt(c2);
 	}
 };
 
-template<typename Type, int Ndim>
-struct PrimitiveState: public Vector<Type, Ndim + 3> {
-	static constexpr int NFields = Ndim + 3;
-	using base_type = Vector<Type, NFields>;
+template<typename Type, int Ndim, typename Container>
+struct ConservedState: public Container {
+	static constexpr int NFields = Ndim + scalarFieldCount;
+	static constexpr Type half = Type(0.5);
+	static HydrodynamicsOptions<Type> const hydroOptions;
+	ContainerResizer<Container, NFields> const createContainer;
+	Type &D;
+	Type &E;
+	Type &tau;
+	Vector<Type, Ndim> &S;
+	ConservedState() :
+			createContainer(*this), D(Container::operator[](0)), E(Container::operator[](1)), tau(
+					Container::operator[](2)), S((Vector<Type, Ndim>&) Container::operator[](3)) {
+	}
+	ConservedState(ConservedState const &U) :
+			createContainer(*this), D(Container::operator[](0)), E(Container::operator[](1)), tau(
+					Container::operator[](2)), S((Vector<Type, Ndim>&) Container::operator[](3)) {
+		*((Container*) this) = (Container const&) U;
+	}
+	ConservedState& operator=(PrimitiveState<Type, Ndim, Container> const &V) {
+		static constexpr Type half(0.5);
+		D = V.rho;
+		E = V.rho * (V.eps + half * vectorNorm(V.v));
+		S = V.rho * V.v;
+		tau = V.rho * V.s;
+		return *this;
+	}
+	ConservedState& operator=(ConservedState const &U) {
+		*((Container*) this) = (Container const&) U;
+		return *this;
+	}
+	ConservedState& operator=(Container const &U) {
+		(*(Container*) this) = U;
+		return *this;
+	}
+	void dualEnergyUpdate(Real maxEnergy) {
+		Type const eThermal = E - half * vectorNorm(S) / D;
+		if (eThermal > hydroOptions.dualEnergyUpdateSwitch * maxEnergy) {
+			tau = energy2Entropy(D, eThermal);
+		}
+	}
+};
+
+template<typename Type, int Ndim, typename Container>
+struct PrimitiveState: public Container {
+	static constexpr int NFields = Ndim + scalarFieldCount;
+	static constexpr Type zero = Type(0), half = Type(0.5), one = Type(1);
+	static HydrodynamicsOptions<Type> const hydroOptions;
+	ContainerResizer<Container, NFields> const createContainer;
 	Type &rho;
 	Type &eps;
 	Type &s;
 	Vector<Type, Ndim> &v;
 	PrimitiveState() :
-			rho(base_type::operator[](0)), eps(base_type::operator[](1)), s(base_type::operator[](2)), v(
-					(Vector<Type, Ndim>&) base_type::operator[](3)) {
+			createContainer(*this), rho(Container::operator[](0)), eps(Container::operator[](1)), s(
+					Container::operator[](2)), v((Vector<Type, Ndim>&) Container::operator[](3)) {
 	}
-	PrimitiveState& operator=(PrimitiveState<Type, Ndim> const &U) {
-		*((base_type*) this) = (base_type const&) U;
-		return *this;
-	}
-	PrimitiveState(ConservedState<Type, Ndim> const &U) :
-			rho(base_type::operator[](0)), eps(base_type::operator[](1)), s(base_type::operator[](2)), v(
-					(Vector<Type, Ndim>&) base_type::operator[](3)) {
-		static constexpr Type one(1);
-		static constexpr Type half(0.5);
-		static HydrodynamicsOptions<Type> const opts;
-		static Type const energySwitch = opts.dualEnergyPressureSwitch;
+	PrimitiveState(ConservedState<Type, Ndim, Container> const &U) :
+			createContainer(*this), rho(Container::operator[](0)), eps(Container::operator[](1)), s(
+					Container::operator[](2)), v((Vector<Type, Ndim>&) Container::operator[](3)) {
 		Type const iD = one / U.D;
 		v = U.S * iD;
 		rho = U.D;
 		eps = U.E - half * vectorNorm(U.S) * iD;
 		s = U.tau * iD;
-		if (eps < energySwitch * U.E) {
+		if (eps < hydroOptions.dualEnergyPressureSwitch * U.E) {
 			eps = entropy2Energy(U.D, U.tau);
 		}
 		eps *= iD;
 	}
-	ConservedState<Type, Ndim> toFlux(int k) const {
-		static Type const half(0.5);
+	PrimitiveState& operator=(PrimitiveState const &U) {
+		*((Container*) this) = (Container const&) U;
+		return *this;
+	}
+	ConservedState<Type, Ndim, Container> toFlux(int k) const {
+		ConservedState<Type, Ndim, Container> F;
 		EquationOfState eos(rho, eps);
-		ConservedState<Type, Ndim> F;
 		F.D = v[k] * rho;
 		F.S = v[k] * rho * v;
 		F.S[k] += eos.P;
@@ -166,9 +175,6 @@ struct PrimitiveState: public Vector<Type, Ndim + 3> {
 		return lambda;
 	}
 	SquareMatrix<Type, NFields> eigenVectors(int k) const {
-		static constexpr Type zero(0);
-		static constexpr Type half(0.5);
-		static constexpr Type one(1);
 		EquationOfState<Type> eos(rho, eps);
 		Vector<Type, NFields> R;
 		Type const h = gamma * eps + half * vectorNorm(v);
@@ -215,34 +221,22 @@ struct PrimitiveState: public Vector<Type, Ndim + 3> {
 	}
 };
 
-template<typename Type, int Ndim>
+template<typename Type, int Ndim, typename Container>
 struct RiemannReturn {
-	ConservedState<Type, Ndim> flux;
+	ConservedState<Type, Ndim, Container> flux;
 	Type signalSpeed;
 };
 
-template<typename Type>
-struct HydrodynamicsOptions {
-	Type fluidGamma;
-	Type dualEnergyPressureSwitch;
-	Type dualEnergyUpdateSwitch;
-	HydrodynamicsOptions() {
-		auto const &opts = getOptions();
-		fluidGamma = Type(opts.fluidGamma);
-		dualEnergyPressureSwitch = Type(opts.dualEnergyPressureSwitch);
-		dualEnergyUpdateSwitch = Type(opts.dualEnergyUpdateSwitch);
-	}
-};
-
-template<typename Type, int Ndim>
-RiemannReturn<Type, Ndim> riemannSolver(ConservedState<Type, Ndim> UL, ConservedState<Type, Ndim> UR, int k) {
+template<typename Type, int Ndim, typename Container>
+RiemannReturn<Type, Ndim, Container> riemannSolver(ConservedState<Type, Ndim, Container> UL,
+		ConservedState<Type, Ndim, Container> UR, int k) {
 	static constexpr Type zero(0);
 	std::swap(UL.S[0], UL.S[k]);
 	std::swap(UR.S[0], UR.S[k]);
-	RiemannReturn<Type, Ndim> rc;
-	ConservedState<Type, Ndim> U0;
-	PrimitiveState<Type, Ndim> const VL(UL);
-	PrimitiveState<Type, Ndim> const VR(UR);
+	RiemannReturn<Type, Ndim, Container> rc;
+	ConservedState<Type, Ndim, Container> U0;
+	PrimitiveState<Type, Ndim, Container> const VL(UL);
+	PrimitiveState<Type, Ndim, Container> const VR(UR);
 	EquationOfState<Type> eosL(VL.rho, VL.eps);
 	EquationOfState<Type> eosR(VR.rho, VR.eps);
 	Type const pL = eosL.P;
@@ -303,6 +297,12 @@ Type entropy2Energy(Type rho, Type S) {
 	static Type const gamm1 = gam - one;
 	return exp(gamm1 * S / rho) * pow(rho, gam);
 }
+
+template<typename Type, int Ndim, typename Container>
+HydrodynamicsOptions<Type> const ConservedState<Type, Ndim, Container>::hydroOptions { };
+
+template<typename Type, int Ndim, typename Container>
+HydrodynamicsOptions<Type> const PrimitiveState<Type, Ndim, Container>::hydroOptions { };
 
 }
 

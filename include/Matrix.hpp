@@ -8,14 +8,15 @@
 #ifndef INCLUDE_MATRIX_HPP_
 #define INCLUDE_MATRIX_HPP_
 
+#include "ForwardDeclarations.hpp"
+#include "Utilities.hpp"
+
 #include <algorithm>
 #include <array>
 #include <iostream>
 #include <string>
 #include <stacktrace>
 #include <type_traits>
-
-#include "Utilities.hpp"
 
 namespace Math {
 
@@ -71,24 +72,14 @@ template<typename Type, int RowCount>
 struct Matrix<Type, RowCount, 1> {
 	USE_STANDARD_DEFAULTS(Matrix)
 	USE_STANDARD_ARITHMETIC(Matrix, Type)
-	;/**/
 	static constexpr std::size_t size() {
 		return RowCount;
 	}
-	Matrix(std::array<std::array<Type, 1>, RowCount> const &initList) {
-		for (int n = 0; n < RowCount; n++) {
-			operator[](n) = initList[n][0];
-		}
+	Matrix(Type const &initValue) {
+		std::fill(begin(), end(), initValue);
 	}
-	Matrix(std::array<Type, RowCount> const &initList) {
-		for (int n = 0; n < RowCount; n++) {
-			operator[](n) = initList[n];
-		}
-	}
-	Matrix(Type const &init) {
-		for (int n = 0; n != int(size()); n++) {
-			values[n] = init;
-		}
+	Matrix(std::initializer_list<Type> const &initList) {
+		std::copy(initList.begin(), initList.end(), begin());
 	}
 	Type& operator[](int n, int m) {
 		assert(m == 0);
@@ -125,6 +116,9 @@ struct Matrix<Type, 1, 1> {
 	USE_STANDARD_DEFAULTS(Matrix)
 	USE_STANDARD_ARITHMETIC(Matrix, Type)
 	;/**/
+	Matrix(std::initializer_list<Type> const &initList) {
+		value = *(initList.begin());
+	}
 	Matrix(Type const &init) {
 		value = init;
 	}
@@ -153,12 +147,13 @@ private:
 	Type value;
 };
 
+
 template<typename Type, int Ndim>
 SquareMatrix<Type, Ndim> identityMatrix() {
 	SquareMatrix<Type, Ndim> identity;
 	for (int n = 0; n < Ndim; n++) {
 		for (int m = 0; m < Ndim; m++) {
-			identity[n, m] = Type(n == m);
+			identity[n, m] = Math::kroneckerDelta<int>(n, m);
 		}
 	}
 	return identity;
@@ -439,4 +434,7 @@ std::string toString(Matrix<Type, RowCount, ColumnCount> const &M) {
 }
 
 }
+
+#include "Numbers.hpp"
+
 #endif /* INCLUDE_MATRIX_HPP_ */

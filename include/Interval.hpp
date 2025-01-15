@@ -187,6 +187,10 @@ struct Interval {
 		}
 		return rc;
 	}
+	void swapDimensions(int k, int n) {
+		std::swap(begin(k), begin(n));
+		std::swap(end(k), end(n));
+	}
 	Type volume() const {
 		Type v = one;
 		for (int k = 0; k < Ndim; k++) {

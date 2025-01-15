@@ -123,5 +123,44 @@ private:
 	value_type value;
 };
 
+#include <deque>
+#include <valarray>
+#include <vector>
+
+template<typename, int>
+struct containerHasResize: public std::false_type {
+	static constexpr bool value = false;
+};
+
+template<typename T, int N>
+struct containerHasResize<std::deque<T>, N> : public std::true_type {
+	static constexpr bool value = true;
+};
+
+template<typename T, int N>
+struct containerHasResize<std::valarray<T>, N> : public std::true_type {
+	static constexpr bool value = true;
+};
+
+template<typename T, int N>
+struct containerHasResize<std::vector<T>, N> : public std::true_type {
+	static constexpr bool value = true;
+};
+
+template<typename Container, int N, bool = containerHasResize<Container, N>::value>
+struct ContainerResizer;
+
+template<typename Container, int N>
+struct ContainerResizer<Container, N, false> {
+	ContainerResizer(Container&) {
+	}
+};
+
+template<typename Container, int N>
+struct ContainerResizer<Container, N, true> {
+	ContainerResizer(Container &container) {
+		container = Container(N);
+	}
+};
 
 #endif /* INCLUDE_UTILITIES_HPP_ */

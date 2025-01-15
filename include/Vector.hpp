@@ -144,4 +144,5 @@ Vector<Type, Ndim> vectorIota(Type init = Type(0)) {
 
 }
 
+
 #endif /* INCLUDE_VECTOR_HPP_ */

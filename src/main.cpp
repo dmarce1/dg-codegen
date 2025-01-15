@@ -17,9 +17,10 @@
 #include <debug/vector>
 #include <span>
 using namespace std;
-
+#include "TriangularArray.hpp"
 #include "Real.hpp"
 #include "Interval.hpp"
+#include "Limiters.hpp"
 #include "MultiArray.hpp"
 #include "Quadrature.hpp"
 #include "Sod.hpp"
@@ -137,16 +138,22 @@ void compute() {
 	}
 }
 
+void testIntegers();
+
+
 int hpx_main(int argc, char *argv[]) {
-	using namespace Math;
-	constexpr int Ndim = 3;
-	Vector<int, Ndim> dims(std::array<int, Ndim>( { { 5, 5, 5 } }));
-	MultiArray<Real, Ndim> A(dims);
-	auto view1 = A.getDefaultView();
-	auto view2 = A.getDefaultView();
-	view1 = view2;
-	processOptions(argc, argv);
-	compute<1024, 2>();
+	testIntegers();
+	Hydrodynamics::ConservedState<Math::Real, 3, std::valarray<Math::Real>> state;
+	/*	using namespace Math;
+	 constexpr int Ndim = 3;
+	 TriangularArray<Real, 3, 4> test;
+	 Vector<int, Ndim> dims { 5, 5, 5 };
+	 MultiArray<Real, Ndim> A(dims);
+	 auto view1 = A.getDefaultView();
+	 auto view2 = A.getDefaultView();
+	 view1 = view2;
+	 processOptions(argc, argv);
+	 compute<1024, 2>();*/
 	return hpx::local::finalize();
 }
 

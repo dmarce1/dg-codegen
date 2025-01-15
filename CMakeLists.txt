@@ -15,6 +15,7 @@ set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
 	src/main.cpp
+	src/Integers.cpp
 	src/Options.cpp
 	src/Sod.cpp
 ) 
@@ -22,10 +23,12 @@ set(astrotiger_src
 set(astrotiger_header
 	include/Complex.hpp
 	include/Constants.hpp
+	include/ForwardDeclarations.hpp
 	include/Hydrodynamics.hpp
 	include/Integrate.hpp
 	include/Interval.hpp
 	include/LegendreP.hpp
+	include/Limiters.hpp
 	include/Matrix.hpp
 	include/MultiArray.hpp
 	include/Numbers.hpp
@@ -35,6 +38,7 @@ set(astrotiger_header
 	include/Real.hpp
 	include/Root.hpp
 	include/Sod.hpp
+	include/TriangularArray.hpp
 	include/Utilities.hpp
 	include/Vector.hpp
 ) 
