@@ -15,6 +15,8 @@ struct Options {
 	double dualEnergyPressureSwitch;
 	double dualEnergyUpdateSwitch;
 	double fluidGamma;
+	double gridScale;
+	int gridLength;
 };
 
 const Options& getOptions();

@@ -33,14 +33,13 @@ bool processOptions(int argc, char *argv[]) {
 	Options opts;
 	bool success;
 	po::options_description commandOptions("options");
-	commandOptions.add_options()                                                                            //
-	("help", "produce help message")                                                                        //
-	("configFile", po::value < std::string > (&(opts.configFile))->default_value(""), "configuration file") //
-	("fluidGamma", po::value<double>(&(opts.fluidGamma))->default_value(5.0 / 3.0), "fluid gamma")          //
-	("dualEnergyPressureSwitch", po::value<double>(&(opts.dualEnergyPressureSwitch))->default_value(0.001),
-			"dual energy pressure switch")                                                                  //
-	("dualEnergyUpdateSwitch", po::value<double>(&(opts.dualEnergyUpdateSwitch))->default_value(0.1),
-			"dual energy update switch")                                                                    //
+	commandOptions.add_options()                                                                                                                           //
+	("configFile", po::value < std::string > (&(opts.configFile))->default_value(""), "configuration file")                                                //
+	("dualEnergyPressureSwitch", po::value<double>(&(opts.dualEnergyPressureSwitch))->default_value(0.001), "dual energy pressure switch (default 0.001)") //
+	("dualEnergyUpdateSwitch", po::value<double>(&(opts.dualEnergyUpdateSwitch))->default_value(0.1), "dual energy update switch (default 0.1)")           //
+	("fluidGamma", po::value<double>(&(opts.fluidGamma))->default_value(5.0 / 3.0), "fluid gamma (default 5.0 / 3.0)")                                     //
+	("gridLength", po::value<int>(&(opts.gridLength))->default_value(256), "length of grid edge in cells (default 256)")                                   //
+	("gridScale", po::value<double>(&(opts.gridScale))->default_value(1.0), "scale of simulation domain (default 1.0)")("help", "produce help message")    //
 			;
 	printf("Processing options\n");
 	po::variables_map variableMap;

@@ -11,20 +11,20 @@
 namespace Math {
 
 
-template<typename T, typename U>
-constexpr T integerPower(T, U);
+template<typename T>
+constexpr T integerPower(T, int);
 
 template<typename T>
-constexpr T kroneckerDelta(T, T);
+constexpr T kroneckerDelta(int, int);
 
 template<typename T>
-constexpr T negativeOne2Power(T);
+constexpr T negativeOne2Power(int);
 
 template<typename T>
-constexpr T nChooseK(T, T);
+constexpr T nChooseK(int, int);
 
 template<typename T>
-constexpr T nFactorial(T);
+constexpr T nFactorial(int);
 
 template<typename T>
 constexpr T nSign(T);

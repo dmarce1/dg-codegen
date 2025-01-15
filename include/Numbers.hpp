@@ -14,24 +14,23 @@
 
 namespace Math {
 
-template<typename T, typename U>
-constexpr T integerPower(T x, U n) {
+template<typename T>
+constexpr T integerPower(T x, int n) {
 	static constexpr T one = T(1);
-	static constexpr U iOne = U(1);
 	T xm = x;
 	T xn = one;
 	while (n) {
-		if (n & iOne) {
+		if (n & 1) {
 			xn *= xm;
 		}
 		xm *= xm;
-		n >>= iOne;
+		n >>= 1;
 	}
 	return xn;
 }
 
 template<typename T>
-constexpr T kroneckerDelta(T n, T m) {
+constexpr T kroneckerDelta(int n, int m) {
 	static constexpr T zero = T(0);
 	static constexpr T one = T(1);
 	if (n == m) {
@@ -42,7 +41,7 @@ constexpr T kroneckerDelta(T n, T m) {
 }
 
 template<typename T>
-constexpr T negativeOne2Power(T k) {
+constexpr T negativeOne2Power(int k) {
 	static constexpr T one = T(1);
 	if( k & 1 ) {
 		return -one;
@@ -52,7 +51,7 @@ constexpr T negativeOne2Power(T k) {
 }
 
 template<typename T>
-constexpr T nChooseK(T n, T k) {
+constexpr T nChooseK(int n, int k) {
 	static constexpr T one = T(1);
 	T num = one;
 	T den = one;
@@ -64,12 +63,12 @@ constexpr T nChooseK(T n, T k) {
 }
 
 template<typename T>
-constexpr T nFactorial(T n) {
+constexpr T nFactorial(int n) {
 	static constexpr T one = T(1);
 	if (n <= 1) {
 		return one;
 	} else {
-		return n * nFactorial(n - 1);
+		return n * nFactorial<T>(n - 1);
 	}
 }
 

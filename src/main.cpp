@@ -7,7 +7,9 @@
 #include "LegendreP.hpp"
 #include "Polynomial.hpp"
 #include "Real.hpp"
+#include "HydroGrid.hpp"
 #include "Options.hpp"
+#include "Radiation.hpp"
 #include "Root.hpp"
 #include "Vector.hpp"
 #include <unordered_map>
@@ -24,6 +26,7 @@ using namespace std;
 #include "MultiArray.hpp"
 #include "Quadrature.hpp"
 #include "Sod.hpp"
+#include "Zobrist.hpp"
 #include <random>
 #include <vector>
 
@@ -140,10 +143,9 @@ void compute() {
 
 void testIntegers();
 
-
 int hpx_main(int argc, char *argv[]) {
-	testIntegers();
-	Hydrodynamics::ConservedState<Math::Real, 3, std::valarray<Math::Real>> state;
+//	HydroGrid<Math::Real, NDIM, PORDER> hydroTest;
+//	TriangularIndices<3, 6> test;
 	/*	using namespace Math;
 	 constexpr int Ndim = 3;
 	 TriangularArray<Real, 3, 4> test;

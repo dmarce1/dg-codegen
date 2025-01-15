@@ -6,10 +6,10 @@ find_package(HDF5 REQUIRED COMPONENTS C CXX)
 find_package(HPX REQUIRED)
 
 set(AT_NDIM "3" CACHE STRING "Number of spatial dimensions")
-set(AT_LEGENDRE_MAX_ORDER "32" CACHE STRING "Sets maximum order for Legendre polynomials")
+set(AT_PORDER "2" CACHE STRING "Sets order of spatial discretization")
 set(AT_CHECK_REALS "1" CACHE STRING "Whether to check Real number operations for errors.")
 
-set(ALL_FLAGS  -Wall -I${PROJECT_SOURCE_DIR}/include -DNDIM=${AT_NDIM} -DCHECK_REALS=${AT_CHECK_REALS} -DLEGENDRE_MAX_ORDER=${AT_LEGENDRE_MAX_ORDER})
+set(ALL_FLAGS  -Wall -I${PROJECT_SOURCE_DIR}/include -DNDIM=${AT_NDIM} -DCHECK_REALS=${AT_CHECK_REALS} -DPORDER=${AT_PORDER})
 set(CXX_FLAGS  ${ALL_FLAGS} -march=native )
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
@@ -17,6 +17,7 @@ set(astrotiger_src
 	src/main.cpp
 	src/Integers.cpp
 	src/Options.cpp
+	src/Radiation.cpp
 	src/Sod.cpp
 ) 
 
@@ -25,6 +26,7 @@ set(astrotiger_header
 	include/Constants.hpp
 	include/ForwardDeclarations.hpp
 	include/Hydrodynamics.hpp
+	include/HydroGrid.hpp
 	include/Integrate.hpp
 	include/Interval.hpp
 	include/LegendreP.hpp
@@ -35,6 +37,7 @@ set(astrotiger_header
 	include/Options.hpp
 	include/Polynomial.hpp
 	include/Quadrature.hpp
+	include/Radiation.hpp
 	include/Real.hpp
 	include/Root.hpp
 	include/Sod.hpp

@@ -13,6 +13,7 @@
 
 #include "Matrix.hpp"
 #include "Utilities.hpp"
+#include "Zobrist.hpp"
 
 namespace Math {
 
@@ -101,6 +102,11 @@ Type vectorNorm(Vector<Type, Ndim> const &A) {
 }
 
 template<typename Type, int Ndim>
+Type vectorMagnitude(Vector<Type, Ndim> const &A) {
+	return sqrt(vectorNorm(A));
+}
+
+template<typename Type, int Ndim>
 Type vectorSum(Vector<Type, Ndim> const &A) {
 	Type sum = Type(0);
 	for (int d = 0; d < NDIM; d++) {
@@ -110,8 +116,7 @@ Type vectorSum(Vector<Type, Ndim> const &A) {
 }
 
 template<typename RType, typename IType, int Ndim>
-constexpr std::enable_if<std::is_integral_v<RType>, IType>::type Pow(Vector<RType, Ndim> const &x,
-		Vector<IType, Ndim> n) {
+constexpr std::enable_if<std::is_integral_v<RType>, IType>::type Pow(Vector<RType, Ndim> const &x, Vector<IType, Ndim> n) {
 	RType xn = RType(1);
 	for (int d = 0; d < Ndim; d++) {
 		RType xm = x[d];
@@ -128,7 +133,13 @@ constexpr std::enable_if<std::is_integral_v<RType>, IType>::type Pow(Vector<RTyp
 
 template<typename Type, int Ndim>
 SquareMatrix<Type, Ndim> vectorTensorProduct(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
-	return A * matrixTranspose(B);
+	SquareMatrix<Type, Ndim> C;
+	for (int n = 0; n < Ndim; n++) {
+		for (int k = 0; k < Ndim; k++) {
+			C[n, k] = A[n] * B[k];
+		}
+	}
+	return C;
 }
 
 template<typename Type, int Ndim>
@@ -142,7 +153,13 @@ Vector<Type, Ndim> vectorIota(Type init = Type(0)) {
 	return I;
 }
 
+template<typename T, int D, T MaxT>
+struct vectorHashKey {
+	size_t operator()(Vector<T, D> const &vector) const {
+		static ZobristGenerator<T> const zobristGenerator(MaxT);
+		return zobristGenerator(vector.begin(), vector.end());
+	}
+};
+
 }
-
-
 #endif /* INCLUDE_VECTOR_HPP_ */

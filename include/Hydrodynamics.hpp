@@ -48,8 +48,7 @@ template<typename, int, typename >
 struct RiemannReturn;
 
 template<typename Type, int Ndim, typename Container>
-RiemannReturn<Type, Ndim, Container> riemannSolver(ConservedState<Type, Ndim, Container> UL,
-		ConservedState<Type, Ndim, Container> UR, int k = 0);
+RiemannReturn<Type, Ndim, Container> riemannSolver(ConservedState<Type, Ndim, Container> UL, ConservedState<Type, Ndim, Container> UR, int k = 0);
 
 template<typename Type>
 Type energy2Entropy(Type rho, Type e);
@@ -80,18 +79,17 @@ struct EquationOfState {
 template<typename Type, int Ndim, typename Container>
 struct ConservedState: public Container {
 	static constexpr int NFields = Ndim + scalarFieldCount;
-	static constexpr Type half = Type(0.5);
 	ConservedState() :
-			createContainer(*this), D(Container::operator[](0)), E(Container::operator[](1)), tau(
-					Container::operator[](2)), S((Vector<Type, Ndim>&) Container::operator[](3)) {
+			createContainer(*this), D(Container::operator[](0)), E(Container::operator[](1)), tau(Container::operator[](2)), S(
+					(Vector<Type, Ndim>&) Container::operator[](3)) {
 	}
 	ConservedState(ConservedState const &U) :
-			createContainer(*this), D(Container::operator[](0)), E(Container::operator[](1)), tau(
-					Container::operator[](2)), S((Vector<Type, Ndim>&) Container::operator[](3)) {
+			createContainer(*this), D(Container::operator[](0)), E(Container::operator[](1)), tau(Container::operator[](2)), S(
+					(Vector<Type, Ndim>&) Container::operator[](3)) {
 		*((Container*) this) = (Container const&) U;
 	}
 	ConservedState& operator=(PrimitiveState<Type, Ndim, Container> const &V) {
-		static constexpr Type half(0.5);
+		static constexpr Type half = Type(0.5);
 		D = V.rho;
 		E = V.rho * (V.eps + half * vectorNorm(V.v));
 		S = V.rho * V.v;
@@ -107,6 +105,7 @@ struct ConservedState: public Container {
 		return *this;
 	}
 	void dualEnergyUpdate(Real maxEnergy) {
+		static constexpr Type half = Type(0.5);
 		Type const eThermal = E - half * vectorNorm(S) / D;
 		if (eThermal > hydroOptions.dualEnergyUpdateSwitch * maxEnergy) {
 			tau = energy2Entropy(D, eThermal);
@@ -123,14 +122,14 @@ struct ConservedState: public Container {
 template<typename Type, int Ndim, typename Container>
 struct PrimitiveState: public Container {
 	static constexpr int NFields = Ndim + scalarFieldCount;
-	static constexpr Type zero = Type(0), half = Type(0.5), one = Type(1);
 	PrimitiveState() :
-			createContainer(*this), rho(Container::operator[](0)), eps(Container::operator[](1)), s(
-					Container::operator[](2)), v((Vector<Type, Ndim>&) Container::operator[](3)) {
+			createContainer(*this), rho(Container::operator[](0)), eps(Container::operator[](1)), s(Container::operator[](2)), v(
+					(Vector<Type, Ndim>&) Container::operator[](3)) {
 	}
 	PrimitiveState(ConservedState<Type, Ndim, Container> const &U) :
-			createContainer(*this), rho(Container::operator[](0)), eps(Container::operator[](1)), s(
-					Container::operator[](2)), v((Vector<Type, Ndim>&) Container::operator[](3)) {
+			createContainer(*this), rho(Container::operator[](0)), eps(Container::operator[](1)), s(Container::operator[](2)), v(
+					(Vector<Type, Ndim>&) Container::operator[](3)) {
+		static constexpr Type half = Type(0.5), one = Type(1);
 		Type const iD = one / U.D;
 		v = U.S * iD;
 		rho = U.D;
@@ -146,6 +145,7 @@ struct PrimitiveState: public Container {
 		return *this;
 	}
 	ConservedState<Type, Ndim, Container> toFlux(int k) const {
+		static constexpr Type half = Type(0.5);
 		ConservedState<Type, Ndim, Container> F;
 		EquationOfState eos(rho, eps);
 		F.D = v[k] * rho;
@@ -169,6 +169,7 @@ struct PrimitiveState: public Container {
 		return lambda;
 	}
 	SquareMatrix<Type, NFields> eigenVectors(int k) const {
+		static constexpr Type zero = Type(0), half = Type(0.5), one = Type(1);
 		EquationOfState<Type> eos(rho, eps);
 		Vector<Type, NFields> R;
 		Type const h = gamma * eps + half * vectorNorm(v);
@@ -228,8 +229,7 @@ struct RiemannReturn {
 };
 
 template<typename Type, int Ndim, typename Container>
-RiemannReturn<Type, Ndim, Container> riemannSolver(ConservedState<Type, Ndim, Container> UL,
-		ConservedState<Type, Ndim, Container> UR, int k) {
+RiemannReturn<Type, Ndim, Container> riemannSolver(ConservedState<Type, Ndim, Container> UL, ConservedState<Type, Ndim, Container> UR, int k) {
 	static constexpr Type zero(0);
 	std::swap(UL.S[0], UL.S[k]);
 	std::swap(UR.S[0], UR.S[k]);

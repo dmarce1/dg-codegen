@@ -28,16 +28,14 @@ using SquareMatrix = Matrix<Type, Ndim, Ndim, Container>;
 
 template<typename Type, int RowCount, int ColumnCount, typename Container>
 struct Matrix {
-	USE_STANDARD_ARITHMETIC(Matrix, Type)
-	;/**/
 	static constexpr std::size_t size() {
 		return ColumnCount * RowCount;
 	}
 	Matrix() :
-			createContainer(values) {
+			values(), createContainer(values) {
 	}
 	Matrix(std::array<std::array<Type, ColumnCount>, RowCount> const &initList) :
-			createContainer(values) {
+			values(), createContainer(values) {
 		for (int n = 0; n < RowCount; n++) {
 			for (int m = 0; m < ColumnCount; m++) {
 				operator[](n, m) = initList[n][m];
@@ -45,16 +43,97 @@ struct Matrix {
 		}
 	}
 	Matrix(Type const &init) :
-			createContainer(values) {
+			values(), createContainer(values) {
 		for (int n = 0; n != size(); n++) {
 			values[n] = init;
 		}
+	}
+	Matrix(Matrix const &other) :
+			values(), createContainer(values) {
+		values = other.values;
+	}
+	Matrix(Matrix &&other) :
+			values(), createContainer(values) {
+		values = std::move(other.values);
+	}
+	Matrix& operator=(Matrix const &other) {
+		values = other.values;
+		return *this;
+	}
+	Matrix& operator=(Matrix &&other) {
+		values = std::move(other.values);
+		return *this;
 	}
 	Type& operator[](int n, int m) {
 		return values[n * ColumnCount + m];
 	}
 	Type operator[](int n, int m) const {
 		return values[n * ColumnCount + m];
+	}
+	Matrix& operator+=(Matrix const &A) {
+		*this = *this + A;
+		return *this;
+	}
+	Matrix& operator-=(Matrix const &A) {
+		*this = *this - A;
+		return *this;
+	}
+	Matrix& operator*=(Type const &a) {
+		*this = *this * a;
+		return *this;
+	}
+	Matrix& operator/=(Type const &a) {
+		*this = *this / a;
+		return *this;
+	}
+	Matrix operator*(Type const &a) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = a * values[k];
+		}
+		return B;
+	}
+	Matrix operator/(Type const &a) const {
+		static constexpr Type one = Type(1);
+		Matrix B;
+		Type const aInv = one / a;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = aInv * values[k];
+		}
+		return B;
+	}
+	Matrix operator+() const {
+		return *this;
+	}
+	Matrix operator-() const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = -values[k];
+		}
+		return B;
+	}
+	Matrix operator+(Matrix const &A) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = values[k] + A.values[k];
+		}
+		return B;
+	}
+	Matrix operator-(Matrix const &A) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = values[k] + A.values[k];
+		}
+		return B;
+	}
+	Matrix operator==(Matrix const &A) const {
+		return bool(this->values == A.values);
+	}
+	Matrix operator!=(Matrix const &A) const {
+		return !operator==(A);
+	}
+	friend Matrix operator*(Type const &a, Matrix const &B) {
+		return B * a;
 	}
 	auto begin() const {
 		return values.begin();
@@ -69,26 +148,41 @@ struct Matrix {
 		return values.end();
 	}
 private:
-	ContainerResizer<Container, size()> const createContainer;
 	Container values;
+	ContainerResizer<Container, size()> const createContainer;
 };
 
 template<typename Type, int RowCount, typename Container>
 struct Matrix<Type, RowCount, 1, Container> {
-	USE_STANDARD_ARITHMETIC(Matrix, Type)
 	static constexpr std::size_t size() {
 		return RowCount;
 	}
 	Matrix() :
-			createContainer(values) {
+			values(), createContainer(values) {
 	}
 	Matrix(Type const &initValue) :
-			createContainer(values) {
+			values(), createContainer(values) {
 		std::fill(begin(), end(), initValue);
 	}
 	Matrix(std::initializer_list<Type> const &initList) :
-			createContainer(values) {
+			values(), createContainer(values) {
 		std::copy(initList.begin(), initList.end(), begin());
+	}
+	Matrix(Matrix const &other) :
+			values(), createContainer(values) {
+		values = other.values;
+	}
+	Matrix(Matrix &&other) :
+			values(), createContainer(values) {
+		values = std::move(other.values);
+	}
+	Matrix& operator=(Matrix const &other) {
+		values = other.values;
+		return *this;
+	}
+	Matrix& operator=(Matrix &&other) {
+		values = std::move(other.values);
+		return *this;
 	}
 	Type& operator[](int n, int m) {
 		assert(m == 0);
@@ -104,6 +198,71 @@ struct Matrix<Type, RowCount, 1, Container> {
 	Type& operator[](int n) {
 		return values[n];
 	}
+	Matrix& operator+=(Matrix const &A) {
+		*this = *this + A;
+		return *this;
+	}
+	Matrix& operator-=(Matrix const &A) {
+		*this = *this - A;
+		return *this;
+	}
+	Matrix& operator*=(Type const &a) {
+		*this = *this * a;
+		return *this;
+	}
+	Matrix& operator/=(Type const &a) {
+		*this = *this / a;
+		return *this;
+	}
+	Matrix operator*(Type const &a) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = a * values[k];
+		}
+		return B;
+	}
+	Matrix operator/(Type const &a) const {
+		static constexpr Type one = Type(1);
+		Matrix B;
+		Type const aInv = one / a;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = aInv * values[k];
+		}
+		return B;
+	}
+	Matrix operator+() const {
+		return *this;
+	}
+	Matrix operator-() const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = -values[k];
+		}
+		return B;
+	}
+	Matrix operator+(Matrix const &A) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = values[k] + A.values[k];
+		}
+		return B;
+	}
+	Matrix operator-(Matrix const &A) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.values[k] = values[k] + A.values[k];
+		}
+		return B;
+	}
+	Matrix operator==(Matrix const &A) const {
+		return bool(this->values == A.values);
+	}
+	Matrix operator!=(Matrix const &A) const {
+		return !operator==(A);
+	}
+	friend Matrix operator*(Type const &a, Matrix const &B) {
+		return B * a;
+	}
 	auto begin() const {
 		return values.begin();
 	}
@@ -117,23 +276,35 @@ struct Matrix<Type, RowCount, 1, Container> {
 		return values.end();
 	}
 private:
-	ContainerResizer<Container, RowCount> const createContainer;
 	Container values;
+	ContainerResizer<Container, RowCount> const createContainer;
 };
 
 template<typename Type, typename Container>
 struct Matrix<Type, 1, 1, Container> {
-	USE_STANDARD_ARITHMETIC(Matrix, Type)
-	;/**/
 	Matrix() {
 	}
-	Matrix(std::initializer_list<Type> const &initList) {
-		value = *(initList.begin());
+	Matrix(std::initializer_list<Type> const &initList) :
+			value(*(initList.begin())) {
 	}
-	Matrix(Type const &init) {
-		value = init;
+	Matrix(Type const &init) :
+			value(init) {
 	}
-	static constexpr std::size_t size() {
+	Matrix(Matrix const &other) :
+			value(other.value) {
+	}
+	Matrix(Matrix &&other) :
+			value(std::move(other.value)) {
+	}
+	Matrix& operator=(Matrix const &other) {
+		value = other.value;
+		return *this;
+	}
+	Matrix& operator=(Matrix &&other) {
+		value = std::move(other.value);
+		return *this;
+	}
+	static constexpr size_t size() {
 		return 1;
 	}
 	Type& operator[](int, int) {
@@ -154,24 +325,87 @@ struct Matrix<Type, 1, 1, Container> {
 	operator Type&() {
 		return value;
 	}
+	Matrix& operator+=(Matrix const &A) {
+		*this = *this + A;
+		return *this;
+	}
+	Matrix& operator-=(Matrix const &A) {
+		*this = *this - A;
+		return *this;
+	}
+	Matrix& operator*=(Type const &a) {
+		*this = *this * a;
+		return *this;
+	}
+	Matrix& operator/=(Type const &a) {
+		*this = *this / a;
+		return *this;
+	}
+	Matrix operator*(Type const &a) const {
+		Matrix B;
+		B.value = a * value;
+		return B;
+	}
+	Matrix operator/(Type const &a) const {
+		static constexpr Type one = Type(1);
+		Matrix B;
+		Type const aInv = one / a;
+		for (int k = 0; k < int(size()); k++) {
+			B.value = aInv * value;
+		}
+		return B;
+	}
+	Matrix operator+() const {
+		return *this;
+	}
+	Matrix operator-() const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.value = -value;
+		}
+		return B;
+	}
+	Matrix operator+(Matrix const &A) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.value = value + A.value;
+		}
+		return B;
+	}
+	Matrix operator-(Matrix const &A) const {
+		Matrix B;
+		for (int k = 0; k < int(size()); k++) {
+			B.value = value + A.value;
+		}
+		return B;
+	}
+	Matrix operator==(Matrix const &A) const {
+		return bool(this->values == A.values);
+	}
+	Matrix operator!=(Matrix const &A) const {
+		return !operator==(A);
+	}
+	friend Matrix operator*(Type const &a, Matrix const &B) {
+		return B * a;
+	}
 private:
 	Type value;
 };
 
 template<typename Type, int Ndim, typename Container = std::array<Type, Ndim * Ndim> >
-SquareMatrix<Type, Ndim, Container> identityMatrix() {
+constexpr SquareMatrix<Type, Ndim, Container> identityMatrix() {
 	SquareMatrix<Type, Ndim> identity;
 	for (int n = 0; n < Ndim; n++) {
 		for (int m = 0; m < Ndim; m++) {
-			identity[n, m] = Math::kroneckerDelta<int>(n, m);
+			identity[n, m] = kroneckerDelta<Type>(n, m);
 		}
 	}
 	return identity;
 }
 
 template<typename Type, int Ndim, typename Container = std::array<Type, Ndim * Ndim> >
-SquareMatrix<Type, Ndim> zeroMatrix() {
-	SquareMatrix<Type, Ndim> Z;
+SquareMatrix<Type, Ndim, Container> zeroMatrix() {
+	SquareMatrix<Type, Ndim, Container> Z;
 	Type const zero = Type(0);
 	for (int n = 0; n < Ndim; n++) {
 		for (int m = 0; m < Ndim; m++) {
@@ -181,9 +415,9 @@ SquareMatrix<Type, Ndim> zeroMatrix() {
 	return Z;
 }
 
-template<typename T, int N, int M, int L, typename Container>
-Matrix<T, N, L> operator*(Matrix<T, N, M, Container> const &A, Matrix<T, M, L, Container> const &B) {
-	Matrix<T, N, L, Container> C;
+template<typename T, int N, int M, int L, typename Container2, typename Container3>
+Matrix<T, N, L> operator*(Matrix<T, N, M, Container2> const &A, Matrix<T, M, L, Container3> const &B) {
+	Matrix<T, N, L> C;
 	for (int n = 0; n < N; n++) {
 		for (int l = 0; l < L; l++) {
 			C[n, l] = T(0);
@@ -229,7 +463,8 @@ auto matrixColumn(Matrix<Type, RowCount, ColumnCount, Container> const &A, int c
 }
 
 template<typename Type, int RowCount, int ColumnCount, typename Container>
-auto matrixTranspose(Matrix<Type, RowCount, ColumnCount, Container> const &B) {
+Matrix<Type, ColumnCount, RowCount, Container> matrixTranspose(
+		Matrix<Type, RowCount, ColumnCount, Container> const &B) {
 	Matrix<Type, ColumnCount, RowCount, Container> A;
 	for (int r = 0; r < RowCount; r++) {
 		for (int c = 0; c < ColumnCount; c++) {
