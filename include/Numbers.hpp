@@ -9,6 +9,7 @@
 #define INCLUDE_NUMBERS_HPP_
 
 #include <type_traits>
+#include <vector>
 
 #include "Vector.hpp"
 
@@ -30,6 +31,16 @@ constexpr T integerPower(T x, int n) {
 }
 
 template<typename T>
+T invInteger(size_t n) {
+	static constexpr T one(1);
+	static thread_local std::vector<T> memory(1, -1);
+	while (n >= memory.size()) {
+		memory.push_back(one / T(memory.size()));
+	}
+	return memory[n];
+}
+
+template<typename T>
 constexpr T kroneckerDelta(int n, int m) {
 	static constexpr T zero = T(0);
 	static constexpr T one = T(1);
@@ -43,7 +54,7 @@ constexpr T kroneckerDelta(int n, int m) {
 template<typename T>
 constexpr T negativeOne2Power(int k) {
 	static constexpr T one = T(1);
-	if( k & 1 ) {
+	if (k & 1) {
 		return -one;
 	} else {
 		return +one;
@@ -89,7 +100,6 @@ template<typename T>
 constexpr T nSquared(T r) {
 	return r * r;
 }
-
 
 }
 #endif /* INCLUDE_NUMBERS_HPP_ */

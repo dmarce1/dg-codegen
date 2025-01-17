@@ -17,7 +17,8 @@ struct TriangularIndices;
 
 template<int DimCnt, int MomCnt>
 struct TriangularIndices {
-	using map_type = std::unordered_map< Math::Vector<int, DimCnt>, int, Math::vectorHashKey<int, DimCnt, MomCnt>>;
+	using indices_type = Math::Vector<int, DimCnt>;
+	using map_type = std::unordered_map<indices_type, int, Math::vectorHashKey<int, DimCnt, MomCnt>>;
 	TriangularIndices() {
 		reset();
 	}
@@ -26,11 +27,11 @@ struct TriangularIndices {
 	TriangularIndices& operator=(TriangularIndices const&) = default;
 	TriangularIndices& operator=(TriangularIndices&&) = default;
 	TriangularIndices& operator++() {
-		index_++;
+		index++;
 		return *this;
 	}
 	TriangularIndices& operator--() {
-		index_--;
+		index--;
 		return *this;
 	}
 	TriangularIndices operator++(int) {
@@ -43,26 +44,29 @@ struct TriangularIndices {
 		operator--();
 		return rc;
 	}
-	operator Math::Vector<int, DimCnt>() const {
-		return index2indices[index_];
-	}
 	operator int() const {
-		return index_;
+		return index;
 	}
 	bool begin() const {
-		return bool(index_ == 0);
+		return bool(index == 0);
 	}
 	int degree(int k) const {
-		return vectorSum(index2indices[index_]);
+		return vectorSum(index2indices[index]);
 	}
 	bool end() const {
-		return bool(index_ == Size);
+		return bool(index == Size);
 	}
-	int index(int k) const {
-		return index2indices[index_][k];
+	indices_type getIndices() const {
+		return index2indices[index];
+	}
+	int indexAt(int k) const {
+		return index2indices[index][k];
 	}
 	void reset() {
-		index_ = 0;
+		index = 0;
+	}
+	void set(indices_type const &indices) {
+		index = indices2index[indices];
 	}
 	static constexpr int Size = []() {
 		int num = 1, den = 1;
@@ -73,10 +77,13 @@ struct TriangularIndices {
 		return num / den;
 	}();
 private:
-	int index_;
+	int index;
 	static std::array<Math::Vector<int, DimCnt>, Size> const index2indices;
 	static map_type const indices2index;
 };
+
+template<typename T, int D, int N>
+using TriangularArray = Math::Vector<T, TriangularIndices<D, N>::Size>;
 
 template<int DimCnt, int MomCnt>
 std::array<Math::Vector<int, DimCnt>, TriangularIndices<DimCnt, MomCnt>::Size> const TriangularIndices<DimCnt, MomCnt>::index2indices = []() {

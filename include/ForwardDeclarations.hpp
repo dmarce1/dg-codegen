@@ -15,6 +15,9 @@ template<typename T>
 constexpr T integerPower(T, int);
 
 template<typename T>
+T invInteger(size_t);
+
+template<typename T>
 constexpr T kroneckerDelta(int, int);
 
 template<typename T>

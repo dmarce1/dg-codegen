@@ -8,25 +8,39 @@
 #ifndef INCLUDE_LEGENDREP_HPP_
 #define INCLUDE_LEGENDREP_HPP_
 
+#include "Numbers.hpp"
 #include "Real.hpp"
 #include "Polynomial.hpp"
 
 namespace Math {
 
-inline Real legendreP(int n, Real x) {
-	Real const one(1.0);
+template<typename T, int P>
+Vector<T, P> legendresAt(T x) {
+	static constexpr T one(1);
+	Vector<T, P> Pn;
+	Pn[0] = one;
+	if (P > 1) {
+		Pn[1] = x;
+	}
+	for (int p = 0; p < P - 1; p++) {
+		Pn[p + 1] = (T(2 * p + 1) * x * Pn[p] - T(p) * Pn[p - 1]) * invInteger<T>(p + 1);
+	}
+	return Pn;
+}
+
+template<typename Type>
+Type legendreP(int n, Type x) {
+	static constexpr Type one(1);
 	if (n == 0) {
 		return one;
 	} else if (n == 1) {
 		return x;
 	} else {
-		Real Pnm1, Pn;
+		Type Pnm1, Pn, Pnp1;
 		Pnm1 = one;
 		Pn = x;
 		for (int l = 1; l < n; l++) {
-			Real const a = Real(2 * l + 1) / Real(l + 1);
-			Real const b = Real(l) / Real(l + 1);
-			Real const Pnp1 = a * Pn * x - b * Pnm1;
+			Pnp1 = (Type(2 * l + 1) * Pn * x - Type(l) * Pnm1) * invInteger<Type>(l + 1);
 			Pnm1 = Pn;
 			Pn = Pnp1;
 		}
@@ -34,65 +48,58 @@ inline Real legendreP(int n, Real x) {
 	}
 }
 
-inline Real dLegendrePdX(int n, Real x) {
-	Real const zero(0), one(1), three(3);
+template<typename Type>
+Type dLegendrePdX(int n, Type x) {
+	static constexpr Type zero(0), one(1);
 	if (n == 0) {
 		return zero;
 	} else if (n == 1) {
 		return one;
 	} else {
-		Real Pnm1, Pn;
-		Real dPnm1dX, dPndX;
+		Type Pnm1, Pn, Pnp1;
+		Type dPnm1dX, dPndX, dPnp1dX;
 		Pnm1 = one;
 		Pn = x;
 		dPndX = one;
 		for (int l = 1; l < n - 1; l++) {
-			Real const a = Real(l + 1);
-			Real const ainv = one / a;
-			Real const b = Real(2 * l + 1) * ainv;
-			Real const c = Real(l) * ainv;
-			Real const Pnp1 = b * Pn * x - c * Pnm1;
-			Real const dPnp1dX = a * Pn + x * dPndX;
+			Pnp1 = (Type(2 * l + 1) * Pn * x - Type(l) * Pnm1) * invInteger<Type>(l + 1);
+			dPnp1dX = Type(l + 1) * Pn + x * dPndX;
 			Pnm1 = Pn;
 			Pn = Pnp1;
 			dPndX = dPnp1dX;
 		}
-		return Real(n) * Pn + x * dPndX;
+		return Type(n) * Pn + x * dPndX;
 	}
 }
 
-inline Real d2LegendrePdX2(int n, Real x) {
-	Real const zero(0), one(1), three(3);
+template<typename Type>
+Type d2LegendrePdX2(int n, Type x) {
+	static constexpr Type zero(0), one(1), three(3);
 	if (n <= 1) {
 		return zero;
 	} else if (n == 2) {
 		return three;
 	} else {
-		Real Pnm1, Pn;
-		Real dPnm1dX, dPndX;
-		Real d2Pnm1dX2, d2PndX2;
+		Type Pnm1, Pn, Pnp1;
+		Type dPnm1dX, dPndX, dPnp1dX;
+		Type d2Pnm1dX2, d2PndX2, d2Pnp1dX2;
 		Pnm1 = one;
 		Pn = x;
 		dPndX = one;
 		d2PndX2 = three;
 		for (int l = 1; l < n - 2; l++) {
-			Real const a = Real(l + 1);
-			Real const ainv = one / a;
-			Real const b = Real(2 * l + 1) * ainv;
-			Real const c = Real(l) * ainv;
-			Real const d = Real(l + 2);
-			Real const Pnp1 = b * Pn * x - c * Pnm1;
-			Real const dPnp1dX = a * Pn + x * dPndX;
-			Real const d2Pnp1dX2 = d * dPndX + x * d2PndX2;
+			Pnp1 = (Type(2 * l + 1) * Pn * x - Type(l) * Pnm1) * invInteger<Type>(l + 1);
+			dPnp1dX = Type(l + 1) * Pn + x * dPndX;
+			d2Pnp1dX2 = Type(l + 2) * dPndX + x * d2PndX2;
 			Pnm1 = Pn;
 			Pn = Pnp1;
 			dPndX = dPnp1dX;
 			d2PndX2 = d2Pnp1dX2;
 		}
-		Real const dPnp1dX = Real(n - 1) * Pn + x * dPndX;
-		d2PndX2 = Real(n) * dPndX + x * d2PndX2;
+		dPnp1dX = Type(n - 1) * Pn + x * dPndX;
+		d2PndX2 = Type(n) * dPndX + x * d2PndX2;
 		dPndX = dPnp1dX;
-		return Real(n + 1) * dPndX + x * d2PndX2;
+		return Type(n + 1) * dPndX + x * d2PndX2;
 	}
 }
 
