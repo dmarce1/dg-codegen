@@ -127,6 +127,11 @@ struct Real {
 		z.value = Type(0);
 		return z;
 	}
+	static Real tiny() {
+		Real z;
+		z.value = Type(std::numeric_limits<double>::min());
+		return z;
+	}
 	friend Real abs(Real a) {
 		debug_check(a);
 		a.value = std::fabs(a.value);

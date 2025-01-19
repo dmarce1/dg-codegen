@@ -497,7 +497,7 @@ SquareMatrix<Type, Ndim - 1, Container> subMatrix(SquareMatrix<Type, Ndim, Conta
 }
 
 template<typename T, int R, typename Container>
-T matrixInverse(SquareMatrix<T, R, Container> &A) {
+T matrixAndDeterminateInverse(SquareMatrix<T, R, Container> &A) {
 	T constexpr zero(0), one(1);
 	T matrixDeterminant = one;
 	auto D = identityMatrix<T, R, Container>();
@@ -541,7 +541,15 @@ T matrixInverse(SquareMatrix<T, R, Container> &A) {
 			}
 		}
 	}
+	A = D;
 	return matrixDeterminant;
+}
+
+template<typename T, int R, typename Container>
+auto matrixInverse(SquareMatrix<T, R, Container> const A) {
+	auto iA = A;
+	matrixAndDeterminateInverse(iA);
+	return iA;
 }
 
 template<typename Type, int Ndim, typename Container>
@@ -549,7 +557,7 @@ Type matrixDeterminant(SquareMatrix<Type, Ndim, Container> A) {
 	if constexpr (Ndim == 1) {
 		return A[0, 0];
 	} else {
-		return matrixInverse(A);
+		return matrixInverseAndDeterminate(A);
 	}
 }
 

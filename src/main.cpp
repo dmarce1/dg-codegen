@@ -142,8 +142,11 @@ void compute() {
 }
 
 void testIntegers();
+void testRadiation();
 
 int hpx_main(int argc, char *argv[]) {
+	testRadiation();
+
 //	HydroGrid<Math::Real, NDIM, PORDER> hydroTest;
 //	TriangularIndices<3, 6> test;
 	/*	using namespace Math;
