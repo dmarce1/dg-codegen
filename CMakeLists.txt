@@ -32,7 +32,6 @@ set(astrotiger_header
 	include/LegendreP.hpp
 	include/Limiters.hpp
 	include/Matrix.hpp
-	include/MultiArray.hpp
 	include/Numbers.hpp
 	include/Options.hpp
 	include/Polynomial.hpp
@@ -79,8 +78,8 @@ target_compile_options(
         $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CUDA>:
             --use_fast_math -Xcompiler=-Ofast ${CUDA_FLAGS}>>
         
-        $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:-O2 -pg ${CXX_FLAGS}>>
+        $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:-O2 -pg -DNDEBUG ${CXX_FLAGS}>>
         $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CUDA>:
-            -Xcompiler=-O2 -pg ${CUDA_FLAGS}>>
+            -Xcompiler=-O2 -pg -DNDEBUG ${CUDA_FLAGS}>>
 )
 

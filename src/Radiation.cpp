@@ -165,11 +165,6 @@ struct testImplicitRadiation {
 		for (int n = 0; n < NDIM; n++) {
 			df_dF[n] = N[n] / Er;
 		}
-		//	Real const f = zero;
-		//	Real const df_dEr = zero;
-		//	for (int n = 0; n < NDIM; n++) {
-		//		df_dF[n] = zero;
-		//	}
 		Real const Xi = three - two * sqrt(four - f * three * f);
 		Real const dXi_df = twelve * f / (three - Xi);
 		Real const dXi_dEr = dXi_df * df_dEr;
@@ -353,7 +348,6 @@ void solveImplicitRadiation(Real &Er, ColumnVector &F, Real &Eg, ColumnVector &M
 		x[n] = F[n] / c;
 	}
 	x[NDIM] = Er;
-
 	Real toler = Real(1e-9);
 	Real err;
 	do {
@@ -361,14 +355,10 @@ void solveImplicitRadiation(Real &Er, ColumnVector &F, Real &Eg, ColumnVector &M
 		auto const &f = f_and_dfdx.first;
 		auto const &dfdx = f_and_dfdx.second;
 		auto const inv_dfdx = matrixInverse(dfdx);
-//		std::cout << toString(f);
-//		std::cout << toString(dfdx);
 		auto const dx = -inv_dfdx * f;
 		err = vectorMagnitude(dx);
 		x += Real(0.5) * dx;
-		printf("%e\n", err);
 	} while (err > toler);
-
 	for (int n = 0; n < NDIM; n++) {
 		Mg[n] = rho * c * Beta0[n] + F[n] - x[n];
 		F[n] = c * x[n];

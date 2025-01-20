@@ -70,6 +70,8 @@ bool processOptions(int argc, char *argv[]) {
 	SHOW(dualEnergyPressureSwitch);
 	SHOW(dualEnergyUpdateSwitch);
 	SHOW(fluidGamma);
+	SHOW(gridLength);
+	SHOW(gridScale);
 	setOptions(opts);
 	return success;
 }

@@ -115,6 +115,15 @@ Type vectorSum(Vector<Type, Ndim> const &A) {
 	return sum;
 }
 
+template<typename Type, int Ndim>
+Type vectorProduct(Vector<Type, Ndim> const &A) {
+	Type product = Type(1);
+	for (int d = 0; d < NDIM; d++) {
+		product *= A[d];
+	}
+	return product;
+}
+
 template<typename RType, typename IType, int Ndim>
 constexpr std::enable_if<std::is_integral_v<RType>, IType>::type Pow(Vector<RType, Ndim> const &x, Vector<IType, Ndim> n) {
 	RType xn = RType(1);

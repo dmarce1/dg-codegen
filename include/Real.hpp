@@ -18,12 +18,16 @@
 
 namespace Math {
 
-#define CHECK_REALS1 CHECK_REALS
+#ifndef NDEBUG
+#define CHECK true
+#else
+#define CHECK CHECK_REALS
+#endif
 
 struct Real {
 	using Type = double;
 	constexpr Real() {
-		if constexpr (CHECK_REALS1) {
+		if constexpr (CHECK) {
 			value = std::numeric_limits<Type>::signaling_NaN();
 		}
 	}
@@ -223,7 +227,7 @@ struct Real {
 private:
 	Type value;
 	static void nonneg_check(Real a) {
-		if constexpr (CHECK_REALS1) {
+		if constexpr (CHECK) {
 			if (a.value < 0.0) {
 				std::string errorString = "FATAL ERROR: Illegal operation on negative number.\n";
 				errorString += "Stack trace:\n";
@@ -235,7 +239,7 @@ private:
 		}
 	}
 	static void zero_check(Real a) {
-		if constexpr (CHECK_REALS1) {
+		if constexpr (CHECK) {
 			if (a.value == 0.0) {
 				std::string errorString = "FATAL ERROR: Divide by zero\n";
 				errorString += "Stack trace:\n";
@@ -247,7 +251,7 @@ private:
 		}
 	}
 	static void debug_check(Real a) {
-		if constexpr (CHECK_REALS1) {
+		if constexpr (CHECK) {
 			if (!std::isfinite(a.value)) {
 				std::string errorString = "FATAL ERROR: Operation on NaN\n";
 				errorString += "Stack trace:\n";
@@ -259,7 +263,7 @@ private:
 		}
 	}
 	static void range_check(Real a, Real b, Real c) {
-		if constexpr (CHECK_REALS1) {
+		if constexpr (CHECK) {
 			if ((b < a) || (b > c)) {
 				std::string errorString = "FATAL ERROR: Range violation\n";
 				errorString += "Stack trace:\n";
@@ -277,5 +281,7 @@ private:
 constexpr Math::Real operator""_Real(long double a) {
 	return Math::Real(a);
 }
+
+#undef CHECK
 
 #endif /* INCLUDE_REAL_HPP_ */

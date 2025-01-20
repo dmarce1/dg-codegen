@@ -1,6 +1,7 @@
 /******************************************************************************
  Copyright (C) 2024  Dominic C. Marcello
  *******************************************************************************/
+#include "ValArray.hpp"
 
 #include <hpx/hpx_init.hpp>
 #include "Hydrodynamics.hpp"
@@ -23,7 +24,6 @@ using namespace std;
 #include "Real.hpp"
 #include "Interval.hpp"
 #include "Limiters.hpp"
-#include "MultiArray.hpp"
 #include "Quadrature.hpp"
 #include "Sod.hpp"
 #include "Zobrist.hpp"
@@ -144,10 +144,126 @@ void compute() {
 void testIntegers();
 void testRadiation();
 
-int hpx_main(int argc, char *argv[]) {
-	testRadiation();
+template<typename T, int N>
+Math::SquareMatrix<T, N> interpolationCoefficients() {
+	static constexpr T half = T(0.5), one = T(1);
+	Math::SquareMatrix<T, N> C;
+	int factorial = T(1);
+	for (int k = 0; k < N; k++) {
+		T x = -half * Real(N - 1);
+		for (int n = 0; n < N; n++) {
+			T const numP = integerPower(x + half, k + 1);
+			T const numM = integerPower(x - half, k + 1);
+			T const den = T(k + 1);
+			C[n, k] = (numP - numM) / den;
+			x = x + one;
+		}
+		factorial *= k + 1;
+	}
+	C = matrixInverse(C);
+	return C;
+}
 
-//	HydroGrid<Math::Real, NDIM, PORDER> hydroTest;
+template<typename T>
+Polynomial<T> legendrePolynomial(int n) {
+	Polynomial<T> Pn;
+	if (n == 0) {
+		Pn[0] = Real(1);
+	} else {
+		if (n % 2 == 0) {
+			Pn[0] = Real(1);
+			Pn[1] = Real(0);
+		} else {
+			Pn[0] = Real(0);
+			Pn[1] = Real(1);
+		}
+		//(n - k) * (n + k + 1) = n(n + 1) - k(k+1)
+		// (k + 1) * (k + 2) = k^2 + 3*k + 2;
+		for (int k = 0; k <= n - 2; k++) {
+			Pn[k + 2] = -Real((n - k) * (n + k + 1)) / Real((k + 1) * (k + 2)) * Pn[k];
+		}
+		Real norm = Real(0);
+		for (int k = 0; k <= n; k++) {
+			norm += Pn[k];
+		}
+		norm = Real(1) / norm;
+		for (int k = 0; k <= n; k++) {
+			Pn[k] *= norm;
+		}
+	}
+	return Pn;
+}
+
+int hpx_main(int argc, char *argv[]) {
+	static constexpr Real one = Real(1), zero = Real(0), half = Real(0.5);
+	printf("BEGIN\n");
+	processOptions(argc, argv);
+	static constexpr int N = 3;
+	auto C = interpolationCoefficients<Real, N>();
+	SquareMatrix<Real, N> a;
+	for (int n = 0; n < N; n++) {
+		if (n % 2 == 0) {
+			a[n, 0] = Real(1);
+			a[n, 1] = Real(0);
+		} else {
+			a[n, 1] = Real(1);
+			a[n, 0] = Real(0);
+		}
+		for (int k = 0; k <= n - 2; k++) {
+			a[n, k + 2] = -Real((n - k) * (n + k + 1)) / Real((k + 1) * (k + 2)) * a[n, k];
+		}
+		for (int k = n + 1; k <= N; k++) {
+			a[n, k] = Real(0);
+		}
+		Real norm = Real(0);
+		for (int k = 0; k <= N; k++) {
+			norm += a[n, k];
+		}
+		norm = Real(1) / norm;
+		for (int k = 0; k <= N; k++) {
+			a[n, k] *= norm;
+			a[n, k] *= integerPower(Real(2), k);
+		}
+	}
+	std::cout << toString(C);
+	Real const f[N] = { one, -one -one, one };
+	Polynomial<Real> P;
+	Vector<Real, N> Q;
+	for (int n = 0; n < N; n++) {
+		P[n] = zero;
+		for (int k = 0; k < N; k++) {
+			P[n] += C[n, k] * f[k];
+		}
+	}
+	auto const A = matrixInverse(a);
+	for (int n = 0; n < N; n++) {
+		Q[n] = zero;
+		for (int k = 0; k < N; k++) {
+			Q[n] += A[n, k] * P[k];
+		}
+	}
+	for (int n = 0; n < N; n++) {
+		Real const dx = one;
+		Real const x = (Real(n) + half) - Real(N) * half;
+		Real const xa = x - half * dx;
+		Real const xb = x + half * dx;
+		printf("%e %e\n", x, polynomialIntegrate(P, xa, xb));
+
+	}
+	Polynomial<Real> R(Real(0));
+	for (int n = 0; n < N; n++) {
+		auto const Pn = legendrePolynomial<Real>(n);
+		for (int k = 0; k <= n; k++) {
+			R[n] += P[n] * Pn[k];
+		}
+	}
+	std::cout << Math::toString(P) << "\n";
+	printf("\n");
+	std::cout << Math::toString(R) << "\n";
+//	InterpolationCoefficients<Real, 3> c;
+	//	testRadiation();
+
+	HydroGrid<double, NDIM, PORDER> hydroTest;
 //	TriangularIndices<3, 6> test;
 	/*	using namespace Math;
 	 constexpr int Ndim = 3;
@@ -159,6 +275,7 @@ int hpx_main(int argc, char *argv[]) {
 	 view1 = view2;
 	 processOptions(argc, argv);
 	 compute<1024, 2>();*/
+	printf("END\n");
 	return hpx::local::finalize();
 }
 
@@ -291,7 +408,10 @@ int main(int argc, char *argv[]) {
 	 for (int n = 0; n < 5; n++) {
 	 printf("%e ", w[n] - Real(2));
 	 }*/
-
-	auto rc = hpx::init(argc, argv);
+	std::vector<std::string> cfg = { "hpx.commandline.allow_unknown=1" };
+	cfg.push_back("hpx.stacks.small_size=524288");
+	hpx::init_params init_params;
+	init_params.cfg = std::move(cfg);
+	auto rc = hpx::init(argc, argv, init_params);
 	return rc;
 }

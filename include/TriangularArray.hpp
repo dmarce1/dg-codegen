@@ -24,6 +24,9 @@ struct TriangularIndices {
 	}
 	TriangularIndices(TriangularIndices const&) = default;
 	TriangularIndices(TriangularIndices&&) = default;
+	TriangularIndices(indices_type const &indices) {
+		set(indices);
+	}
 	TriangularIndices& operator=(TriangularIndices const&) = default;
 	TriangularIndices& operator=(TriangularIndices&&) = default;
 	TriangularIndices& operator++() {
@@ -54,7 +57,7 @@ struct TriangularIndices {
 		return vectorSum(index2indices[index]);
 	}
 	bool end() const {
-		return bool(index == Size);
+		return bool(index == size());
 	}
 	indices_type getIndices() const {
 		return index2indices[index];
@@ -68,27 +71,30 @@ struct TriangularIndices {
 	void set(indices_type const &indices) {
 		index = indices2index[indices];
 	}
-	static constexpr int Size = []() {
-		int num = 1, den = 1;
-		for (int k = 0; k < DimCnt; k++) {
-			num *= k + MomCnt;
-			den *= k + 1;
-		}
-		return num / den;
-	}();
+	static constexpr size_t size() {
+		static constexpr int Size = []() {
+			int num = 1, den = 1;
+			for (int k = 0; k < DimCnt; k++) {
+				num *= k + MomCnt;
+				den *= k + 1;
+			}
+			return num / den;
+		}();
+		return Size;
+	}
 private:
 	int index;
-	static std::array<Math::Vector<int, DimCnt>, Size> const index2indices;
+	static std::array<Math::Vector<int, DimCnt>, TriangularIndices<DimCnt, MomCnt>::size()> const index2indices;
 	static map_type const indices2index;
 };
 
 template<typename T, int D, int N>
-using TriangularArray = Math::Vector<T, TriangularIndices<D, N>::Size>;
+using TriangularArray = Math::Vector<T, TriangularIndices<D, N>::size()>;
 
 template<int DimCnt, int MomCnt>
-std::array<Math::Vector<int, DimCnt>, TriangularIndices<DimCnt, MomCnt>::Size> const TriangularIndices<DimCnt, MomCnt>::index2indices = []() {
+std::array<Math::Vector<int, DimCnt>, TriangularIndices<DimCnt, MomCnt>::size()> const TriangularIndices<DimCnt, MomCnt>::index2indices = []() {
 	using namespace Math;
-	std::array<Vector<int, DimCnt>, Size> indicesList;
+	std::array<Vector<int, DimCnt>, size()> indicesList;
 	int currentIndex = 0;
 	for (int pOrder = 0; pOrder < MomCnt; pOrder++) {
 		Vector<int, DimCnt> vIndices = zeroVector<int, DimCnt>();

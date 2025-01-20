@@ -8,14 +8,12 @@
 #ifndef INCLUDE_LEGENDREP_HPP_
 #define INCLUDE_LEGENDREP_HPP_
 
-#include "Numbers.hpp"
-#include "Real.hpp"
-#include "Polynomial.hpp"
+#include "TriangularArray.hpp"
 
 namespace Math {
 
 template<typename T, int P>
-Vector<T, P> legendresAt(T x) {
+Vector<T, P> legendreBasis(T x) {
 	static constexpr T one(1);
 	Vector<T, P> Pn;
 	Pn[0] = one;
@@ -26,6 +24,23 @@ Vector<T, P> legendresAt(T x) {
 		Pn[p + 1] = (T(2 * p + 1) * x * Pn[p] - T(p) * Pn[p - 1]) * invInteger<T>(p + 1);
 	}
 	return Pn;
+}
+
+template<typename T, int D, int P>
+TriangularArray<T, D, P> legendreBasis(Vector<T, D> const &x) {
+	static constexpr T one(1);
+	TriangularArray<T, D, P> Qn;
+	Vector<Vector<T, P>, D> Pn;
+	for (int k = 0; k < D; k++) {
+		Pn[k] = legendreBasis(x[k]);
+	}
+	for (TriangularIndices<D, P> I; I != I.end(); I++) {
+		Qn[I] = one;
+		for (int k = 0; k < D; k++) {
+			Qn[I] *= Pn[k];
+		}
+	}
+	return Qn;
 }
 
 template<typename Type>

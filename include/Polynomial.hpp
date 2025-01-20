@@ -68,8 +68,6 @@ struct Polynomial: public std::vector<Type> {
 	}
 	Type operator[](int i) const {
 		if (int(base_type::size()) <= i) {
-			std::cout << std::to_string(std::stacktrace::current());
-			abort();
 			return Type(0);
 		} else {
 			return base_type::operator[](i);
@@ -130,20 +128,22 @@ struct Polynomial: public std::vector<Type> {
 		*this = a / *this;
 		return *this;
 	}
-	std::string toString() const {
-		using std::to_string;
-		std::string str;
-		str += "(";
-		for (int n = 0; n < int(base_type::size()); n++) {
-			str += to_string((*this)[n]);
-			if (n + 1 < int(base_type::size())) {
-				str += ", ";
-			}
-		}
-		str += ")";
-		return str;
-	}
 };
+
+template<typename Type>
+std::string toString(Polynomial<Type> const& P) {
+	using std::to_string;
+	std::string str;
+	str += "(";
+	for (int n = 0; n < int(P.size()); n++) {
+		str += to_string(P[n]);
+		if (n + 1 < int(P.size())) {
+			str += ", ";
+		}
+	}
+	str += ")";
+	return str;
+}
 
 template<typename Type>
 Polynomial<Type> operator*(Type const &a, Polynomial<Type> const &B) {
