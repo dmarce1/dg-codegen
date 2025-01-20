@@ -198,7 +198,7 @@ int hpx_main(int argc, char *argv[]) {
 	static constexpr Real one = Real(1), zero = Real(0), half = Real(0.5);
 	printf("BEGIN\n");
 	processOptions(argc, argv);
-	static constexpr int N = 3;
+	static constexpr int N = 5;
 	auto C = interpolationCoefficients<Real, N>();
 	SquareMatrix<Real, N> a;
 	for (int n = 0; n < N; n++) {
@@ -226,7 +226,7 @@ int hpx_main(int argc, char *argv[]) {
 		}
 	}
 	std::cout << toString(C);
-	Real const f[N] = { one, -one -one, one };
+	Real const f[N] = { one, one, one, one, one };
 	Polynomial<Real> P;
 	Vector<Real, N> Q;
 	for (int n = 0; n < N; n++) {
