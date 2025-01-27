@@ -26,18 +26,56 @@ Vector<T, P> legendreBasis(T x) {
 	return Pn;
 }
 
+template<typename T, int P>
+Vector<T, P> legendreBasisDerivative(T x) {
+	static constexpr T zero(0), one(1);
+	Vector<T, P> dPnDx;
+	auto const Pn = legendreBasis(x);
+	dPnDx[0] = zero;
+	if (P > 0) {
+		dPnDx[1] = one;
+	}
+	if (P > 1) {
+		for (int p = 1; p < P - 1; p++) {
+			dPnDx[p + 1] = T(p + 1) * Pn[p] + x * dPnDx[p];
+		}
+	}
+	return dPnDx;
+}
+
 template<typename T, int D, int P>
 TriangularArray<T, D, P> legendreBasis(Vector<T, D> const &x) {
 	static constexpr T one(1);
 	TriangularArray<T, D, P> Qn;
 	Vector<Vector<T, P>, D> Pn;
-	for (int k = 0; k < D; k++) {
-		Pn[k] = legendreBasis(x[k]);
+	for (int dim = 0; dim < D; dim++) {
+		Pn[dim] = legendreBasis(x[dim]);
 	}
 	for (TriangularIndices<D, P> I; I != I.end(); I++) {
 		Qn[I] = one;
-		for (int k = 0; k < D; k++) {
-			Qn[I] *= Pn[k];
+		for (int dim = 0; dim < D; dim++) {
+			Qn[I] *= Pn[dim];
+		}
+	}
+	return Qn;
+}
+
+template<typename T, int D, int P>
+TriangularArray<T, D, P> legendreBasisDerivative(int derivDim, Vector<T, D> const &x) {
+	static constexpr T one(1);
+	TriangularArray<T, D, P> Qn;
+	Vector<Vector<T, P>, D> Pn;
+	for (int dim = 0; dim < D; dim++) {
+		if (dim != derivDim) {
+			Pn[dim] = legendreBasis(x[dim]);
+		} else {
+			Pn[dim] = legendreBasisDerivative(x[dim]);
+		}
+	}
+	for (TriangularIndices<D, P> I; I != I.end(); I++) {
+		Qn[I] = one;
+		for (int dim = 0; dim < D; dim++) {
+			Qn[I] *= Pn[dim];
 		}
 	}
 	return Qn;

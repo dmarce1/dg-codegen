@@ -386,6 +386,18 @@ struct Matrix<Type, 1, 1, Container> {
 	Matrix operator!=(Matrix const &A) const {
 		return !operator==(A);
 	}
+	auto begin() const {
+		return &value;
+	}
+	auto end() const {
+		return &value + 1;
+	}
+	auto begin() {
+		return &value;
+	}
+	auto end() {
+		return &value + 1;
+	}
 	friend Matrix operator*(Type const &a, Matrix const &B) {
 		return B * a;
 	}
@@ -455,7 +467,7 @@ auto matrixRow(Matrix<Type, RowCount, ColumnCount, Container> const &A, int r) {
 }
 
 template<typename Type, int RowCount, int ColumnCount, typename Container>
-auto matrixColumn(Matrix<Type, RowCount, ColumnCount, Container> const &A, int c) {
+Matrix<Type, RowCount, 1, Container> matrixColumn(Matrix<Type, RowCount, ColumnCount, Container> const &A, int c) {
 	Matrix<Type, RowCount, 1, Container> column;
 	for (int r = 0; r < RowCount; r++) {
 		column[r, 0] = A[r, c];

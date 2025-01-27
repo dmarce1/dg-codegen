@@ -104,6 +104,9 @@ struct ConservedState: public Container {
 		(*(Container*) this) = U;
 		return *this;
 	}
+	SquareMatrix<Type, NFields> eigenVectors(int k) const {
+		return PrimitiveState<Type, Ndim, Container>().eigenVectors(k);
+	}
 	void dualEnergyUpdate(Real maxEnergy) {
 		static constexpr Type half = Type(0.5);
 		Type const eThermal = E - half * vectorNorm(S) / D;

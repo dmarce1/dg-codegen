@@ -109,7 +109,7 @@ Type vectorMagnitude(Vector<Type, Ndim> const &A) {
 template<typename Type, int Ndim>
 Type vectorSum(Vector<Type, Ndim> const &A) {
 	Type sum = Type(0);
-	for (int d = 0; d < NDIM; d++) {
+	for (int d = 0; d < Ndim; d++) {
 		sum += A[d];
 	}
 	return sum;
@@ -118,7 +118,7 @@ Type vectorSum(Vector<Type, Ndim> const &A) {
 template<typename Type, int Ndim>
 Type vectorProduct(Vector<Type, Ndim> const &A) {
 	Type product = Type(1);
-	for (int d = 0; d < NDIM; d++) {
+	for (int d = 0; d < Ndim; d++) {
 		product *= A[d];
 	}
 	return product;

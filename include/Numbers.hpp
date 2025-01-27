@@ -18,16 +18,20 @@ namespace Math {
 template<typename T>
 constexpr T integerPower(T x, int n) {
 	static constexpr T one = T(1);
-	T xm = x;
-	T xn = one;
-	while (n) {
-		if (n & 1) {
-			xn *= xm;
+	if (n >= 0) {
+		T xm = x;
+		T xn = one;
+		while (n) {
+			if (n & 1) {
+				xn *= xm;
+			}
+			xm *= xm;
+			n >>= 1;
 		}
-		xm *= xm;
-		n >>= 1;
+		return xn;
+	} else {
+		return one / integerPower(x, -n);
 	}
-	return xn;
 }
 
 template<typename T>
@@ -79,7 +83,7 @@ constexpr T nFactorial(int n) {
 	if (n <= 1) {
 		return one;
 	} else {
-		return n * nFactorial<T>(n - 1);
+		return T(n) * nFactorial<T>(n - 1);
 	}
 }
 

@@ -50,14 +50,8 @@ struct TriangularIndices {
 	operator int() const {
 		return index;
 	}
-	bool begin() const {
-		return bool(index == 0);
-	}
 	int degree(int k) const {
 		return vectorSum(index2indices[index]);
-	}
-	bool end() const {
-		return bool(index == size());
 	}
 	indices_type getIndices() const {
 		return index2indices[index];
@@ -70,6 +64,16 @@ struct TriangularIndices {
 	}
 	void set(indices_type const &indices) {
 		index = indices2index[indices];
+	}
+	static TriangularIndices begin() {
+		TriangularIndices rc;
+		rc.set(0);
+		return rc;
+	}
+	static TriangularIndices end() {
+		TriangularIndices rc;
+		rc.set(size());
+		return rc;
 	}
 	static constexpr size_t size() {
 		static constexpr int Size = []() {
@@ -100,12 +104,6 @@ std::array<Math::Vector<int, DimCnt>, TriangularIndices<DimCnt, MomCnt>::size()>
 		Vector<int, DimCnt> vIndices = zeroVector<int, DimCnt>();
 		bool continueLoop;
 		do {
-			int k = DimCnt - 1;
-			vIndices[k]++;
-			while ((k > 0) && (vIndices[k] > vIndices[k - 1])) {
-				vIndices[k--] = 0;
-				vIndices[k]++;
-			}
 			if (vIndices[0] >= MomCnt) {
 				continueLoop = false;
 			} else {
@@ -113,6 +111,14 @@ std::array<Math::Vector<int, DimCnt>, TriangularIndices<DimCnt, MomCnt>::size()>
 					indicesList[currentIndex++] = vIndices;
 				}
 				continueLoop = true;
+			}
+			if (continueLoop) {
+				int k = DimCnt - 1;
+				vIndices[k]++;
+				while ((k > 0) && (vIndices[k] >= MomCnt)) {
+					vIndices[k--] = 0;
+					vIndices[k]++;
+				}
 			}
 		} while (continueLoop);
 	}

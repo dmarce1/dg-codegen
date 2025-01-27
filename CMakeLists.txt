@@ -25,9 +25,11 @@ set(astrotiger_header
 	include/Complex.hpp
 	include/Constants.hpp
 	include/ForwardDeclarations.hpp
+	include/Grid.hpp
 	include/Hydrodynamics.hpp
 	include/HydroGrid.hpp
 	include/Integrate.hpp
+	include/Interpolate.hpp
 	include/Interval.hpp
 	include/LegendreP.hpp
 	include/Limiters.hpp
@@ -39,9 +41,11 @@ set(astrotiger_header
 	include/Radiation.hpp
 	include/Real.hpp
 	include/Root.hpp
+	include/RungeKutta.hpp
 	include/Sod.hpp
 	include/TriangularArray.hpp
 	include/Utilities.hpp
+	include/ValArray.hpp
 	include/Vector.hpp
 ) 
 
