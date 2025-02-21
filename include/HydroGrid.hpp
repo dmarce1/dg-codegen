@@ -301,6 +301,7 @@ struct HydroGrid {
 		}
 	}
 private:
+	static RungeKutta<T, P> constexpr butcherTable = RungeKutta<T, P>();
 	static Quadrature::QuadratureRules<T, Q> const quadratureRules;
 	GridOptions<T> gridOptions;
 	int N;

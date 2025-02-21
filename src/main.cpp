@@ -1,7 +1,6 @@
 /******************************************************************************
  Copyright (C) 2024  Dominic C. Marcello
  *******************************************************************************/
-#include "Grid.hpp"
 #include "ValArray.hpp"
 
 #include <hpx/hpx_init.hpp>
@@ -12,7 +11,9 @@
 #include "Real.hpp"
 #include "HydroGrid.hpp"
 #include "Options.hpp"
+#include "Tensor.hpp"
 #include "Radiation.hpp"
+#include "Relativity.hpp"
 #include "Root.hpp"
 #include "Vector.hpp"
 #include <unordered_map>
@@ -31,8 +32,9 @@ using namespace std;
 #include "Zobrist.hpp"
 #include <random>
 #include <vector>
+#include <fstream>
 
-template<int M, int P>
+template<int M, int rho>
 void compute() {
 	using namespace Hydrodynamics;
 	using state_type = ConservedState<Real, 1>;
@@ -174,11 +176,189 @@ Polynomial<T> legendrePolynomial(int n) {
 	return Pn;
 }
 
+#include <iostream>
+#include <vector>
+#include <array>
+#include <cmath>
+#include <cassert>
+
+//-----------------------------------------------------------------
+// Utility functions
+//-----------------------------------------------------------------
+
+#include <iostream>
+#include <vector>
+#include <array>
+#include <cmath>
+#include <cassert>
+
+template<typename T>
+auto genFunctor(std::string const &name, std::vector<Polynomial<T>> const &P, int Order, int shift = 0, int Dimension = 3) {
+	static constexpr T zero(0), half(0.5), one(1), two(2);
+	std::ostringstream code;
+	code << std::scientific;
+	code.precision(16);
+	code << "template<typename T> \n";
+	code << "struct " << name << "<T, " << Order << ", " << Dimension << "> {\n";
+	code << "\tinline T operator()(T const& x) const {\n";
+	code << "\t\tusing namespace std;\n";
+	code << "\t\tT y;\n";
+	int NumPieces;
+	const int n = Order;
+	const bool isOdd = (n % 2 == 1);
+	int m;
+	if (isOdd) {
+		m = (n - 1) / 2;
+		NumPieces = m + 1;
+	} else {
+		m = n / 2;
+		NumPieces = m;
+	}
+	if (isOdd) {
+		code << "\t\tswitch( floor(x * T(" << T(0.5 * n) << ") + T(" << T(0.5 * n - m) << ")) ) {\n";
+	} else {
+		code << "\t\tswitch( floor(x) ) {\n";
+	}
+	for (int p = 0; p < NumPieces; p++) {
+		bool first = true;
+		code << "\t\tcase " << p << ":\n";
+		for (int i = n - 1; i >= 0; i--) {
+			T const c = P[p][i];
+			if (first) {
+				if (c > T(0)) {
+					code << "\t\t\ty = +T(" << c << ");\n";
+					first = false;
+				} else if (c < T(0)) {
+					code << "\t\t\ty = -T(" << -c << ");\n";
+					first = false;
+				}
+			} else {
+				if (c > T(0)) {
+					code << "\t\t\ty = fma(y, x, +T(" << c << "));\n";
+				} else if (c < T(0)) {
+					code << "\t\t\ty = fma(y, x, -T(" << -c << "));\n";
+				} else {
+					code << "\t\t\ty *= x;\n";
+				}
+			}
+		}
+		code << "\t\t\tbreak;\n";
+	}
+	code << "\t\tdefault:\n";
+	code << "\t\t\ty = T(0);\n";
+	code << "\t\t}\n";
+	if (shift < 0) {
+		code << "\t\tT const xinv = T(1) / x;\n";
+		while (shift) {
+			code << "\t\ty *= xinv;\n";
+			shift++;
+		}
+	}
+	code << "\t\treturn y;\n";
+	code << "\t}\n";
+	code << "};\n";
+	return code.str();
+}
+
+auto genBSplineFunctor(int Order, int Dimension = 3) {
+	using T = Real;
+	static constexpr T zero(0), half(0.5), one(1), two(2);
+	int NumPieces;
+	std::vector<T> boundaries;
+	std::vector<Polynomial<T>> rho;
+	std::vector<Polynomial<T>> Menc;
+	std::vector<Polynomial<T>> drho_dr;
+	const int n = Order;
+	const bool isOdd = (n % 2 == 1);
+	int m;
+	if (isOdd) {
+		m = (n - 1) / 2;
+		NumPieces = m + 1;
+	} else {
+		m = n / 2;
+		NumPieces = m;
+	}
+	boundaries.resize(NumPieces + 1);
+	if (isOdd) {
+		boundaries[0] = zero;
+		boundaries[1] = one / T(n);
+		for (int r = 1; r < NumPieces; ++r) {
+			boundaries[r + 1] = boundaries[1] + T(r) * (two / T(n));
+		}
+	} else {
+		boundaries.resize(NumPieces + 1);
+		for (int i = 0; i <= NumPieces; ++i) {
+			boundaries[i] = T(i) * (two / T(n));
+		}
+	}
+	rho.resize(NumPieces);
+	for (int r = 0; r < NumPieces; ++r) {
+		int k_full = m + r;
+		for (int i = 0; i < n; ++i) {
+			T sum_j = zero;
+			for (int j = 0; j <= k_full; ++j) {
+				T term = integerPower<T>(one - two * T(j) / T(n), n - 1 - i);
+				sum_j += negativeOne2Power<T>(j) * nChooseK<T>(n, j) * term;
+			}
+			rho[r][i] = (nChooseK<T>(n - 1, i) * sum_j) / nFactorial<T>(n - 1);
+		}
+	}
+	Polynomial<T> dV;
+	using namespace std;
+	dV[Dimension - 1] = two * pow(T(M_PI), T(Dimension) * half) / tgamma(T(Dimension) * half);
+	T norm = zero;
+	for (int r = 0; r < NumPieces; ++r) {
+		norm += polynomialIntegrate(rho[r] * dV, boundaries[r], boundaries[r + 1]);
+	}
+	norm = one / norm;
+	for (int r = 0; r < NumPieces; ++r) {
+		rho[r] *= norm;
+	}
+	T Mtot = zero;
+	for (int r = 0; r < NumPieces; ++r) {
+		for (int i = 0; i < n; ++i) {
+			if (abs(rho[r][i]) < T(1e-10)) {
+				rho[r][i] = T(0);
+			}
+		}
+		auto const M = polynomialAntiDerivative(rho[r] * dV);
+		T const M0 = M(boundaries[r]);
+		T const M1 = M(boundaries[r + 1]);
+		Mtot += M1 - M0;
+		Menc.push_back(M + Polynomial<T>(Mtot - M0));
+		drho_dr.push_back(polynomialDerivative(rho[r]));
+	}
+	std::ostringstream code;
+	code << "\n";
+	code << genFunctor<T>("BSplineDensity", rho, Order, Dimension);
+	code << "\n";
+	code << genFunctor<T>("BSplineDerivative", drho_dr, Order, Dimension);
+	code << "\n";
+	code << genFunctor<T>("BSplineEnclosedMass", Menc, Order, -2, Dimension);
+	code << "\n";
+	return code.str();
+}
+
+void test();
+
 int hpx_main(int argc, char *argv[]) {
-	printf("BEGIN\n");
-	processOptions(argc, argv);
-	Grid<Real, 3, 4, 3> test(50);
-	printf("END\n");
+	test();
+//	static constexpr int N1 = 2;
+//	static constexpr int N2 = 8;
+//	std::ofstream fOut("kernel.hpp");
+//	std::ostringstream code;
+//	code << "\n";
+//	code << "#pragma once\n\n";
+//	code << "template<typename, int, int = 3> \n";
+//	code << "struct BSpline;\n";
+//	code << "\n";
+//	code << "template<typename, int, int = 3> \n";
+//	code << "struct DerivativeBSpline;\n";
+//	code << "\n" << std::ends;
+//	for (int n = N1; n < N2; n++) {
+//		code << genBSplineFunctor(n, 3);
+//	}
+//	fOut << code.str() << "\n" << std::endl;
 	return hpx::local::finalize();
 }
 

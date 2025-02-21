@@ -120,11 +120,11 @@ struct Polynomial: public std::vector<Type> {
 		*this = *this * A;
 		return *this;
 	}
-	Polynomial& operator*=(Type const &a) const {
+	Polynomial& operator*=(Type const &a) {
 		*this = a * *this;
 		return *this;
 	}
-	Polynomial& operator/=(Type const &a) const {
+	Polynomial& operator/=(Type const &a) {
 		*this = a / *this;
 		return *this;
 	}
@@ -186,12 +186,14 @@ auto polynomialDivision(Polynomial<Type> const &D, Polynomial<Type> const &I) {
 }
 
 template<typename Type>
-Polynomial<Type> polynomialDerivative(Polynomial<Type> const &F) {
-	Polynomial<Type> dfdx(Type(0));
-	for (int n = 0; n < F.degree(); n++) {
-		dfdx[n] = Type(n + 1) * F[n + 1];
+Polynomial<Type> polynomialDerivative(Polynomial<Type> F) {
+	static constexpr Type zero = Type(0);
+	auto const deg = F.degree();
+	for (int n = 0; n < deg; n++) {
+		F[n] = Type(n + 1) * F[n + 1];
+		F[n + 1] = zero;
 	}
-	return dfdx;
+	return F;
 }
 
 template<typename Type>

@@ -15,84 +15,6 @@
 
 using namespace Math;
 
-template<typename T, int N>
-Vector<T, N> findRootNelderMead(std::function<Vector<T, N>(Vector<T, N> const&)> const&, Vector<T, N> const&);
-
-template<typename T, int N>
-Vector<T, N> findRootNelderMead(std::function<Vector<T, N>(Vector<T, N> const&)> const &testFunction, Vector<T, N> const &xGuess) {
-	using simplex_type = std::pair<T, Vector<T, N>>;
-	static constexpr T zero = T(0), one = T(1);
-	static constexpr T alpha = T(1), rho = T(0.5), sigma = T(0.5), gamma = T(2), tolerance(1e-6);
-	Vector<simplex_type, N + 1> xSimplex;
-	T const iN = one / T(N);
-	T const dX = T(1.0e-3) * vectorMagnitude(xGuess);
-	for (int k = 0; k < N; k++) {
-		xSimplex[k].second = xGuess;
-		xSimplex[k].second[k] += dX;
-		xSimplex[k].first = testFunction(xSimplex[k].second);
-	}
-	xSimplex[N].second = xGuess;
-	xSimplex[N].first = testFunction(xSimplex[N].second);
-	while (true) {
-		bool shrink;
-		simplex_type reflectionPoint;
-		simplex_type contractionPoint;
-		Real error = zero;
-		std::sort(xSimplex.begin(), xSimplex.end(), [](simplex_type const &a, simplex_type const &b) {
-			return abs(a.first) < abs(b.first);
-		});
-		for (int k = 0; k <= N; k++) {
-			error += nSquared(xSimplex[k].first);
-		}
-		error = sqrt(error * iN);
-		if (error <= tolerance) {
-			return xSimplex[0].second;
-		}
-		Vector<T, N> xCentroid = zeroVector<T, N>();
-		for (int k = 0; k < N; k++) {
-			xCentroid += xSimplex[k].second;
-		}
-		xCentroid *= iN;
-		reflectionPoint.second = xCentroid + alpha * (xCentroid - xSimplex[N].second);
-		reflectionPoint.first = testFunction(reflectionPoint.second);
-		shrink = false;
-		if (abs(reflectionPoint.first) <= abs(xSimplex[0].first)) {
-			simplex_type expansionPoint;
-			expansionPoint.second = (one - gamma) * xCentroid + gamma * reflectionPoint.second;
-			expansionPoint.first = testFunction(expansionPoint.second);
-			if (abs(expansionPoint.first) < abs(reflectionPoint.first)) {
-				xSimplex[N] = expansionPoint;
-			} else {
-				xSimplex[N] = reflectionPoint;
-			}
-		} else if (abs(reflectionPoint.first) <= abs(xSimplex[N - 1].first)) {
-			xSimplex[N] = reflectionPoint;
-		} else if (abs(reflectionPoint.first) <= abs(xSimplex[N].first)) {
-			contractionPoint.second = (one - rho) * xCentroid + rho * reflectionPoint.second;
-			contractionPoint.first = testFunction(contractionPoint.second);
-			if (abs(contractionPoint.first) <= abs(reflectionPoint.first)) {
-				xSimplex[N] = contractionPoint;
-			} else {
-				shrink = true;
-			}
-		} else {
-			contractionPoint.second = (one - rho) * xCentroid + rho * xSimplex[N].second;
-			contractionPoint.first = testFunction(contractionPoint.second);
-			if (abs(contractionPoint.first) <= abs(xSimplex[N].first)) {
-				xSimplex[N] = contractionPoint;
-			} else {
-				shrink = true;
-			}
-		}
-		if (shrink) {
-			for (int k = 1; k <= N; k++) {
-				xSimplex[k].second = (one - sigma) * xSimplex[0].second + sigma * xSimplex[k].second;
-				xSimplex[k].first = testFunction(xSimplex[k].second);
-			}
-		}
-	}
-}
-
 static constexpr int XDIM = 0;
 static constexpr int YDIM = 1;
 static constexpr int ZDIM = 2;
@@ -135,10 +57,22 @@ struct testImplicitRadiation {
 		for (int n = 0; n < NDIM; n++) {
 			Beta[n] = Beta0[n] + (F0[n] - F[n]) / (rho * c);
 		}
+		Real Ek = zero;
+		Vector<Real, NDIM> dEk_dF;
+		for (int n = 0; n < NDIM; n++) {
+			dEk_dF[n] = -c * Beta[n];
+		}
 		Real const Eg = Eg0 + Er0 - Er;
+		Real const dEg_dEr = -one;
+		Real const eps = Eg - Ek;
+		Vector<Real, NDIM> const deps_dF = -dEk_dF;
+		Real const deps_dEr = -one;
 		Real const F2 = vectorNorm(F);
 		Real const absF = sqrt(F2);
-		Real const T = Eg * (mu * mAMU) / ((gamma - one) * kB * rho);
+		Real const iCv = (mu * mAMU) / ((gamma - one) * kB * rho);
+		Real const T = eps * iCv;
+		Real const dT_dEr = -iCv;
+		Vector<Real, NDIM> const dT_dF = deps_dF * iCv;
 		Real const T2 = nSquared(T);
 		Real const T4 = nSquared(T2);
 		Tensor dBeta_dF;
@@ -152,7 +86,6 @@ struct testImplicitRadiation {
 			N[n] = F[n] / (absF + Real::tiny());
 		}
 		Real const T3 = T * T2;
-		Real const dT_dEr = -T / Eg;
 		Tensor dN_dF;
 		for (int n = 0; n < NDIM; n++) {
 			for (int m = 0; m < NDIM; m++) {
@@ -219,7 +152,7 @@ struct testImplicitRadiation {
 		Real const dgk_dEr = kappa * (one - four * aR * T3 * dT_dEr);
 		ColumnVector dgk_dF;
 		for (int n = 0; n < NDIM; n++) {
-			dgk_dF[n] = -two * kappa * Beta[n];
+			dgk_dF[n] = -kappa * (two * Beta[n] + three * aR * T3 * dT_dF[n]);
 			for (int k = 0; k < NDIM; k++) {
 				dgk_dF[n] -= two * kappa * F[k] * dBeta_dF[k, n];
 			}
@@ -339,6 +272,7 @@ void solveImplicitRadiation(Real &Er, ColumnVector &F, Real &Eg, ColumnVector &M
 	 aR = pc.aR;
 	 c = pc.c;
 	 */
+
 	Real const c = Real(1);
 	auto const Beta0 = Mg / (rho * c);
 	auto const Eg0 = Eg;
@@ -367,7 +301,257 @@ void solveImplicitRadiation(Real &Er, ColumnVector &F, Real &Eg, ColumnVector &M
 	Er = x[NDIM];
 }
 
+struct RadiationState: public Math::Vector<Real, 4> {
+	static constexpr int NF = 4;
+	using base_type = Math::Vector<Real, NF>;
+	RadiationState() :
+			F((Math::Vector<Real, NDIM>&) base_type::operator[](0)), E(base_type::operator[](NDIM)) {
+	}
+	Vector<Real, NDIM> &F;
+	Real &E;
+};
+
+std::pair<Real, Real> eigenvalues(Real f, Real mu) {
+	std::pair<Real, Real> rc;
+	Real constexpr third = Real(1. / 3.), one = Real(1), two = Real(2), three = Real(3), four = Real(4);
+	Real const f2 = f * f;
+	Real const mu2 = mu * mu;
+	Real const a = sqrt(four - three * f2);
+	Real const b = a * a - a;
+	Real const c = two - f2 - a;
+	Real const d = two * (third * b + mu2 * c);
+	Real const e = one / a;
+	Real const g = mu * f;
+	rc.first = e * (g - d);
+	rc.second = e * (g + d);
+	return rc;
+}
+
+struct FluxReturn {
+	RadiationState flux;
+	Real signalSpeed;
+};
+
+FluxReturn radiationFlux(RadiationState const &uL, RadiationState const &uR, int dim) {
+	Real constexpr zero(0), sixth = Real(1. / 6.), half = Real(1. / 2.), one(1), two = Real(2), three = Real(3), four = Real(4);
+	Real const tiny = Real::tiny();
+	/*	static constexpr Constants<Real> pc;
+	 mAMU = pc.m;
+	 kB = pc.kB;
+	 aR = pc.aR;
+	 c = pc.c;
+	 */
+	Real const c = one;
+	Real const cinv = one / c;
+	Real const c2inv = cinv * cinv;
+	FluxReturn rc;
+	auto &flux = rc.flux;
+	auto &signalSpeed = rc.signalSpeed;
+	Math::Vector<Real, NDIM> pL;
+	Math::Vector<Real, NDIM> pR;
+	Math::Vector<Real, NDIM> FrL;
+	Math::Vector<Real, NDIM> FrR;
+	for (int k = 0; k < NDIM; k++) {
+		FrL[k] = uL[k] * c2inv;
+		FrR[k] = uR[k] * c2inv;
+	}
+	Real const ErL = uL[NDIM];
+	Real const ErR = uR[NDIM];
+	Real const F2L = Math::vectorNorm(FrL);
+	Real const F2R = Math::vectorNorm(FrR);
+	Real const FmagL = sqrt(F2L + tiny);
+	Real const FmagR = sqrt(F2R + tiny);
+	Real const fL = FmagL / ErL;
+	Real const fR = FmagR / ErR;
+	Real const FinvL = one / FmagL;
+	Real const FinvR = one / FmagR;
+	auto const nL = FrL * FinvL;
+	auto const nR = FrR * FinvR;
+	Real const muL = nL[dim];
+	Real const muR = nR[dim];
+	auto const lambdaL = eigenvalues(fL, muL);
+	auto const lambdaR = eigenvalues(fR, muR);
+	Real const sL = min(lambdaR.first, lambdaL.first);
+	Real const sR = max(lambdaR.second, lambdaL.second);
+	signalSpeed = max(abs(sR), abs(sL));
+	Real const XiL = three - two * sqrt(four - fL * three * fL);
+	Real const XiR = three - two * sqrt(four - fR * three * fR);
+	for (int k = 0; k < NDIM; k++) {
+		pL[k] = half * ErL * (one - XiL) * nL[k] * nL[dim];
+		pR[k] = half * ErR * (one - XiR) * nR[k] * nR[dim];
+	}
+	pL[dim] += sixth * ErL * (XiL + one);
+	pR[dim] += sixth * ErR * (XiR + one);
+	if (sL >= zero) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			flux[dim] = pL[dim];
+		}
+		flux[NDIM] = FrL[dim];
+	} else if (/*sL < zero &&*/zero < sR) {
+		Real const aInv = one / (sR - sL);
+		Real const aL = sR * aInv;
+		Real const aR = sL * aInv;
+		Real const aRL = sR * sL * aInv;
+		for (int dim = 0; dim < NDIM; dim++) {
+			flux[dim] = aL * pL[dim] - aR * pR[dim] + aRL * (FrR[dim] - FrL[dim]);
+		}
+		flux[NDIM] = aL * FrL[dim] - aR * FrR[dim] + aRL * (ErR - ErL);
+	} else /*if (sR >= zero)*/{
+		for (int dim = 0; dim < NDIM; dim++) {
+			flux[dim] = pR[dim];
+		}
+		flux[NDIM] = FrR[dim];
+	}
+	return rc;
+}
+
+struct RadiationGrid {
+	static Real constexpr zero = Real(0), one = Real(1);
+	static constexpr int NF = 4;
+	static constexpr int BW = 1;
+	using flux_array_type = std::array<std::vector<std::valarray<Real>>, NDIM>;
+	RadiationGrid(int N_ = 64) {
+		N = N_ + 2 * BW;
+		N3 = N * N * N;
+		dN[0] = 1;
+		for (int dim = 0; dim < NDIM - 1; dim++) {
+			dN[dim + 1] = dN[dim] * N;
+		}
+		bottomCorner = 0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			bottomCorner += dN[dim];
+		}
+		topCorner = N3 - bottomCorner;
+		for (int f = 0; f < NF; f++) {
+			Ur[f] = std::valarray<Real>(N3);
+			Ug[f] = std::valarray<Real>(N3);
+		}
+		rho = std::valarray<Real>(N3);
+		dx = one / Real(N - 2 * BW);
+	}
+	Real computeFlux() {
+		Real maxSignalSpeed = zero;
+		for (int dim = 0; dim < NDIM; dim++) {
+			for (int n = bottomCorner; n < N3; n++) {
+				RadiationState uR, uL;
+				F[dim] = std::vector<std::valarray<Real>>(NF, std::valarray<Real>(N3));
+				for (int k = 0; k <= NDIM; k++) {
+					uR[k] = Ur[k][n];
+					uL[k] = Ur[k][n - dN[dim]];
+				}
+				auto const fluxReturn = radiationFlux(uL, uR, dim);
+				for (int k = 0; k <= NDIM; k++) {
+					F[dim][k][n] = fluxReturn.flux[k];
+				}
+				maxSignalSpeed = max(maxSignalSpeed, fluxReturn.signalSpeed);
+			}
+		}
+		return maxSignalSpeed;
+	}
+	void implicitSolve(Real dt) {
+		Real constexpr gamma = Real(5.0 / 3.0);
+		Real const c = one;
+		Real const cinv = one / c;
+		ColumnVector Fr;
+		ColumnVector Mg;
+		for (int n = bottomCorner; n < topCorner; n++) {
+			Real Er = Ur[NDIM][n];
+			Real Eg = Ug[NDIM][n];
+			for (int dim = 0; dim < NDIM; dim++) {
+				Fr[dim] = Ur[dim][n] * cinv;
+				Mg[dim] = Ug[dim][n];
+			}
+			Real const mu = Real(1);
+			Real const kappa = Real(1e6);
+			Real const Chi = Real(1e6);
+			solveImplicitRadiation(Er, Fr, Eg, Mg, rho[n], mu, kappa, Chi, gamma, dt);
+			Ur[NDIM][n] = Er;
+			Ug[NDIM][n] = Eg;
+			for (int dim = 0; dim < NDIM; dim++) {
+				Ur[dim][n] = c * Fr[dim];
+				Ug[dim][n] = Mg[dim];
+			}
+		}
+
+	}
+	void explicitSolve(Real beta, Real dt) {
+		const Real alpha = one - beta;
+		const Real lambda = dt / dx;
+		for (int f = 0; f < NF; f++) {
+			for (int n = bottomCorner; n < topCorner; n++) {
+				Real dU = zero;
+				for (int dim = 0; dim < NDIM; dim++) {
+					dU -= lambda * (F[dim][f][n + dN[dim]] - F[dim][f][n]);
+				}
+				auto const U1 = Ur[f][n] + dU;
+				Ur[f][n] = alpha * Ur0[f][n] + beta * U1;
+			}
+		}
+	}
+	Real prepareStep() {
+		Ur0 = Ur;
+		return dx / computeFlux();
+	}
+	void doStep(Real dt) {
+		explicitSolve(one, dt);
+		implicitSolve(dt);
+	}
+	void finishStep() {
+		std::array<int, NDIM> n;
+		auto &nx = n[0];
+		auto &ny = n[1];
+		auto &nz = n[2];
+		for (nx = 0; nx < BW; nx++) {
+			for (ny = BW; ny < N - BW; ny++) {
+				for (nz = BW; nz < N - BW; nz++) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						std::swap(n[0], n[dim]);
+						int iLd = 0;
+						for (int k = 0; k < NDIM; k++) {
+							iLd += dN[k] * n[k];
+						}
+						int iLs = iLd, iHs = iLd, iHd = iLd;
+						iLs += (BW - dN[dim]) * n[dim];
+						iHs += (N - dN[dim] - BW) * n[dim];
+						for (int f = 0; f < NF; f++) {
+							Ur[f][iLd] = Ur[f][iLs];
+							Ur[f][iHd] = Ur[f][iHs];
+						}
+						Ur[dim][iLd] = min(zero, Ur[dim][iLd]);
+						Ur[dim][iHd] = max(zero, Ur[dim][iHd]);
+						std::swap(n[0], n[dim]);
+					}
+				}
+			}
+		}
+	}
+private:
+	std::array<std::valarray<Real>, NF> Ur0;
+	std::array<std::valarray<Real>, NF> Ur;
+	std::array<std::valarray<Real>, NF> Ug;
+	std::valarray<Real> rho;
+	flux_array_type F;
+	int N;
+	int N3;
+	int bottomCorner;
+	int topCorner;
+	Real dx;
+	Math::Vector<int, NDIM> dN;
+};
+
+RadiationGrid driver(RadiationGrid grid, Real tMax) {
+	static constexpr Real zero = Real(0), cfl = Real(0.4);
+	Real t = zero;
+	while (t < tMax) {
+		Real const dt = cfl * grid.prepareStep();
+		grid.doStep(dt);
+		grid.finishStep();
+		t += dt;
+	}
+	return grid;
+}
 void testRadiation() {
+	RadiationGrid test;
 	Real a(.354);
 	ColumnVector F = Real(Real(0.0) * a);
 	ColumnVector Mg = Real(-Real(0.0) * a);

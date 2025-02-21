@@ -19,6 +19,7 @@ set(astrotiger_src
 	src/Options.cpp
 	src/Radiation.cpp
 	src/Sod.cpp
+	src/test.cpp
 ) 
 
 set(astrotiger_header
@@ -40,9 +41,11 @@ set(astrotiger_header
 	include/Quadrature.hpp
 	include/Radiation.hpp
 	include/Real.hpp
+	include/Relativity.hpp
 	include/Root.hpp
 	include/RungeKutta.hpp
 	include/Sod.hpp
+	include/Tensor.hpp
 	include/TriangularArray.hpp
 	include/Utilities.hpp
 	include/ValArray.hpp
@@ -52,7 +55,8 @@ set(astrotiger_header
 add_hpx_executable(
   astrotiger
   DEPENDENCIES
-  stdc++_libbacktrace
+  	stdc++_libbacktrace
+  	siloh5
   SOURCES
     ${astrotiger_src}
   HEADERS

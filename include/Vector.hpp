@@ -21,7 +21,7 @@ template<typename Type, int Ndim>
 using Vector = Matrix<Type, Ndim, 1>;
 
 template<typename Type, int Ndim>
-Vector<Type, Ndim> max(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
+Vector<Type, Ndim> vectorMaximum(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
 	Vector<Type, Ndim> result;
 	for (int n = 0; n < Ndim; n++) {
 		result[n] = A[n] < B[n] ? B[n] : A[n];
@@ -30,7 +30,7 @@ Vector<Type, Ndim> max(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B)
 }
 
 template<typename Type, int Ndim>
-Type max(Vector<Type, Ndim> const &A) {
+Type vectorMaximum(Vector<Type, Ndim> const &A) {
 	Type maxA = A[0];
 	for (int n = 1; n < Ndim; n++) {
 		if (maxA < A[n]) {
@@ -41,7 +41,7 @@ Type max(Vector<Type, Ndim> const &A) {
 }
 
 template<typename Type, int Ndim>
-Vector<Type, Ndim> min(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
+Vector<Type, Ndim> vectorMinimum(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B) {
 	Vector<Type, Ndim> result;
 	for (int n = 0; n < Ndim; n++) {
 		result[n] = A[n] < B[n] ? A[n] : B[n];
@@ -50,7 +50,7 @@ Vector<Type, Ndim> min(Vector<Type, Ndim> const &A, Vector<Type, Ndim> const &B)
 }
 
 template<typename Type, int Ndim>
-Type min(Vector<Type, Ndim> const &A) {
+Type vectorMinimum(Vector<Type, Ndim> const &A) {
 	Type minA = A[0];
 	for (int n = 1; n < Ndim; n++) {
 		if (minA > A[n]) {

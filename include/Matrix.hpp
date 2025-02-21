@@ -43,6 +43,9 @@ struct Matrix {
 			}
 		}
 	}
+	Matrix(std::initializer_list<Type> initList) :
+			values(initList) {
+	}
 	Matrix(Type const &init) :
 			values(), createContainer(values) {
 		for (int n = 0; n != size(); n++) {
@@ -165,7 +168,7 @@ struct Matrix<Type, RowCount, 1, Container> {
 			values(), createContainer(values) {
 		std::fill(begin(), end(), initValue);
 	}
-	Matrix(std::initializer_list<Type> const &initList) :
+	Matrix(std::initializer_list<Type> initList) :
 			values(), createContainer(values) {
 		std::copy(initList.begin(), initList.end(), begin());
 	}
@@ -443,8 +446,7 @@ Matrix<T, N, L> operator*(Matrix<T, N, M, Container2> const &A, Matrix<T, M, L, 
 }
 
 template<typename Type, int Ndim, typename Container>
-SquareMatrix<Type, Ndim, Container> operator*=(SquareMatrix<Type, Ndim, Container> &A,
-		SquareMatrix<Type, Ndim, Container> const &C) {
+SquareMatrix<Type, Ndim, Container> operator*=(SquareMatrix<Type, Ndim, Container> &A, SquareMatrix<Type, Ndim, Container> const &C) {
 	SquareMatrix<Type, Ndim, Container> const B = A;
 	for (int n = 0; n < Ndim; n++) {
 		for (int l = 0; l < Ndim; l++) {
@@ -476,8 +478,7 @@ Matrix<Type, RowCount, 1, Container> matrixColumn(Matrix<Type, RowCount, ColumnC
 }
 
 template<typename Type, int RowCount, int ColumnCount, typename Container>
-Matrix<Type, ColumnCount, RowCount, Container> matrixTranspose(
-		Matrix<Type, RowCount, ColumnCount, Container> const &B) {
+Matrix<Type, ColumnCount, RowCount, Container> matrixTranspose(Matrix<Type, RowCount, ColumnCount, Container> const &B) {
 	Matrix<Type, ColumnCount, RowCount, Container> A;
 	for (int r = 0; r < RowCount; r++) {
 		for (int c = 0; c < ColumnCount; c++) {
@@ -601,8 +602,7 @@ SquareMatrix<Type, Ndim, Container> matrixAdjoint(SquareMatrix<Type, Ndim, Conta
 }
 
 template<typename Type, int P, int Q, int M, int N, typename Container>
-Matrix<Type, P * M, Q * N, Container> matrixKroneckerProduct(Matrix<Type, P, Q, Container> const &A,
-		Matrix<Type, M, N, Container> const &B) {
+Matrix<Type, P * M, Q * N, Container> matrixKroneckerProduct(Matrix<Type, P, Q, Container> const &A, Matrix<Type, M, N, Container> const &B) {
 	Matrix<Type, P * M, Q * N, Container> C;
 	for (int p = 0; p < P; p++) {
 		auto const pQ = Q * p;
@@ -619,8 +619,7 @@ Matrix<Type, P * M, Q * N, Container> matrixKroneckerProduct(Matrix<Type, P, Q, 
 }
 
 template<typename T, int N, typename Container>
-void matrixQRDecomposition(SquareMatrix<T, N, Container> const &A, SquareMatrix<T, N, Container> &Q,
-		SquareMatrix<T, N, Container> &R) {
+void matrixQRDecomposition(SquareMatrix<T, N, Container> const &A, SquareMatrix<T, N, Container> &Q, SquareMatrix<T, N, Container> &R) {
 	T const one(1);
 	R = A;
 	Q = identityMatrix<T, N, Container>();
@@ -643,8 +642,8 @@ void matrixQRDecomposition(SquareMatrix<T, N, Container> const &A, SquareMatrix<
 }
 
 template<typename T, int R, typename Container>
-SquareMatrix<T, R, Container> matrixLUDecomposition(SquareMatrix<T, R, Container> const &A,
-		SquareMatrix<T, R, Container> &L, SquareMatrix<T, R, Container> &U) {
+SquareMatrix<T, R, Container> matrixLUDecomposition(SquareMatrix<T, R, Container> const &A, SquareMatrix<T, R, Container> &L,
+		SquareMatrix<T, R, Container> &U) {
 	const T zero(0);
 	SquareMatrix<T, R> P = identityMatrix<T, R, Container>();
 	L = P;

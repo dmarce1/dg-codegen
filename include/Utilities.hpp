@@ -163,4 +163,17 @@ struct ContainerResizer<Container, N, true> {
 	}
 };
 
+template <typename T, typename = void>
+struct Underlying {
+    using type = T;
+};
+
+template <typename T>
+struct Underlying<T, std::void_t<typename T::value_type>> {
+    using type = typename T::value_type;
+};
+
+template <typename T>
+using underlying_type = typename Underlying<T>::type;
+
 #endif /* INCLUDE_UTILITIES_HPP_ */
