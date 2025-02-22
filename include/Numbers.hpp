@@ -105,5 +105,9 @@ constexpr T nSquared(T r) {
 	return r * r;
 }
 
+constexpr auto periodicModulus(auto a, auto b) {
+	return a - b * (a / b - int(a < 0));
+}
+
 }
 #endif /* INCLUDE_NUMBERS_HPP_ */

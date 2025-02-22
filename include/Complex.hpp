@@ -27,10 +27,7 @@ struct Complex {
 	Complex() :
 			x(), y() {
 	}
-	Complex(Type const &_value) :
-			x(_value), y(0) {
-	}
-	Complex(int const &_value) :
+	explicit Complex(Type const &_value) :
 			x(_value), y(0) {
 	}
 	constexpr Complex(Type const &_x, Type const &_y) :

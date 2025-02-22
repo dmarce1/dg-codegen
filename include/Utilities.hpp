@@ -129,22 +129,22 @@ private:
 
 template<typename, int>
 struct containerHasResize: public std::false_type {
-	static constexpr bool value = false;
+	static constexpr const bool value = false;
 };
 
 template<typename T, int N>
 struct containerHasResize<std::deque<T>, N> : public std::true_type {
-	static constexpr bool value = true;
+	static constexpr const bool value = true;
 };
 
 template<typename T, int N>
 struct containerHasResize<std::valarray<T>, N> : public std::true_type {
-	static constexpr bool value = true;
+	static constexpr const bool value = true;
 };
 
 template<typename T, int N>
 struct containerHasResize<std::vector<T>, N> : public std::true_type {
-	static constexpr bool value = true;
+	static constexpr const bool value = true;
 };
 
 template<typename Container, int N, bool = containerHasResize<Container, N>::value>
@@ -152,28 +152,28 @@ struct ContainerResizer;
 
 template<typename Container, int N>
 struct ContainerResizer<Container, N, false> {
-	ContainerResizer(Container&) {
+	void operator()(Container&) const {
 	}
 };
 
 template<typename Container, int N>
 struct ContainerResizer<Container, N, true> {
-	ContainerResizer(Container &container) {
+	void operator()(Container &container) const {
 		container = Container(N);
 	}
 };
 
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct Underlying {
-    using type = T;
+	using type = T;
 };
 
-template <typename T>
+template<typename T>
 struct Underlying<T, std::void_t<typename T::value_type>> {
-    using type = typename T::value_type;
+	using type = typename T::value_type;
 };
 
-template <typename T>
+template<typename T>
 using underlying_type = typename Underlying<T>::type;
 
 #endif /* INCLUDE_UTILITIES_HPP_ */

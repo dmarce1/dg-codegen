@@ -178,6 +178,10 @@ struct Real {
 		a.value = std::asin(a.value);
 		return a;
 	}
+	friend auto lround(Real a) {
+		debug_check(a);
+		return std::lround(a.value);
+	}
 	friend Real tgamma(Real a) {
 		nonneg_check(a);
 		debug_check(a);

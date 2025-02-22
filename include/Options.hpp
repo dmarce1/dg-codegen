@@ -16,7 +16,9 @@ struct Options {
 	double dualEnergyUpdateSwitch;
 	double fluidGamma;
 	double gridScale;
+	double totalMass;
 	int gridLength;
+	size_t particleCount;
 };
 
 const Options& getOptions();

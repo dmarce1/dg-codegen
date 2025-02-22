@@ -205,6 +205,19 @@ Polynomial<Type> polynomialAntiDerivative(Polynomial<Type> const &dfdx) {
 	return f;
 }
 
+
+template<typename Type>
+Polynomial<Polynomial<Type>> polynomialAntiDerivative(Polynomial<Polynomial<Type>> const &dfdx) {
+	Polynomial<Type> f;
+	for (int n = 0; n <= dfdx.degree(); n++) {
+		f[n + 1] = dfdx[n] / Type(n + 1);
+	}
+	for (int n = 1; n <= dfdx.degree() + 1; n++) {
+		f[n] = polynomialAntiDerivative(f[n]);
+	}
+	return f;
+}
+
 template<typename Type>
 Type polynomialIntegrate(Polynomial<Type> const &f, Type const &a, Type const &b) {
 	auto const F = polynomialAntiDerivative(f);

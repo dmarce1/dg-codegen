@@ -342,6 +342,7 @@ auto genBSplineFunctor(int Order, int Dimension = 3) {
 void test();
 
 int hpx_main(int argc, char *argv[]) {
+	processOptions(argc, argv);
 	test();
 //	static constexpr int N1 = 2;
 //	static constexpr int N2 = 8;

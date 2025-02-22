@@ -33,10 +33,12 @@ struct Matrix {
 		return ColumnCount * RowCount;
 	}
 	Matrix() :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 	}
 	Matrix(std::array<std::array<Type, ColumnCount>, RowCount> const &initList) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 		for (int n = 0; n < RowCount; n++) {
 			for (int m = 0; m < ColumnCount; m++) {
 				operator[](n, m) = initList[n][m];
@@ -47,17 +49,21 @@ struct Matrix {
 			values(initList) {
 	}
 	Matrix(Type const &init) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 		for (int n = 0; n != size(); n++) {
 			values[n] = init;
 		}
 	}
 	Matrix(Matrix const &other) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
+
 		values = other.values;
 	}
 	Matrix(Matrix &&other) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 		values = std::move(other.values);
 	}
 	Matrix& operator=(Matrix const &other) {
@@ -153,7 +159,13 @@ struct Matrix {
 	}
 private:
 	Container values;
-	ContainerResizer<Container, size()> const createContainer;
+	static void createContainer(Container &container) {
+		static constexpr int N = size();
+		constexpr bool flag = containerHasResize<Container, N>::value;
+		if constexpr (flag) {
+			container = Container(N);
+		}
+	}
 };
 
 template<typename Type, int RowCount, typename Container>
@@ -162,22 +174,27 @@ struct Matrix<Type, RowCount, 1, Container> {
 		return RowCount;
 	}
 	Matrix() :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 	}
 	Matrix(Type const &initValue) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 		std::fill(begin(), end(), initValue);
 	}
 	Matrix(std::initializer_list<Type> initList) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 		std::copy(initList.begin(), initList.end(), begin());
 	}
 	Matrix(Matrix const &other) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 		values = other.values;
 	}
 	Matrix(Matrix &&other) :
-			values(), createContainer(values) {
+			values() {
+		createContainer(values);
 		values = std::move(other.values);
 	}
 	Matrix& operator=(Matrix const &other) {
@@ -281,7 +298,7 @@ struct Matrix<Type, RowCount, 1, Container> {
 	}
 private:
 	Container values;
-	ContainerResizer<Container, RowCount> const createContainer;
+	static ContainerResizer<Container, RowCount> const createContainer;
 };
 
 template<typename Type, typename Container>
@@ -511,7 +528,7 @@ SquareMatrix<Type, Ndim - 1, Container> subMatrix(SquareMatrix<Type, Ndim, Conta
 }
 
 template<typename T, int R, typename Container>
-T matrixAndDeterminateInverse(SquareMatrix<T, R, Container> &A) {
+T matrixInverseAndDeterminant(SquareMatrix<T, R, Container> &A) {
 	T constexpr zero(0), one(1);
 	T matrixDeterminant = one;
 	auto D = identityMatrix<T, R, Container>();
@@ -522,6 +539,8 @@ T matrixAndDeterminateInverse(SquareMatrix<T, R, Container> &A) {
 			do {
 				k++;
 				if (k >= R) {
+					printf("(%i >= %i)\n", k, R);
+					abort();
 					return zero;
 				}
 				pivot = A[k, i];
@@ -562,7 +581,11 @@ T matrixAndDeterminateInverse(SquareMatrix<T, R, Container> &A) {
 template<typename T, int R, typename Container>
 auto matrixInverse(SquareMatrix<T, R, Container> const A) {
 	auto iA = A;
-	matrixAndDeterminateInverse(iA);
+	T det = matrixInverseAndDeterminant(iA);
+	if (det == T(0)) {
+		printf("Matrix is singular\n");
+		abort();
+	}
 	return iA;
 }
 
@@ -571,7 +594,7 @@ Type matrixDeterminant(SquareMatrix<Type, Ndim, Container> A) {
 	if constexpr (Ndim == 1) {
 		return A[0, 0];
 	} else {
-		return matrixInverseAndDeterminate(A);
+		return matrixInverseAndDeterminant(A);
 	}
 }
 
@@ -699,6 +722,74 @@ std::string toString(Matrix<Type, RowCount, ColumnCount, Container> const &M) {
 		result += hLine;
 	}
 	return result;
+}
+
+template<typename Type, int RowCount, int ColumnCount, typename Container>
+std::string toMathematica(Matrix<Type, RowCount, ColumnCount, Container> const &M) {
+	using std::to_string;
+	std::string list;
+	list += "A =: {\n";
+	for (int row = 0; row < RowCount; row++) {
+		list += "\t{";
+		for (int column = 0; column < ColumnCount; column++) {
+			list += to_string(M[row, column]);
+			if (column != ColumnCount - 1) {
+				list += ",";
+			}
+		}
+		list += " }";
+		if (row != RowCount - 1) {
+			list += ",";
+		}
+	}
+	list += "}";
+	return list;
+}
+
+template<typename T, int D>
+struct SymmetricMatrix: public std::array<T, ((D * D + D) >> 1)> {
+	using base_type = std::array<T, ((D * D + D) >> 1)>;
+	SymmetricMatrix() = default;
+	SymmetricMatrix(SymmetricMatrix const&) = default;
+	SymmetricMatrix(SymmetricMatrix&&) = default;
+	SymmetricMatrix& operator=(SymmetricMatrix const&) = default;
+	SymmetricMatrix& operator=(SymmetricMatrix&&) = default;
+	SymmetricMatrix(T init) {
+		std::fill(base_type::begin(), base_type::end(), init);
+	}
+	T& operator[](int n, int k) {
+		return ((base_type&) (*this))[index(n, k)];
+	}
+	T operator[](int n, int k) const {
+		return ((base_type&) (*this))[index(n, k)];
+	}
+private:
+	static constexpr int index(int n, int k) {
+		int const p = std::max(n, k);
+		int const q = std::min(n, k);
+		int const i = ((p * p + p) >> 1) + q;
+		return i;
+	}
+};
+
+template<typename T>
+auto matrixInverse(SymmetricMatrix<T, NDIM> const &A) {
+	static const T one = T(1);
+	SymmetricMatrix<T, NDIM> Ainv;
+	Ainv[0, 0] = +A[1, 1] * A[2, 2] - nSquared(A[1, 2]);
+	Ainv[0, 1] = -A[1, 0] * A[2, 2] + A[2, 1] * A[2, 0];
+	Ainv[0, 2] = +A[1, 0] * A[2, 1] - A[1, 1] * A[2, 0];
+	Ainv[1, 1] = +A[0, 0] * A[2, 2] - nSquared(A[0, 2]);
+	Ainv[2, 2] = +A[0, 0] * A[1, 1] - nSquared(A[0, 1]);
+	Ainv[1, 2] = -A[0, 0] * A[1, 2] + A[0, 1] * A[0, 2];
+	T const det = A[0, 0] * Ainv[0, 0] + A[0, 1] * Ainv[0, 1] + A[0, 2] * Ainv[0, 2];
+	T const detInv = one / det;
+	for (int k = 0; k < NDIM; k++) {
+		for (int n = 0; n <= k; n++) {
+			Ainv[n, k] *= detInv;
+		}
+	}
+	return Ainv;
 }
 
 }

@@ -5,11 +5,10 @@ project(astrotiger CXX CUDA)
 find_package(HDF5 REQUIRED COMPONENTS C CXX)
 find_package(HPX REQUIRED)
 
-set(AT_NDIM "3" CACHE STRING "Number of spatial dimensions")
 set(AT_PORDER "2" CACHE STRING "Sets order of spatial discretization")
 set(AT_CHECK_REALS "1" CACHE STRING "Whether to check Real number operations for errors.")
 
-set(ALL_FLAGS  -Wall -I${PROJECT_SOURCE_DIR}/include -DNDIM=${AT_NDIM} -DCHECK_REALS=${AT_CHECK_REALS} -DPORDER=${AT_PORDER})
+set(ALL_FLAGS  -Wall -I${PROJECT_SOURCE_DIR}/include -DNDIM=3 -DDIM4=4 -DCHECK_REALS=${AT_CHECK_REALS} -DPORDER=${AT_PORDER})
 set(CXX_FLAGS  ${ALL_FLAGS} -march=native )
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
@@ -27,21 +26,27 @@ set(astrotiger_header
 	include/Constants.hpp
 	include/ForwardDeclarations.hpp
 	include/Grid.hpp
+	include/GridAttributes.hpp
 	include/Hydrodynamics.hpp
 	include/HydroGrid.hpp
+	include/GRGrid.hpp
+	include/Kernels.hpp
 	include/Integrate.hpp
 	include/Interpolate.hpp
 	include/Interval.hpp
 	include/LegendreP.hpp
 	include/Limiters.hpp
+	include/LinearGravity.hpp
 	include/Matrix.hpp
 	include/Numbers.hpp
 	include/Options.hpp
+	include/Particles.hpp
 	include/Polynomial.hpp
 	include/Quadrature.hpp
 	include/Radiation.hpp
 	include/Real.hpp
 	include/Relativity.hpp
+	include/Spacetime.hpp
 	include/Root.hpp
 	include/RungeKutta.hpp
 	include/Sod.hpp
