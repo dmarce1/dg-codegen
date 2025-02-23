@@ -10,8 +10,10 @@
 
 #include "GridAttributes.hpp"
 #include "Vector.hpp"
+#include "Interval.hpp"
 #include "Kernels.hpp"
 
+#include <numeric>
 #include <valarray>
 
 template<typename T>
@@ -42,7 +44,7 @@ struct Particles {
 	using grid_type = std::valarray<real_type>;
 	static constexpr real_type zero = real_type(0), two = real_type(2), half = real_type(0.5), one = real_type(1);
 	Particles(size_t count, int Ngrid, int BW) :
-			gAttr(Vector<int, NDIM> { Ngrid, Ngrid, Ngrid }, BW), X(grid_type(zero, count)), U(grid_type(zero, count)), M(
+			gAttr(Vector<int, NDIM> { Ngrid, Ngrid, Ngrid }, BW), X(grid_type(zero, count)), U(grid_type(zero, count)), particleGrid(gAttr.intSize), M(
 					getOptions().totalMass / real_type(count)), time(0.0), N(count) {
 		static constexpr real_type r0(0.1);
 		for (int n = 0; n < int(count); n++) {
@@ -57,6 +59,56 @@ struct Particles {
 				outside = radius > real_type(r0);
 			} while (outside);
 		}
+	}
+	void swap_particles(size_t i, size_t j) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			std::swap(X[dim][i], X[dim][j]);
+			std::swap(U[dim][i], U[dim][j]);
+		}
+	}
+	void sort_particles(std::pair<size_t, size_t> particleRange, Interval<size_t, NDIM> indexBox) {
+		if (indexBox.volume() <= 1) {
+			int index = 0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				index += indexBox.begin(dim) * gAttr.intSizes[dim];
+			}
+			particleGrid[index] = particleRange;
+		} else {
+			int const sortDim = indexBox.longest();
+			size_t const splitIndex = (indexBox.begin(sortDim) + indexBox.end(sortDim)) >> 1;
+			auto indexBoxL = indexBox;
+			auto indexBoxR = indexBox;
+			auto particleRangeL = particleRange;
+			auto particleRangeR = particleRange;
+			size_t const midIndex = std::midpoint(indexBox.begin(sortDim), indexBox.end(sortDim));
+			indexBoxL.end(sortDim) = indexBoxR.begin(sortDim) = midIndex;
+			if (particleRange.second > particleRange.first) {
+				real_type const splitPosition = real_type(splitIndex) * gAttr.gridSpacing[sortDim];
+				size_t hi = particleRange.second;
+				size_t lo = particleRange.first;
+				auto const &sortPos = X[sortDim];
+				while (lo < hi) {
+					if (sortPos[lo] >= splitPosition) {
+						while (lo != hi) {
+							hi--;
+							if (sortPos[hi] < splitPosition) {
+								swap_particles(hi, lo);
+								break;
+							}
+						}
+					}
+					lo++;
+				}
+				particleRangeL.second = particleRangeR.first = hi;
+			}
+			sort_particles(particleRangeL, indexBoxL);
+			sort_particles(particleRangeR, indexBoxR);
+		}
+
+	}
+	void sort_particles() {
+		Interval<size_t, NDIM> indexBox( { 0, 0, 0 }, { gAttr.intSizes[0], gAttr.intSizes[1], gAttr.intSizes[2] });
+		sort_particles(std::pair<size_t, size_t>(0, X[0].size()), indexBox);
 	}
 	Vector<real_type, DIM4> getX(size_t n) const {
 		Vector<real_type, DIM4> x;
@@ -114,7 +166,7 @@ struct Particles {
 						real_type weight = one;
 						int index = 0;
 						for (int k = 0; k < NDIM; k++) {
-							index += gAttr.gridStrides[k] * periodicModulus(K[k], gAttr.intSizes[k]);
+							index += gAttr.extStrides[k] * periodicModulus(K[k], gAttr.intSizes[k]);
 							real_type const X = x[k + 1] * real_type(gAttr.intSizes[k]) - real_type(K[k] - bw) - half;
 							weight *= kernelTSC(X);
 						}
@@ -133,12 +185,12 @@ struct Particles {
 		return T;
 	}
 	template<typename MetricFunctor>
-	void kick(MetricFunctor const &dgdx, real_type dt) {
+	void kick(MetricFunctor const &grVars, real_type dt) {
 		for (size_t n = 0; n != N; n++) {
 			Vector<real_type, DIM4> du = zero;
 			auto u = getU(n);
 			auto const x = getX(n);
-			auto const D = dgdx(x[1], x[2], x[3]);
+			auto const D = grVars(x[1], x[2], x[3]);
 			for (int k = 0; k < DIM4; k++) {
 				for (int i = 0; i < DIM4; i++) {
 					for (int j = 0; j <= i; j++) {
@@ -186,6 +238,7 @@ private:
 	GridAttributes<real_type> const gAttr;
 	Vector<grid_type, NDIM> X;
 	Vector<grid_type, NDIM> U;
+	std::valarray<std::pair<size_t, size_t>> particleGrid;
 	real_type const M;
 	real_type time;
 	size_t N;

@@ -22,7 +22,7 @@ static std::string readTimers() {
 	std::string output;
 	output += std::string("Timing Results:\n");
 	for (auto iter = timerDatabase.begin(); iter != timerDatabase.end(); iter++) {
-		output += iter->first + std::string(" ") + std::to_string(iter->second.read());
+		output += iter->first + std::string(" ") + std::to_string(iter->second.read()) + " s\n";
 	}
 	return output;
 }
@@ -33,10 +33,12 @@ static void resetTimers() {
 
 static void startTimer(char const *name) {
 	timerDatabase[name].start();
+	currentTimer = name;
 }
 
 static void stopTimer() {
 	timerDatabase[currentTimer].stop();
+	currentTimer = "";
 }
 
 template<typename RealType>
@@ -67,7 +69,10 @@ struct CosmicGR {
 	void execute(real_type maxTime) {
 		real_type const dt = cfl * dx / c;
 		GR.enforceBoundaryConditions();
-		auto const dgdx = [this](real_type x, real_type y, real_type z) {
+//		auto const grVars = [this](int x, int  y, int  z) {
+//			return GR.getStateVars(x, y, z);
+//		};
+		auto const grVars = [this](real_type x, real_type y, real_type z) {
 			return GR.metricDerivatives(x, y, z);
 		};
 		int step = 0;
@@ -79,28 +84,56 @@ struct CosmicGR {
 				output(&T);
 				lastOutputTime = time;
 			}
+
+			startTimer("sort");
+			printf("sort\n");
+			DM.sort_particles();
+			stopTimer();
+
+			startTimer("kick");
 			printf("kick\n");
-			DM.kick(dgdx, half * dt);
+			DM.kick(grVars, half * dt);
+			stopTimer();
+
+			startTimer("drift");
 			printf("drift\n");
 			DM.drift(half * dt);
+			stopTimer();
+
+			startTimer("stress-energy tensor");
 			printf("stress-energy tensor\n");
 			auto const T = DM.stressEnergyTensor();
+			stopTimer();
+
+			startTimer("GR step");
 			printf("GR step\n");
 			GR.step(T, dt);
+			stopTimer();
+
+			startTimer("BC");
 			printf("BC\n");
 			GR.enforceBoundaryConditions();
+			stopTimer();
+
+			startTimer("drift");
 			printf("drift\n");
 			DM.drift(half * dt);
+			stopTimer();
+
+			startTimer("kick");
 			printf("kick\n");
-			DM.kick(dgdx, half * dt);
+			DM.kick(grVars, half * dt);
+			stopTimer();
+
 			time += dt;
 			step++;
+			std::cout << "\n\n" << readTimers() << "\n\n";
 		}
 		output();
 	}
 private:
-	LinearGravity<Real> GR;
-	Particles<Real> DM;
+	LinearGravity<real_type> GR;
+	Particles<real_type> DM;
 	real_type dx;
 	real_type time;
 	real_type lastOutputTime;
@@ -109,7 +142,7 @@ private:
 
 void test() {
 	using namespace Math;
-	CosmicGR<Real> test;
+	CosmicGR<double> test;
 	test.execute(Real(1));
 //TricubicSpline<double> test;
 }

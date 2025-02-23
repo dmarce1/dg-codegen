@@ -17,7 +17,8 @@ struct GridAttributes {
 	static constexpr T zero = T(0), one = T(1);
 	std::valarray<size_t> intSizes;
 	std::valarray<size_t> extSizes;
-	std::valarray<size_t> gridStrides;
+	std::valarray<size_t> intStrides;
+	std::valarray<size_t> extStrides;
 	std::valarray<T> gridSpacing;
 	size_t intSize;
 	size_t extSize;
@@ -26,7 +27,7 @@ struct GridAttributes {
 	Math::Vector<std::gslice, 2 * NDIM> srcBoundarySlices;
 	Math::Vector<std::gslice, 2 * NDIM> dstBoundarySlices;
 	GridAttributes(Math::Vector<int, NDIM> const &N, int bw) :
-			intSizes(NDIM), extSizes(NDIM), gridStrides(NDIM), gridSpacing(NDIM), boundWidth(bw) {
+			intSizes(NDIM), extSizes(NDIM), intStrides(NDIM), extStrides(NDIM), gridSpacing(NDIM), boundWidth(bw) {
 		intSize = 1;
 		extSize = 1;
 		for (int k = 0; k < NDIM; k++) {
@@ -38,13 +39,15 @@ struct GridAttributes {
 		for (int k = 0; k < NDIM; k++) {
 			gridSpacing[k] = one / T(intSizes[k]);
 		}
-		gridStrides[XDIM] = extSizes[YDIM] * extSizes[ZDIM];
-		gridStrides[YDIM] = extSizes[ZDIM];
-		gridStrides[ZDIM] = 1;
+		extStrides[ZDIM] = intStrides[ZDIM] = 1;
+		for (int k = NDIM - 1; k > 0; k--) {
+			extStrides[k - 1] = extStrides[k] * extSizes[k];
+			intStrides[k - 1] = intStrides[k] * intSizes[k];
+		}
 		minSpacing = gridSpacing.min();
 		for (int dim = 0; dim < NDIM; dim++) {
 			std::valarray<size_t> sizes(NDIM);
-			int const bwStride = boundWidth * gridStrides[dim];
+			int const bwStride = boundWidth * extStrides[dim];
 			sizes[dim] = boundWidth;
 			for (int k = 0; k < dim; k++) {
 				sizes[k] = intSizes[k];
@@ -54,22 +57,19 @@ struct GridAttributes {
 			}
 			int srcStart1 = zero;
 			for (int k = 0; k <= dim; k++) {
-				srcStart1 += boundWidth * gridStrides[k];
+				srcStart1 += boundWidth * extStrides[k];
 			}
-			size_t const dstStart1 = srcStart1 + intSizes[dim] * gridStrides[dim];
+			size_t const dstStart1 = srcStart1 + intSizes[dim] * extStrides[dim];
 			size_t const dstStart2 = srcStart1 - bwStride;
 			size_t const srcStart2 = dstStart1 - bwStride;
 			size_t const i0 = 2 * dim;
 			size_t const i1 = i0 + 1;
-			srcBoundarySlices[i0] = std::gslice(srcStart1, sizes, gridStrides);
-			dstBoundarySlices[i0] = std::gslice(dstStart1, sizes, gridStrides);
-			srcBoundarySlices[i1] = std::gslice(srcStart2, sizes, gridStrides);
-			dstBoundarySlices[i1] = std::gslice(dstStart2, sizes, gridStrides);
+			srcBoundarySlices[i0] = std::gslice(srcStart1, sizes, extStrides);
+			dstBoundarySlices[i0] = std::gslice(dstStart1, sizes, extStrides);
+			srcBoundarySlices[i1] = std::gslice(srcStart2, sizes, extStrides);
+			dstBoundarySlices[i1] = std::gslice(dstStart2, sizes, extStrides);
 		}
 	}
 };
-
-
-
 
 #endif /* INCLUDE_GRIDATTRIBUTES_HPP_ */

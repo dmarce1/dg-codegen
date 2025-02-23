@@ -21,24 +21,22 @@
 
 namespace Math {
 
-template<typename Type, int RowCount, int ColumnCount, typename Container = std::array<Type, ColumnCount * RowCount>>
+template<typename Type, int RowCount, int ColumnCount>
 struct Matrix;
 
-template<typename Type, int Ndim, typename Container = std::array<Type, Ndim * Ndim>>
-using SquareMatrix = Matrix<Type, Ndim, Ndim, Container>;
+template<typename Type, int Ndim>
+using SquareMatrix = Matrix<Type, Ndim, Ndim>;
 
-template<typename Type, int RowCount, int ColumnCount, typename Container>
+template<typename Type, int RowCount, int ColumnCount>
 struct Matrix {
 	static constexpr std::size_t size() {
 		return ColumnCount * RowCount;
 	}
 	Matrix() :
 			values() {
-		createContainer(values);
 	}
 	Matrix(std::array<std::array<Type, ColumnCount>, RowCount> const &initList) :
 			values() {
-		createContainer(values);
 		for (int n = 0; n < RowCount; n++) {
 			for (int m = 0; m < ColumnCount; m++) {
 				operator[](n, m) = initList[n][m];
@@ -50,20 +48,16 @@ struct Matrix {
 	}
 	Matrix(Type const &init) :
 			values() {
-		createContainer(values);
 		for (int n = 0; n != size(); n++) {
 			values[n] = init;
 		}
 	}
 	Matrix(Matrix const &other) :
 			values() {
-		createContainer(values);
-
 		values = other.values;
 	}
 	Matrix(Matrix &&other) :
 			values() {
-		createContainer(values);
 		values = std::move(other.values);
 	}
 	Matrix& operator=(Matrix const &other) {
@@ -77,7 +71,7 @@ struct Matrix {
 	Type& operator[](int n, int m) {
 		return values[n * ColumnCount + m];
 	}
-	Type operator[](int n, int m) const {
+	Type const& operator[](int n, int m) const {
 		return values[n * ColumnCount + m];
 	}
 	Matrix& operator+=(Matrix const &A) {
@@ -158,43 +152,36 @@ struct Matrix {
 		return values.end();
 	}
 private:
-	Container values;
-	static void createContainer(Container &container) {
-		static constexpr int N = size();
-		constexpr bool flag = containerHasResize<Container, N>::value;
-		if constexpr (flag) {
-			container = Container(N);
-		}
-	}
+	std::array<Type, size()> values;
 };
 
-template<typename Type, int RowCount, typename Container>
-struct Matrix<Type, RowCount, 1, Container> {
+template<typename Type, int RowCount>
+struct Matrix<Type, RowCount, 1> {
 	static constexpr std::size_t size() {
 		return RowCount;
 	}
 	Matrix() :
 			values() {
-		createContainer(values);
+
 	}
 	Matrix(Type const &initValue) :
 			values() {
-		createContainer(values);
+
 		std::fill(begin(), end(), initValue);
 	}
 	Matrix(std::initializer_list<Type> initList) :
 			values() {
-		createContainer(values);
+
 		std::copy(initList.begin(), initList.end(), begin());
 	}
 	Matrix(Matrix const &other) :
 			values() {
-		createContainer(values);
+
 		values = other.values;
 	}
 	Matrix(Matrix &&other) :
 			values() {
-		createContainer(values);
+
 		values = std::move(other.values);
 	}
 	Matrix& operator=(Matrix const &other) {
@@ -209,14 +196,14 @@ struct Matrix<Type, RowCount, 1, Container> {
 		assert(m == 0);
 		return operator[](n);
 	}
-	Type operator[](int n, int m) const {
+	Type const& operator[](int n, int m) const {
 		assert(m == 0);
 		return operator[](n);
 	}
-	Type operator[](int n) const {
+	Type& operator[](int n) {
 		return values[n];
 	}
-	Type& operator[](int n) {
+	Type const& operator[](int n) const {
 		return values[n];
 	}
 	Matrix& operator+=(Matrix const &A) {
@@ -297,18 +284,11 @@ struct Matrix<Type, RowCount, 1, Container> {
 		return values.end();
 	}
 private:
-	Container values;
-	static void createContainer(Container &container) {
-		static constexpr int N = size();
-		constexpr bool flag = containerHasResize<Container, N>::value;
-		if constexpr (flag) {
-			container = Container(N);
-		}
-	}
+	std::array<Type, size()> values;
 };
 
-template<typename Type, typename Container>
-struct Matrix<Type, 1, 1, Container> {
+template<typename Type>
+struct Matrix<Type, 1, 1> {
 	Matrix() {
 	}
 	Matrix(std::initializer_list<Type> const &initList) :
@@ -337,13 +317,13 @@ struct Matrix<Type, 1, 1, Container> {
 	Type& operator[](int, int) {
 		return value;
 	}
-	Type operator[](int, int) const {
-		return value;
-	}
-	Type operator[](int n) const {
+	Type const& operator[](int, int) const {
 		return value;
 	}
 	Type& operator[](int n) {
+		return value;
+	}
+	Type const& operator[](int n) const {
 		return value;
 	}
 	operator Type() const {
@@ -431,8 +411,8 @@ private:
 	Type value;
 };
 
-template<typename Type, int Ndim, typename Container = std::array<Type, Ndim * Ndim> >
-constexpr SquareMatrix<Type, Ndim, Container> identityMatrix() {
+template<typename Type, int Ndim>
+constexpr SquareMatrix<Type, Ndim> identityMatrix() {
 	SquareMatrix<Type, Ndim> identity;
 	for (int n = 0; n < Ndim; n++) {
 		for (int m = 0; m < Ndim; m++) {
@@ -442,9 +422,9 @@ constexpr SquareMatrix<Type, Ndim, Container> identityMatrix() {
 	return identity;
 }
 
-template<typename Type, int Ndim, typename Container = std::array<Type, Ndim * Ndim> >
-SquareMatrix<Type, Ndim, Container> zeroMatrix() {
-	SquareMatrix<Type, Ndim, Container> Z;
+template<typename Type, int Ndim>
+SquareMatrix<Type, Ndim> zeroMatrix() {
+	SquareMatrix<Type, Ndim> Z;
 	Type const zero = Type(0);
 	for (int n = 0; n < Ndim; n++) {
 		for (int m = 0; m < Ndim; m++) {
@@ -454,8 +434,8 @@ SquareMatrix<Type, Ndim, Container> zeroMatrix() {
 	return Z;
 }
 
-template<typename T, int N, int M, int L, typename Container2, typename Container3>
-Matrix<T, N, L> operator*(Matrix<T, N, M, Container2> const &A, Matrix<T, M, L, Container3> const &B) {
+template<typename T, int N, int M, int L>
+Matrix<T, N, L> operator*(Matrix<T, N, M> const &A, Matrix<T, M, L> const &B) {
 	Matrix<T, N, L> C;
 	for (int n = 0; n < N; n++) {
 		for (int l = 0; l < L; l++) {
@@ -468,9 +448,9 @@ Matrix<T, N, L> operator*(Matrix<T, N, M, Container2> const &A, Matrix<T, M, L, 
 	return C;
 }
 
-template<typename Type, int Ndim, typename Container>
-SquareMatrix<Type, Ndim, Container> operator*=(SquareMatrix<Type, Ndim, Container> &A, SquareMatrix<Type, Ndim, Container> const &C) {
-	SquareMatrix<Type, Ndim, Container> const B = A;
+template<typename Type, int Ndim>
+SquareMatrix<Type, Ndim> operator*=(SquareMatrix<Type, Ndim> &A, SquareMatrix<Type, Ndim> const &C) {
+	SquareMatrix<Type, Ndim> const B = A;
 	for (int n = 0; n < Ndim; n++) {
 		for (int l = 0; l < Ndim; l++) {
 			A[n, l] = Type(0);
@@ -482,27 +462,27 @@ SquareMatrix<Type, Ndim, Container> operator*=(SquareMatrix<Type, Ndim, Containe
 	return A;
 }
 
-template<typename Type, int RowCount, int ColumnCount, typename Container>
-auto matrixRow(Matrix<Type, RowCount, ColumnCount, Container> const &A, int r) {
-	Matrix<Type, 1, ColumnCount, Container> row;
+template<typename Type, int RowCount, int ColumnCount>
+auto matrixRow(Matrix<Type, RowCount, ColumnCount> const &A, int r) {
+	Matrix<Type, 1, ColumnCount> row;
 	for (int c = 0; c < ColumnCount; c++) {
 		row[0, c] = A[r, c];
 	}
 	return row;
 }
 
-template<typename Type, int RowCount, int ColumnCount, typename Container>
-Matrix<Type, RowCount, 1, Container> matrixColumn(Matrix<Type, RowCount, ColumnCount, Container> const &A, int c) {
-	Matrix<Type, RowCount, 1, Container> column;
+template<typename Type, int RowCount, int ColumnCount>
+Matrix<Type, RowCount, 1> matrixColumn(Matrix<Type, RowCount, ColumnCount> const &A, int c) {
+	Matrix<Type, RowCount, 1> column;
 	for (int r = 0; r < RowCount; r++) {
 		column[r, 0] = A[r, c];
 	}
 	return column;
 }
 
-template<typename Type, int RowCount, int ColumnCount, typename Container>
-Matrix<Type, ColumnCount, RowCount, Container> matrixTranspose(Matrix<Type, RowCount, ColumnCount, Container> const &B) {
-	Matrix<Type, ColumnCount, RowCount, Container> A;
+template<typename Type, int RowCount, int ColumnCount>
+Matrix<Type, ColumnCount, RowCount> matrixTranspose(Matrix<Type, RowCount, ColumnCount> const &B) {
+	Matrix<Type, ColumnCount, RowCount> A;
 	for (int r = 0; r < RowCount; r++) {
 		for (int c = 0; c < ColumnCount; c++) {
 			A[c, r] = B[r, c];
@@ -511,9 +491,9 @@ Matrix<Type, ColumnCount, RowCount, Container> matrixTranspose(Matrix<Type, RowC
 	return A;
 }
 
-template<typename Type, int Ndim, typename Container>
-SquareMatrix<Type, Ndim - 1, Container> subMatrix(SquareMatrix<Type, Ndim, Container> const &A, int row, int column) {
-	SquareMatrix<Type, Ndim - 1, Container> subMatrix;
+template<typename Type, int Ndim>
+SquareMatrix<Type, Ndim - 1> subMatrix(SquareMatrix<Type, Ndim> const &A, int row, int column) {
+	SquareMatrix<Type, Ndim - 1> subMatrix;
 	for (int r = 0; r < row; r++) {
 		for (int c = 0; c < column; c++) {
 			subMatrix[r, c] = A[r, c];
@@ -533,11 +513,11 @@ SquareMatrix<Type, Ndim - 1, Container> subMatrix(SquareMatrix<Type, Ndim, Conta
 	return subMatrix;
 }
 
-template<typename T, int R, typename Container>
-T matrixInverseAndDeterminant(SquareMatrix<T, R, Container> &A) {
+template<typename T, int R>
+T matrixInverseAndDeterminant(SquareMatrix<T, R> &A) {
 	T constexpr zero(0), one(1);
 	T matrixDeterminant = one;
-	auto D = identityMatrix<T, R, Container>();
+	auto D = identityMatrix<T, R>();
 	for (int i = 0; i < R; ++i) {
 		T pivot = A[i, i];
 		if (pivot == zero) {
@@ -584,8 +564,8 @@ T matrixInverseAndDeterminant(SquareMatrix<T, R, Container> &A) {
 	return matrixDeterminant;
 }
 
-template<typename T, int R, typename Container>
-auto matrixInverse(SquareMatrix<T, R, Container> const A) {
+template<typename T, int R>
+auto matrixInverse(SquareMatrix<T, R> const A) {
 	auto iA = A;
 	T det = matrixInverseAndDeterminant(iA);
 	if (det == T(0)) {
@@ -595,8 +575,8 @@ auto matrixInverse(SquareMatrix<T, R, Container> const A) {
 	return iA;
 }
 
-template<typename Type, int Ndim, typename Container>
-Type matrixDeterminant(SquareMatrix<Type, Ndim, Container> A) {
+template<typename Type, int Ndim>
+Type matrixDeterminant(SquareMatrix<Type, Ndim> A) {
 	if constexpr (Ndim == 1) {
 		return A[0, 0];
 	} else {
@@ -604,8 +584,8 @@ Type matrixDeterminant(SquareMatrix<Type, Ndim, Container> A) {
 	}
 }
 
-template<typename Type, int Ndim, typename Container>
-Type matrixTrace(SquareMatrix<Type, Ndim, Container> const &A) {
+template<typename Type, int Ndim>
+Type matrixTrace(SquareMatrix<Type, Ndim> const &A) {
 	Type result = Type(0);
 	for (int c = 0; c < Ndim; c++) {
 		result += A[c, c];
@@ -613,9 +593,9 @@ Type matrixTrace(SquareMatrix<Type, Ndim, Container> const &A) {
 	return result;
 }
 
-template<typename Type, int Ndim, typename Container>
-SquareMatrix<Type, Ndim, Container> matrixCofactor(SquareMatrix<Type, Ndim, Container> const &A) {
-	SquareMatrix<Type, Ndim, Container> aCofactor;
+template<typename Type, int Ndim>
+SquareMatrix<Type, Ndim> matrixCofactor(SquareMatrix<Type, Ndim> const &A) {
+	SquareMatrix<Type, Ndim> aCofactor;
 	for (int r = 0; r < Ndim; r++) {
 		for (int c = 0; c < Ndim; c++) {
 			auto const sgn = ((r + c) & 1) ? -Type(1) : Type(1);
@@ -625,14 +605,14 @@ SquareMatrix<Type, Ndim, Container> matrixCofactor(SquareMatrix<Type, Ndim, Cont
 	return aCofactor;
 }
 
-template<typename Type, int Ndim, typename Container>
-SquareMatrix<Type, Ndim, Container> matrixAdjoint(SquareMatrix<Type, Ndim, Container> const &A) {
+template<typename Type, int Ndim>
+SquareMatrix<Type, Ndim> matrixAdjoint(SquareMatrix<Type, Ndim> const &A) {
 	return matrixTranspose(matrixCofactor(A));
 }
 
-template<typename Type, int P, int Q, int M, int N, typename Container>
-Matrix<Type, P * M, Q * N, Container> matrixKroneckerProduct(Matrix<Type, P, Q, Container> const &A, Matrix<Type, M, N, Container> const &B) {
-	Matrix<Type, P * M, Q * N, Container> C;
+template<typename Type, int P, int Q, int M, int N>
+Matrix<Type, P * M, Q * N> matrixKroneckerProduct(Matrix<Type, P, Q> const &A, Matrix<Type, M, N> const &B) {
+	Matrix<Type, P * M, Q * N> C;
 	for (int p = 0; p < P; p++) {
 		auto const pQ = Q * p;
 		for (int q = 0; q < Q; q++) {
@@ -647,14 +627,14 @@ Matrix<Type, P * M, Q * N, Container> matrixKroneckerProduct(Matrix<Type, P, Q, 
 	return C;
 }
 
-template<typename T, int N, typename Container>
-void matrixQRDecomposition(SquareMatrix<T, N, Container> const &A, SquareMatrix<T, N, Container> &Q, SquareMatrix<T, N, Container> &R) {
+template<typename T, int N>
+void matrixQRDecomposition(SquareMatrix<T, N> const &A, SquareMatrix<T, N> &Q, SquareMatrix<T, N> &R) {
 	T const one(1);
 	R = A;
-	Q = identityMatrix<T, N, Container>();
+	Q = identityMatrix<T, N>();
 	for (int j = 0; j < N; j++) {
 		for (int i = j + 1; i < N; i++) {
-			SquareMatrix<T, N, Container> G = identityMatrix<T, N>();
+			SquareMatrix<T, N> G = identityMatrix<T, N>();
 			T const x = R[j, j];
 			T const y = R[i, j];
 			T const hinv = one / sqrt(sqr(x) + sqr(y));
@@ -670,11 +650,10 @@ void matrixQRDecomposition(SquareMatrix<T, N, Container> const &A, SquareMatrix<
 	Q = matrixTranspose(Q);
 }
 
-template<typename T, int R, typename Container>
-SquareMatrix<T, R, Container> matrixLUDecomposition(SquareMatrix<T, R, Container> const &A, SquareMatrix<T, R, Container> &L,
-		SquareMatrix<T, R, Container> &U) {
+template<typename T, int R>
+SquareMatrix<T, R> matrixLUDecomposition(SquareMatrix<T, R> const &A, SquareMatrix<T, R> &L, SquareMatrix<T, R> &U) {
 	const T zero(0);
-	SquareMatrix<T, R> P = identityMatrix<T, R, Container>();
+	SquareMatrix<T, R> P = identityMatrix<T, R>();
 	L = P;
 	U = A;
 	for (int i = 0; i < R; ++i) {
@@ -696,8 +675,8 @@ SquareMatrix<T, R, Container> matrixLUDecomposition(SquareMatrix<T, R, Container
 	return matrixTranspose(P);
 }
 
-template<typename Type, int RowCount, int ColumnCount, typename Container>
-std::string toString(Matrix<Type, RowCount, ColumnCount, Container> const &M) {
+template<typename Type, int RowCount, int ColumnCount>
+std::string toString(Matrix<Type, RowCount, ColumnCount> const &M) {
 	using std::to_string;
 	int maxLength = 0;
 	std::string result;
@@ -730,8 +709,8 @@ std::string toString(Matrix<Type, RowCount, ColumnCount, Container> const &M) {
 	return result;
 }
 
-template<typename Type, int RowCount, int ColumnCount, typename Container>
-std::string toMathematica(Matrix<Type, RowCount, ColumnCount, Container> const &M) {
+template<typename Type, int RowCount, int ColumnCount>
+std::string toMathematica(Matrix<Type, RowCount, ColumnCount> const &M) {
 	using std::to_string;
 	std::string list;
 	list += "A =: {\n";
@@ -766,7 +745,7 @@ struct SymmetricMatrix: public std::array<T, ((D * D + D) >> 1)> {
 	T& operator[](int n, int k) {
 		return ((base_type&) (*this))[index(n, k)];
 	}
-	T operator[](int n, int k) const {
+	T const& operator[](int n, int k) const {
 		return ((base_type&) (*this))[index(n, k)];
 	}
 private:

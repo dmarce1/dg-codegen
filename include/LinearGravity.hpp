@@ -60,7 +60,7 @@ struct LinearGravity {
 	static constexpr real_type zero = real_type(0), half = real_type(0.5), one = real_type(1);
 	static constexpr int BW = 2;
 	LinearGravity(int N_) :
-			gAttr(Vector<int, NDIM>( { N_, N_, N_ }), BW), Ni(gAttr.intSizes[0]), Ne(gAttr.extSizes[0]), sizes(gAttr.intSizes), strides(gAttr.gridStrides), N3(
+			gAttr(Vector<int, NDIM>( { N_, N_, N_ }), BW), Ni(gAttr.intSizes[0]), Ne(gAttr.extSizes[0]), sizes(gAttr.intSizes), strides(gAttr.extStrides), N3(
 					Ne * Ne * Ne), start(Ne * (Ne * BW + BW) + BW) {
 		for (int i = 0; i < DIM4; i++) {
 			for (int j = 0; j <= i; j++) {
@@ -157,45 +157,36 @@ struct LinearGravity {
 	}
 	auto metricDerivatives(real_type x0, real_type y0, real_type z0) const {
 		using return_type = Vector<SymmetricMatrix<real_type, DIM4>, DIM4>;
-		static std::valarray<size_t> const sizes( { 3, 3, 3 });
+		return_type u = return_type(zero);
 		int const i0 = x0 * real_type(Ni) + BW;
 		int const j0 = y0 * real_type(Ni) + BW;
 		int const k0 = z0 * real_type(Ni) + BW;
-		size_t const start = (i0 - 1) * strides[XDIM] + (j0 - 1) * strides[YDIM] + (k0 - 1) * strides[ZDIM];
-		std::gslice const gSlice(start, sizes, strides);
-		return_type u = return_type(zero);
+		Vector<int, NDIM> originIndices( { i0, j0, k0 });
+		Vector<int, NDIM> indices;
+		int &i = indices[XDIM];
+		int &j = indices[YDIM];
+		int &k = indices[ZDIM];
+		Vector<SymmetricMatrix<real_type, DIM4>, DIM4> V;
 		Vector<real_type, NDIM> const X0( { x0, y0, z0 });
-		Vector<grid_type, NDIM> dX;
-		std::valarray<bool> flag1(27), flag2(27), flag3(27);
-		if (x0 < zero || y0 < zero || z0 < zero) {
-			printf("OUT OF RANGE\n");
-			abort();
-		}
-		for (int dim = 0; dim < NDIM; dim++) {
-			dX[dim] = std::abs(grid_type(X[dim][gSlice]) - (real_type(Ni) * X0[dim]));
-		}
-		grid_type weights(real_type(1), 27);
-		grid_type zeros(real_type(0), 27);
-		for (int dim = 0; dim < NDIM; dim++) {
-			flag1 = (dX[dim] < real_type(0.5));
-			flag2 = (dX[dim] < real_type(1.5)) && !flag1;
-			flag3 = !flag1 && !flag2;
-			auto const w1 = (real_type(0.75) - dX[dim] * dX[dim]);
-			auto const w2 = (dX[dim] * (dX[dim] * real_type(0.5) - real_type(1.5)) + real_type(1.125));
-			weights[flag1] *= w1[flag1];
-			weights[flag2] *= w2[flag2];
-			weights[flag3] *= zeros[flag3];
-		}
-		real_type sum = zero;
-		for (int n = 0; n < 27; n++) {
-			sum += weights[n];
-		}
-		grid_type tmp(27);
-		for (int l = 0; l < DIM4; l++) {
-			for (int m = 0; m < DIM4; m++) {
-				for (int n = 0; n <= m; n++) {
-					tmp = U[l][m, n][gSlice];
-					u[l][m, n] = (tmp * weights).sum();
+		size_t const start = (i0 - 1) * strides[XDIM] + (j0 - 1) * strides[YDIM] + (k0 - 1) * strides[ZDIM];
+		for (i = 0; i < 3; i++) {
+			for (j = 0; j < 3; j++) {
+				for (k = 0; k < 3; k++) {
+					size_t index = start;
+					for (int dim = 0; dim < NDIM; dim++) {
+						index += indices[dim] * strides[dim];
+					}
+					real_type weight = one;
+					for (int dim = 0; dim < NDIM; dim++) {
+						weight *= kernelTSC(abs(X[dim][index]) - (real_type(Ni) * X0[dim]));
+					}
+					for (int l = 0; l < DIM4; l++) {
+						for (int m = 0; m < DIM4; m++) {
+							for (int n = 0; n <= m; n++) {
+								u[l][m, n] += weight * U[l][m, n][index];
+							}
+						}
+					}
 				}
 			}
 		}
@@ -203,6 +194,18 @@ struct LinearGravity {
 			u[k] = reverseTrace(u[k]);
 		}
 		return u;
+	}
+	auto getStateVars(int xi, int yi, int zi) const {
+		Vector<SymmetricMatrix<real_type, DIM4>, DIM4> v;
+		int const index = xi * gAttr.extSizes[XDIM] + yi * gAttr.extSizes[YDIM] + zi * gAttr.extSizes[ZDIM];
+		for (int k = 0; k < DIM4; k++) {
+			for (int i = 0; i < DIM4; i++) {
+				for (int j = 0; j <= i; j++) {
+					v[k][i, j] = U[k][i, j][index];
+				}
+			}
+		}
+		return v;
 	}
 private:
 	GridAttributes<real_type> gAttr;

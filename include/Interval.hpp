@@ -31,7 +31,7 @@ struct Interval {
 	Interval(Math::Vector<Type, Ndim> const &e) {
 		*this = e;
 	}
-	Interval(std::array<Type, Ndim> const &b, std::array<Type, Ndim> const &e) {
+	Interval(std::initializer_list<Type> const &b, std::initializer_list<Type> const &e) {
 		_begin = b;
 		_end = e;
 	}
@@ -130,7 +130,7 @@ struct Interval {
 	}
 	Interval expand(Type count) const {
 		Interval I;
-		for( int k = 0; k < Ndim; k++) {
+		for (int k = 0; k < Ndim; k++) {
 			I.begin(k) = begin(k) - count;
 			I.end(k) = end(k) + count;
 		}
@@ -160,9 +160,9 @@ struct Interval {
 		return true;
 	}
 	int longest() const {
-		int n;
-		Type L = -1;
-		for (int k = 0; k < Ndim; k++) {
+		int n = 0;
+		Type L = span(0);
+		for (int k = 1; k < Ndim; k++) {
 			Type const l = span(k);
 			if (L < l) {
 				L = l;
@@ -205,7 +205,6 @@ private:
 	Math::Vector<Type, Ndim> _begin;
 	Math::Vector<Type, Ndim> _end;
 };
-
 
 template<typename Type, int Ndim>
 Interval<Type, Ndim> nullInterval() {
