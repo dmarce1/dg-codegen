@@ -32,12 +32,31 @@ Vector<real_type, DIM4> velocityTo4(Vector<real_type, NDIM> const &u3) {
 	return u4;
 }
 
+double rand1() {
+	return (rand() + 0.5) / double(RAND_MAX);
+}
+
+template<typename RealType>
 struct Particles {
-	using real_type = Real;
+	using real_type = RealType;
 	using grid_type = std::valarray<real_type>;
-	static constexpr real_type zero = real_type(0), half = real_type(0.5), one = real_type(1);
-	Particles(size_t count) :
-			X(grid_type(zero, count)), U(grid_type(zero, count)), M(getOptions().totalMass / real_type(count)), time(0.0), N(count) {
+	static constexpr real_type zero = real_type(0), two = real_type(2), half = real_type(0.5), one = real_type(1);
+	Particles(size_t count, int Ngrid, int BW) :
+			gAttr(Vector<int, NDIM> { Ngrid, Ngrid, Ngrid }, BW), X(grid_type(zero, count)), U(grid_type(zero, count)), M(
+					getOptions().totalMass / real_type(count)), time(0.0), N(count) {
+		static constexpr real_type r0(0.1);
+		for (int n = 0; n < int(count); n++) {
+			bool outside;
+			do {
+				for (int dim = 0; dim < NDIM; dim++) {
+					real_type r(rand1());
+					r = (two * r - one) * real_type(r0) + half;
+					X[dim][n] = r;
+				}
+				real_type const radius = sqrt(nSquared(X[XDIM][n] - half) + nSquared(X[YDIM][n] - half) + nSquared(X[ZDIM][n] - half));
+				outside = radius > real_type(r0);
+			} while (outside);
+		}
 	}
 	Vector<real_type, DIM4> getX(size_t n) const {
 		Vector<real_type, DIM4> x;
@@ -68,18 +87,21 @@ struct Particles {
 			X[dim][n] = x[dim + 1];
 		}
 	}
-	auto stressEnergyTensor(GridAttributes<real_type> const &gAttr) const {
+	auto stressEnergyTensor() const {
 		using namespace Math;
+		auto const opts = getOptions();
 		int const bw = gAttr.boundWidth;
+		Real dx3inv = Real(gAttr.intSizes[0] * gAttr.intSizes[1] * gAttr.intSizes[2]);
+		real_type const backgroundDensity = real_type(opts.totalMass);
 		SymmetricMatrix<grid_type, NDIM + 1> T(grid_type(zero, gAttr.extSize));
 		for (size_t n = 0; n != N; n++) {
 			Vector<int, NDIM> I;
 			Vector<real_type, DIM4> u = getU(n);
 			Vector<real_type, DIM4> x = getX(n);
-			Vector<real_type, NDIM + 1> dT;
+			SymmetricMatrix<real_type, DIM4> dT;
 			for (int j = 0; j < DIM4; j++) {
 				for (int k = 0; k <= j; k++) {
-					dT[j, k] = M * u[j] * u[k];
+					dT[j, k] = M * u[j] * u[k] * dx3inv;
 				}
 			}
 			for (int k = 0; k < NDIM; k++) {
@@ -105,15 +127,18 @@ struct Particles {
 				}
 			}
 		}
+		for (int k = 0; k < int(gAttr.extSize); k++) {
+			T[0, 0][k] -= backgroundDensity;
+		}
 		return T;
 	}
 	template<typename MetricFunctor>
 	void kick(MetricFunctor const &dgdx, real_type dt) {
 		for (size_t n = 0; n != N; n++) {
 			Vector<real_type, DIM4> du = zero;
-			auto &u = getU(n);
+			auto u = getU(n);
 			auto const x = getX(n);
-			auto const D = dgdx(x[0], x[1], x[2]);
+			auto const D = dgdx(x[1], x[2], x[3]);
 			for (int k = 0; k < DIM4; k++) {
 				for (int i = 0; i < DIM4; i++) {
 					for (int j = 0; j <= i; j++) {
@@ -132,23 +157,39 @@ struct Particles {
 			auto const u = getU(n);
 			auto x = getX(n);
 			real_type const Winv = one / u[0];
-			for (int k = 0; k < NDIM; k++) {
-				for (int i = 0; i < DIM4; i++) {
-					for (int j = 0; j <= i; j++) {
-						dx[k] += u[k] * Winv;
-					}
-				}
+			for (int k = 1; k < DIM4; k++) {
+				dx[k] += u[k] * Winv;
 			}
 			x += dx * dt;
+			for (int dim = 1; dim < DIM4; dim++) {
+				while (x[dim] >= one) {
+					x[dim] -= one;
+				}
+				while (x[dim] < zero) {
+					x[dim] += one;
+				}
+			}
 			setX(n, x);
 		}
 	}
+	void output(DBfile *db, DBoptlist *optList) const {
+		static constexpr int silo_data_type = DB_DOUBLE;
+		static constexpr char meshName[] = "particleMesh";
+		real_type const *coords[NDIM] = { &X[XDIM][0], &X[YDIM][0], &X[ZDIM][0] };
+		DBPutPointmesh(db, meshName, NDIM, coords, N, silo_data_type, optList);
+		for (int dim = 0; dim < NDIM; dim++) {
+			auto const name = std::string("u") + std::to_string(dim);
+			DBPutPointvar1(db, name.c_str(), meshName, std::begin(U[dim]), N, silo_data_type, optList);
+		}
+	}
 private:
+	GridAttributes<real_type> const gAttr;
 	Vector<grid_type, NDIM> X;
 	Vector<grid_type, NDIM> U;
 	real_type const M;
 	real_type time;
 	size_t N;
-};
+}
+;
 
 #endif /* INCLUDE_PARTICLES_HPP_ */

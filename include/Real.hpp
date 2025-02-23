@@ -21,7 +21,7 @@ namespace Math {
 #ifndef NDEBUG
 #define CHECK true
 #else
-#define CHECK CHECK_REALS
+#define CHECK  false
 #endif
 
 struct Real {

@@ -15,9 +15,6 @@
 
 using namespace Math;
 
-static constexpr int XDIM = 0;
-static constexpr int YDIM = 1;
-static constexpr int ZDIM = 2;
 static constexpr int NF = 4;
 
 using ColumnVector = Vector<Real, NDIM>;

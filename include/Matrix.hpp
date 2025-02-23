@@ -298,7 +298,13 @@ struct Matrix<Type, RowCount, 1, Container> {
 	}
 private:
 	Container values;
-	static ContainerResizer<Container, RowCount> const createContainer;
+	static void createContainer(Container &container) {
+		static constexpr int N = size();
+		constexpr bool flag = containerHasResize<Container, N>::value;
+		if constexpr (flag) {
+			container = Container(N);
+		}
+	}
 };
 
 template<typename Type, typename Container>

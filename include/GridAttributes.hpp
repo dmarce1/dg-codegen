@@ -8,10 +8,6 @@
 #ifndef INCLUDE_GRIDATTRIBUTES_HPP_
 #define INCLUDE_GRIDATTRIBUTES_HPP_
 
-static constexpr int XDIM = 0;
-static constexpr int YDIM = 1;
-static constexpr int ZDIM = 2;
-
 #include "Vector.hpp"
 
 #include <valarray>

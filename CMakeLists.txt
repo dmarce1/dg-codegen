@@ -47,6 +47,7 @@ set(astrotiger_header
 	include/Real.hpp
 	include/Relativity.hpp
 	include/Spacetime.hpp
+	include/Timer.hpp
 	include/Root.hpp
 	include/RungeKutta.hpp
 	include/Sod.hpp
@@ -87,12 +88,12 @@ target_compile_options(
         $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS}>>
         $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CUDA>:-G ${CUDA_FLAGS}>>
         
-        $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:-Ofast ${CXX_FLAGS}>>
+        $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:-DNDEBUG -Ofast ${CXX_FLAGS}>>
         $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CUDA>:
-            --use_fast_math -Xcompiler=-Ofast ${CUDA_FLAGS}>>
+            --use_fast_math --DNDEBUG Xcompiler=-Ofast ${CUDA_FLAGS}>>
         
-        $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:-O2 -pg -DNDEBUG ${CXX_FLAGS}>>
+        $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:-g -pg -DNDEBUG ${CXX_FLAGS}>>
         $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CUDA>:
-            -Xcompiler=-O2 -pg -DNDEBUG ${CUDA_FLAGS}>>
+            -Xcompiler=-g -pg -DNDEBUG ${CUDA_FLAGS}>>
 )
 

@@ -8,6 +8,8 @@
 #ifndef INCLUDE_LINEARGRAVITY_HPP_
 #define INCLUDE_LINEARGRAVITY_HPP_
 
+#include <functional>
+
 #include <silo.h>
 
 #include "GridAttributes.hpp"
@@ -17,6 +19,18 @@
 
 using namespace Math;
 
+template<typename T>
+SymmetricMatrix<T, DIM4> minkowskiMetric() {
+	static constexpr T zero = T(0), one = T(1);
+	using return_type = SymmetricMatrix<T, DIM4>;
+	return_type nu = return_type(zero);
+	nu[0, 0] = -one;
+	nu[1, 1] = +one;
+	nu[2, 2] = +one;
+	nu[3, 3] = +one;
+	return nu;
+}
+
 static void siloErrorHandler(char *errorString_) {
 	std::string const errorString(errorString_);
 	std::cout << "SILO returned an error." << "\n";
@@ -25,30 +39,66 @@ static void siloErrorHandler(char *errorString_) {
 	abort();
 }
 
+template<typename T>
+SymmetricMatrix<T, DIM4> reverseTrace(SymmetricMatrix<T, DIM4> Tij) {
+	static constexpr T zero = T(0), half = T(0.5);
+	static auto const nu = minkowskiMetric<T>();
+	T trT = zero;
+	for (int k = 0; k < DIM4; k++) {
+		trT += nu[k, k] * Tij[k, k];
+	}
+	for (int k = 0; k < DIM4; k++) {
+		Tij[k, k] -= half * nu[k, k] * trT;
+	}
+	return Tij;
+}
+
+template<typename RealType>
 struct LinearGravity {
-	using real_type = Real;
+	using real_type = RealType;
 	using grid_type = std::valarray<real_type>;
 	static constexpr real_type zero = real_type(0), half = real_type(0.5), one = real_type(1);
-	static constexpr int BW = 1;
-	static constexpr real_type CFL = real_type(0.25);
+	static constexpr int BW = 2;
 	LinearGravity(int N_) :
-			gAttr(Vector<int, NDIM>( { N_, N_, N_ }), BW), Ni(gAttr.intSize), Ne(gAttr.extSize), sizes(gAttr.intSizes), strides(gAttr.gridStrides), N3(
-					Ne * Ne * Ne), start(Ne * (Ne * BW + BW) + BW), U(grid_type(zero, N3)) {
-	}
-	void step(SymmetricMatrix<grid_type, DIM4> const &S) {
-		constexpr real_type G = real_type(-8.0 * M_PI);
-		real_type const dx = one / real_type(Ni);
-		real_type const dt = CFL * dx;
-		Vector<grid_type, DIM4> D;
+			gAttr(Vector<int, NDIM>( { N_, N_, N_ }), BW), Ni(gAttr.intSizes[0]), Ne(gAttr.extSizes[0]), sizes(gAttr.intSizes), strides(gAttr.gridStrides), N3(
+					Ne * Ne * Ne), start(Ne * (Ne * BW + BW) + BW) {
 		for (int i = 0; i < DIM4; i++) {
 			for (int j = 0; j <= i; j++) {
-				D[0] = (dt * G) * S[i, j];
+				for (int k = 0; k < DIM4; k++) {
+					U[k][i, j] = grid_type(zero, N3);
+				}
+			}
+		}
+		for (int k = 0; k < NDIM; k++) {
+			X[k] = grid_type(N3);
+			Vector<size_t, NDIM> x;
+			for (x[XDIM] = 0; x[XDIM] != Ne; x[XDIM]++) {
+				for (x[YDIM] = 0; x[YDIM] != Ne; x[YDIM]++) {
+					for (x[ZDIM] = 0; x[ZDIM] != Ne; x[ZDIM]++) {
+						int index = 0;
+						for (int n = 0; n < NDIM; n++) {
+							index += strides[n] * x[n];
+						}
+						X[k][index] = (real_type(((int) x[k]) - BW) + half);
+					}
+				}
+			}
+		}
+		return;
+	}
+	void step(SymmetricMatrix<grid_type, DIM4> const &T, real_type dt) {
+		constexpr real_type G = real_type(-8.0 * M_PI);
+		real_type const dx = one / real_type(Ni);
+		Vector<grid_type, DIM4> D(grid_type(zero, N3));
+		for (int i = 0; i < DIM4; i++) {
+			for (int j = 0; j <= i; j++) {
+				D[0] += (dt * G) * T[i, j];
 				for (int k = 1; k < DIM4; k++) {
 					int const dk = strides[k - 1];
 					grid_type const &Uk = U[k][i, j];
 					grid_type const &U0 = U[0][i, j];
-					grid_type const Fk = half * ((U0 + U0.cshift(dk)) - (Uk - Uk.cshift(dk)));
-					grid_type const F0 = half * ((Uk + Uk.cshift(dk)) - (U0 - U0.cshift(dk)));
+					grid_type const Fk = half * ((U0 + U0.cshift(dk)) + (Uk - Uk.cshift(dk)));
+					grid_type const F0 = half * ((Uk + Uk.cshift(dk)) + (U0 - U0.cshift(dk)));
 					D[0] += (F0.cshift(-dk) - F0) * (one / dx);
 					D[k] += (Fk.cshift(-dk) - Fk) * (one / dx);
 				}
@@ -58,12 +108,8 @@ struct LinearGravity {
 			}
 		}
 	}
-	void output(DBfile *db, DBoptlist *optList) const {
+	void output(DBfile *db, DBoptlist *optList, SymmetricMatrix<grid_type, DIM4> const *Tptr = nullptr) const {
 		using namespace Math;
-		static constexpr int XDIM = 0;
-		static constexpr int YDIM = 1;
-		static constexpr int ZDIM = 2;
-		static constexpr char meshName[] = "Cartesian";
 		static constexpr int silo_data_type = DB_DOUBLE;
 		char const *const coordnames[NDIM] = { "x", "y", "z" };
 		Vector<std::vector<double>, NDIM> xCoordinates;
@@ -76,14 +122,24 @@ struct LinearGravity {
 		void const *const coords[NDIM] = { xCoordinates[XDIM].data(), xCoordinates[YDIM].data(), xCoordinates[ZDIM].data() };
 		int const dims2[NDIM] = { (int) Ni, (int) Ni, (int) Ni };
 		int dims1[NDIM] = { dims2[0] + 1, dims2[1] + 1, dims2[2] + 1 };
-		DBPutQuadmesh(db, meshName, coordnames, coords, dims1, NDIM, silo_data_type, DB_COLLINEAR, optList);
+		DBPutQuadmesh(db, "quadMesh", coordnames, coords, dims1, NDIM, silo_data_type, DB_COLLINEAR, optList);
 		auto const gSlice = std::gslice(start, sizes, strides);
 		for (int i = 0; i < DIM4; i++) {
 			for (int j = 0; j <= i; j++) {
 				for (int k = 0; k < DIM4; k++) {
 					std::valarray<real_type> const u = U[k][i, j][gSlice];
 					std::string fieldname = std::string("g") + std::to_string(i) + std::to_string(j) + std::string("_") + std::to_string(k);
-					DBPutQuadvar1(db, fieldname.c_str(), meshName, std::begin(u), dims2, NDIM, NULL, 0, silo_data_type, DB_ZONECENT, optList);
+					DBPutQuadvar1(db, fieldname.c_str(), "quadMesh", std::begin(u), dims2, NDIM, NULL, 0, silo_data_type, DB_ZONECENT, optList);
+				}
+			}
+		}
+		if (Tptr) {
+			auto const &T = *Tptr;
+			for (int i = 0; i < DIM4; i++) {
+				for (int j = 0; j <= i; j++) {
+					std::valarray<real_type> const u = T[i, j][gSlice];
+					std::string fieldname = std::string("T") + std::to_string(i) + std::to_string(j);
+					DBPutQuadvar1(db, fieldname.c_str(), "quadMesh", std::begin(u), dims2, NDIM, NULL, 0, silo_data_type, DB_ZONECENT, optList);
 				}
 			}
 		}
@@ -99,35 +155,54 @@ struct LinearGravity {
 			}
 		}
 	}
-	auto metricFunction() const {
-		auto const f = [this](real_type x0, real_type y0, real_type z0) {
-			using return_type = Vector<SymmetricMatrix<real_type, DIM4>, DIM4>;
-			return_type u = return_type(zero);
-			int const i0 = x0 * real_type(Ni) + BW;
-			int const j0 = y0 * real_type(Ni) + BW;
-			int const k0 = z0 * real_type(Ni) + BW;
-			for (int i = i0 - 1; i <= i0 + 1; i++) {
-				for (int j = j0 - 1; j <= j0 + 1; j++) {
-					for (int k = k0 - 1; k <= k0 + 1; k++) {
-						int index = strides[0] * periodicModulus(i, Ni);
-						index += strides[1] * periodicModulus(j, Ni);
-						index += strides[2] * periodicModulus(k, Ni);
-						real_type const x = real_type(sizes[0]) * x - real_type(i) - half;
-						real_type const y = real_type(sizes[1]) * y - real_type(j) - half;
-						real_type const z = real_type(sizes[2]) * z - real_type(k) - half;
-						for (int l = 0; l < DIM4; l++) {
-							for (int m = 0; m < DIM4; m++) {
-								for (int n = 0; n <= m; n++) {
-									u[l][m, n] += kernelTSC(x) * kernelTSC(y) * kernelTSC(z) * U[l][m, n][index];
-								}
-							}
-						}
-					}
+	auto metricDerivatives(real_type x0, real_type y0, real_type z0) const {
+		using return_type = Vector<SymmetricMatrix<real_type, DIM4>, DIM4>;
+		static std::valarray<size_t> const sizes( { 3, 3, 3 });
+		int const i0 = x0 * real_type(Ni) + BW;
+		int const j0 = y0 * real_type(Ni) + BW;
+		int const k0 = z0 * real_type(Ni) + BW;
+		size_t const start = (i0 - 1) * strides[XDIM] + (j0 - 1) * strides[YDIM] + (k0 - 1) * strides[ZDIM];
+		std::gslice const gSlice(start, sizes, strides);
+		return_type u = return_type(zero);
+		Vector<real_type, NDIM> const X0( { x0, y0, z0 });
+		Vector<grid_type, NDIM> dX;
+		std::valarray<bool> flag1(27), flag2(27), flag3(27);
+		if (x0 < zero || y0 < zero || z0 < zero) {
+			printf("OUT OF RANGE\n");
+			abort();
+		}
+		for (int dim = 0; dim < NDIM; dim++) {
+			dX[dim] = std::abs(grid_type(X[dim][gSlice]) - (real_type(Ni) * X0[dim]));
+		}
+		grid_type weights(real_type(1), 27);
+		grid_type zeros(real_type(0), 27);
+		for (int dim = 0; dim < NDIM; dim++) {
+			flag1 = (dX[dim] < real_type(0.5));
+			flag2 = (dX[dim] < real_type(1.5)) && !flag1;
+			flag3 = !flag1 && !flag2;
+			auto const w1 = (real_type(0.75) - dX[dim] * dX[dim]);
+			auto const w2 = (dX[dim] * (dX[dim] * real_type(0.5) - real_type(1.5)) + real_type(1.125));
+			weights[flag1] *= w1[flag1];
+			weights[flag2] *= w2[flag2];
+			weights[flag3] *= zeros[flag3];
+		}
+		real_type sum = zero;
+		for (int n = 0; n < 27; n++) {
+			sum += weights[n];
+		}
+		grid_type tmp(27);
+		for (int l = 0; l < DIM4; l++) {
+			for (int m = 0; m < DIM4; m++) {
+				for (int n = 0; n <= m; n++) {
+					tmp = U[l][m, n][gSlice];
+					u[l][m, n] = (tmp * weights).sum();
 				}
 			}
-			return u;
-		};
-		return f;
+		}
+		for (int k = 0; k < DIM4; k++) {
+			u[k] = reverseTrace(u[k]);
+		}
+		return u;
 	}
 private:
 	GridAttributes<real_type> gAttr;
@@ -137,7 +212,9 @@ private:
 	std::valarray<size_t> const &strides;
 	size_t N3;
 	size_t start;
+	Vector<grid_type, NDIM> X;
 	Vector<SymmetricMatrix<grid_type, DIM4>, DIM4> U;
-};
+}
+;
 
 #endif /* INCLUDE_LINEARGRAVITY_HPP_ */

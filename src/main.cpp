@@ -3,6 +3,7 @@
  *******************************************************************************/
 #include "ValArray.hpp"
 
+#include "Timer.hpp"
 #include <hpx/hpx_init.hpp>
 #include "Interpolate.hpp"
 #include "Hydrodynamics.hpp"
@@ -342,7 +343,9 @@ auto genBSplineFunctor(int Order, int Dimension = 3) {
 void test();
 
 int hpx_main(int argc, char *argv[]) {
+	printf("Reading options...\n");
 	processOptions(argc, argv);
+	printf("Done.\n");
 	test();
 //	static constexpr int N1 = 2;
 //	static constexpr int N2 = 8;

@@ -92,6 +92,11 @@
 		return !(*this > other); \
 	} \
 
+
+static constexpr int XDIM = 0;
+static constexpr int YDIM = 1;
+static constexpr int ZDIM = 2;
+
 template<auto Init>
 struct AutoInit {
 	using value_type = decltype(Init);
