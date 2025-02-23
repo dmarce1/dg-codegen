@@ -92,7 +92,7 @@ struct LinearGravity {
 		Vector<grid_type, DIM4> D(grid_type(zero, N3));
 		for (int i = 0; i < DIM4; i++) {
 			for (int j = 0; j <= i; j++) {
-				D[0] += (dt * G) * T[i, j];
+				D[0] += (gAttr.d3R * G) * T[i, j];
 				for (int k = 1; k < DIM4; k++) {
 					int const dk = strides[k - 1];
 					grid_type const &Uk = U[k][i, j];
@@ -112,11 +112,11 @@ struct LinearGravity {
 		using namespace Math;
 		static constexpr int silo_data_type = DB_DOUBLE;
 		char const *const coordnames[NDIM] = { "x", "y", "z" };
-		Vector<std::vector<double>, NDIM> xCoordinates;
+		Vector<std::vector<real_type>, NDIM> xCoordinates;
 		for (int dim = 0; dim < NDIM; dim++) {
 			xCoordinates[dim].resize(Ni + 1);
 			for (int n = 0; n <= int(Ni); n++) {
-				xCoordinates[dim][n] = double(n) / double(Ni);
+				xCoordinates[dim][n] = real_type(n) / real_type(Ni);
 			}
 		}
 		void const *const coords[NDIM] = { xCoordinates[XDIM].data(), xCoordinates[YDIM].data(), xCoordinates[ZDIM].data() };

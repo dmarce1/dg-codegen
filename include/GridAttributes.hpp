@@ -20,6 +20,8 @@ struct GridAttributes {
 	std::valarray<size_t> intStrides;
 	std::valarray<size_t> extStrides;
 	std::valarray<T> gridSpacing;
+	T d3Rinv;
+	T d3R;
 	size_t intSize;
 	size_t extSize;
 	size_t boundWidth;
@@ -36,8 +38,12 @@ struct GridAttributes {
 			extSize *= extSizes[k];
 			intSize *= intSizes[k];
 		}
+		d3Rinv = one;
+		d3R = one;
 		for (int k = 0; k < NDIM; k++) {
+			d3Rinv *= T(intSizes[k]);
 			gridSpacing[k] = one / T(intSizes[k]);
+			d3R *= gridSpacing[k];
 		}
 		extStrides[ZDIM] = intStrides[ZDIM] = 1;
 		for (int k = NDIM - 1; k > 0; k--) {

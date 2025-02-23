@@ -143,9 +143,9 @@ struct Particles {
 		using namespace Math;
 		auto const opts = getOptions();
 		int const bw = gAttr.boundWidth;
-		Real dx3inv = Real(gAttr.intSizes[0] * gAttr.intSizes[1] * gAttr.intSizes[2]);
-		real_type const backgroundDensity = real_type(opts.totalMass);
-		SymmetricMatrix<grid_type, NDIM + 1> T(grid_type(zero, gAttr.extSize));
+		Real const dx3inv = gAttr.d3Rinv;
+		Real const dx3 = gAttr.d3R;
+		SymmetricMatrix<grid_type, DIM4> T(grid_type(zero, gAttr.extSize));
 		for (size_t n = 0; n != N; n++) {
 			Vector<int, NDIM> I;
 			Vector<real_type, DIM4> u = getU(n);
@@ -179,8 +179,11 @@ struct Particles {
 				}
 			}
 		}
-		for (int k = 0; k < int(gAttr.extSize); k++) {
-			T[0, 0][k] -= backgroundDensity;
+		for (int j = 0; j < DIM4; j++) {
+			for (int k = 0; k <= j; k++) {
+				auto const tmp = T[j, k].sum() * dx3;
+				T[j, k] -= tmp;
+			}
 		}
 		return T;
 	}

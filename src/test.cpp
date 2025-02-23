@@ -142,7 +142,7 @@ private:
 
 void test() {
 	using namespace Math;
-	CosmicGR<double> test;
+	CosmicGR<Real> test;
 	test.execute(Real(1));
 //TricubicSpline<double> test;
 }
