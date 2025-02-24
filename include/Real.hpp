@@ -141,6 +141,12 @@ struct Real {
 		a.value = std::fabs(a.value);
 		return a;
 	}
+	friend Real copysign(Real a, Real b) {
+		debug_check(a);
+		debug_check(b);
+		a.value = std::copysign(a.value, b.value);
+		return a;
+	}
 	friend Real expm1(Real a) {
 		debug_check(a);
 		a.value = std::expm1(a.value);

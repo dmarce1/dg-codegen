@@ -87,23 +87,79 @@ struct LinearGravity {
 		return;
 	}
 	void step(SymmetricMatrix<grid_type, DIM4> const &T, real_type dt) {
+		auto const slopeLimiter = [](real_type const &a, real_type const &b) -> real_type {
+			using namespace std;
+			return (copysign(half, a) + copysign(half, b)) * (min(abs(a), abs(b)));
+		};
 		constexpr real_type G = real_type(-8.0 * M_PI);
 		real_type const dx = one / real_type(Ni);
+		real_type const dxinv = real_type(Ni);
 		Vector<grid_type, DIM4> D(grid_type(zero, N3));
-		for (int i = 0; i < DIM4; i++) {
-			for (int j = 0; j <= i; j++) {
-				D[0] += (gAttr.d3R * G) * T[i, j];
-				for (int k = 1; k < DIM4; k++) {
-					int const dk = strides[k - 1];
-					grid_type const &Uk = U[k][i, j];
-					grid_type const &U0 = U[0][i, j];
-					grid_type const Fk = half * ((U0 + U0.cshift(dk)) + (Uk - Uk.cshift(dk)));
-					grid_type const F0 = half * ((Uk + Uk.cshift(dk)) + (U0 - U0.cshift(dk)));
-					D[0] += (F0.cshift(-dk) - F0) * (one / dx);
-					D[k] += (Fk.cshift(-dk) - Fk) * (one / dx);
+		auto const &strides = gAttr.extStrides;
+		auto const dV = gAttr.d3R;
+		auto const N3 = gAttr.extSize;
+		grid_type UxR = grid_type(N3);
+		grid_type UtR = grid_type(N3);
+		grid_type UxL = grid_type(N3);
+		grid_type UtL = grid_type(N3);
+		grid_type Fx = grid_type(N3);
+		grid_type Ft = grid_type(N3);
+		decltype(U) U0 = U;
+		decltype(U) dU(grid_type(zero, N3));
+		for (int rkSubstep = 0; rkSubstep < 2; rkSubstep++) {
+			for (int k = 0; k < DIM4; k++) {
+				for (int m = 0; m < DIM4; m++) {
+					for (int j = 0; j <= m; j++) {
+						dU[k][m, j] = (G * dV) * T[m, j];
+					}
 				}
-				for (int k = 0; k < DIM4; k++) {
-					U[k][i, j] += dt * D[k];
+			}
+			for (int k = 1; k < DIM4; k++) {
+				size_t const dk = strides[k - 1];
+				for (int m = 0; m < DIM4; m++) {
+					for (int j = 0; j <= m; j++) {
+						for (size_t i0 = dk; i0 < N3 - dk; i0++) {
+							size_t const ip = i0 + dk;
+							size_t const im = i0 - dk;
+							real_type const uxp = U[k][m, j][ip];
+							real_type const utp = U[0][m, j][ip];
+							real_type const ux0 = U[k][m, j][i0];
+							real_type const ut0 = U[0][m, j][i0];
+							real_type const uxm = U[k][m, j][im];
+							real_type const utm = U[0][m, j][im];
+							real_type const slp_x = slopeLimiter(uxp - ux0, ux0 - uxm);
+							real_type const slp_t = slopeLimiter(utp - ut0, ut0 - utm);
+							UxR[i0] = ux0 - half * slp_x;
+							UtR[i0] = ut0 - half * slp_t;
+							UxL[ip] = ux0 + half * slp_x;
+							UtL[ip] = ut0 + half * slp_t;
+						}
+						for (size_t i0 = 2 * dk; i0 < N3 - dk; i0++) {
+							Fx[i0] = half * (-UtL[i0] - UtR[i0]) - half * (UxR[i0] - UxL[i0]);
+							Ft[i0] = half * (-UxL[i0] - UxR[i0]) - half * (UtR[i0] - UtL[i0]);
+						}
+						for (size_t i0 = 2 * dk; i0 < N3 - 2 * dk; i0++) {
+							size_t const ip = i0 + dk;
+							size_t const im = i0;
+							dU[k][m, j][i0] -= (Fx[ip] - Fx[im]) * dxinv;
+							dU[0][m, j][i0] -= (Ft[ip] - Ft[im]) * dxinv;
+						}
+					}
+				}
+			}
+			for (int k = 0; k < DIM4; k++) {
+				size_t const dk = strides[k - 1];
+				for (int m = 0; m < DIM4; m++) {
+					for (int j = 0; j <= m; j++) {
+						for (size_t i0 = dk; i0 < N3 - dk; i0++) {
+							U[k][m, j][i0] += dt * dU[k][m, j][i0];
+						}
+						if (rkSubstep == 1) {
+							for (size_t i0 = dk; i0 < N3 - dk; i0++) {
+								U[k][m, j][i0] += half * (U0[k][m, j][i0] - U[k][m, j][i0]);
+							}
+						}
+					}
 				}
 			}
 		}

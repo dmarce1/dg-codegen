@@ -66,7 +66,7 @@ struct Polynomial: public std::vector<Type> {
 		}
 		return base_type::operator[](i);
 	}
-	Type const& operator[](int i) const {
+	Type const operator[](int i) const {
 		if (int(base_type::size()) <= i) {
 			return Type(0);
 		} else {
