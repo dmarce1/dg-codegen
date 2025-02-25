@@ -40,9 +40,9 @@ bool processOptions(int argc, char *argv[]) {
 	("dualEnergyUpdateSwitch", po::value<double>(&(opts.dualEnergyUpdateSwitch))->default_value(0.1), "dual energy update switch (default 0.1)")           //
 	("fluidGamma", po::value<double>(&(opts.fluidGamma))->default_value(5.0 / 3.0), "fluid gamma (default 5.0 / 3.0)")                                     //
 	("gridScale", po::value<double>(&(opts.gridScale))->default_value(1.0), "scale of simulation domain (default 1.0)")                                    //
-	("totalMass", po::value<double>(&(opts.totalMass))->default_value(1.0), "total mass in domain (default 1.0)")                                          //
+	("totalMass", po::value<double>(&(opts.totalMass))->default_value(1.0e-3), "total mass in domain (default 0.001)")                                          //
 	("gridLength", po::value<int>(&(opts.gridLength))->default_value(64), "length of grid edge in cells (default 64)")                                    //
-	("particleCount", po::value<size_t>(&(opts.particleCount))->default_value(2000), "number of particles (default 2000)")                                    //
+	("particleCount", po::value<size_t>(&(opts.particleCount))->default_value(10000), "number of particles (default 2000)")                                    //
 	("help", "produce help message");
 	printf("Processing options\n");
 	po::variables_map variableMap;

@@ -777,8 +777,21 @@ auto matrixInverse(SymmetricMatrix<T, NDIM> const &A) {
 	return Ainv;
 }
 
+template<typename T>
+SymmetricMatrix<T, 4> minkowskiMetric() {
+	static constexpr T zero = T(0), one = T(1);
+	using return_type = SymmetricMatrix<T, DIM4>;
+	return_type nu = return_type(zero);
+	nu[0, 0] = -one;
+	nu[1, 1] = +one;
+	nu[2, 2] = +one;
+	nu[3, 3] = +one;
+	return nu;
+}
+
 }
 
 #include "Numbers.hpp"
+
 
 #endif /* INCLUDE_MATRIX_HPP_ */

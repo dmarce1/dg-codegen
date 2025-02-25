@@ -25,7 +25,10 @@ struct GridAttributes {
 	size_t intSize;
 	size_t extSize;
 	size_t boundWidth;
+	size_t start;
+	size_t stop;
 	T minSpacing;
+	std::gslice interiorSlice;
 	Math::Vector<std::gslice, 2 * NDIM> srcBoundarySlices;
 	Math::Vector<std::gslice, 2 * NDIM> dstBoundarySlices;
 	GridAttributes(Math::Vector<int, NDIM> const &N, int bw) :
@@ -75,6 +78,13 @@ struct GridAttributes {
 			srcBoundarySlices[i1] = std::gslice(srcStart2, sizes, extStrides);
 			dstBoundarySlices[i1] = std::gslice(dstStart2, sizes, extStrides);
 		}
+		start = 0;
+		stop = 0;
+		for (int d = 0; d < NDIM; d++) {
+			start += boundWidth * extStrides[d];
+			stop += (extSizes[d] - boundWidth) * extStrides[d];
+		}
+		interiorSlice = std::gslice(start, intSizes, extStrides);
 	}
 };
 

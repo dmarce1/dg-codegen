@@ -14,6 +14,7 @@ set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
 	src/main.cpp
+	src/Einstein.cpp
 	src/Integers.cpp
 	src/Options.cpp
 	src/Radiation.cpp

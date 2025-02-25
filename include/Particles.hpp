@@ -145,20 +145,23 @@ struct Particles {
 		int const bw = gAttr.boundWidth;
 		Real const dx3inv = gAttr.d3Rinv;
 		Real const dx3 = gAttr.d3R;
+		auto const eta = minkowskiMetric<real_type>();
 		SymmetricMatrix<grid_type, DIM4> T(grid_type(zero, gAttr.extSize));
 		for (size_t n = 0; n != N; n++) {
 			Vector<int, NDIM> I;
 			Vector<real_type, DIM4> u = getU(n);
+			u[0] = -u[0];
 			Vector<real_type, DIM4> x = getX(n);
 			SymmetricMatrix<real_type, DIM4> dT;
 			for (int j = 0; j < DIM4; j++) {
 				for (int k = 0; k <= j; k++) {
-					dT[j, k] = M * u[j] * u[k] * dx3inv;
+					dT[j, k] = M * u[j] * u[k];
 				}
 			}
 			for (int k = 0; k < NDIM; k++) {
 				I[k] = int(x[k + 1] * gAttr.intSizes[k]) + bw;
 			}
+			real_type wsum = zero;
 			for (int ix = I[0] - 1; ix <= I[0] + 1; ix++) {
 				for (int iy = I[1] - 1; iy <= I[1] + 1; iy++) {
 					for (int iz = I[2] - 1; iz <= I[2] + 1; iz++) {
@@ -170,6 +173,7 @@ struct Particles {
 							real_type const X = x[k + 1] * real_type(gAttr.intSizes[k]) - real_type(K[k] - bw) - half;
 							weight *= kernelTSC(X);
 						}
+						wsum += weight;
 						for (int j = 0; j < DIM4; j++) {
 							for (int k = 0; k <= j; k++) {
 								T[j, k][index] += weight * dT[j, k];
@@ -181,8 +185,7 @@ struct Particles {
 		}
 		for (int j = 0; j < DIM4; j++) {
 			for (int k = 0; k <= j; k++) {
-				auto const tmp = T[j, k].sum() * dx3;
-				T[j, k] -= tmp;
+				T[j, k] = T[j, k] * dx3inv - grid_type(T[j, k][gAttr.interiorSlice]).sum();
 			}
 		}
 		return T;
@@ -192,6 +195,7 @@ struct Particles {
 		for (size_t n = 0; n != N; n++) {
 			Vector<real_type, DIM4> du = zero;
 			auto u = getU(n);
+			u[0] = -u[0];
 			auto const x = getX(n);
 			auto const D = grVars(x[1], x[2], x[3]);
 			for (int k = 0; k < DIM4; k++) {
@@ -209,9 +213,10 @@ struct Particles {
 	void drift(real_type dt) {
 		for (size_t n = 0; n != N; n++) {
 			Vector<real_type, DIM4> dx = zero;
-			auto const u = getU(n);
-			auto x = getX(n);
+			auto u = getU(n);
 			real_type const Winv = one / u[0];
+			u[0] = -u[0];
+			auto x = getX(n);
 			for (int k = 1; k < DIM4; k++) {
 				dx[k] += u[k] * Winv;
 			}

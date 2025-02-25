@@ -16,20 +16,9 @@
 #include "Real.hpp"
 #include "Vector.hpp"
 #include "Kernels.hpp"
+#include "Limiters.hpp"
 
 using namespace Math;
-
-template<typename T>
-SymmetricMatrix<T, DIM4> minkowskiMetric() {
-	static constexpr T zero = T(0), one = T(1);
-	using return_type = SymmetricMatrix<T, DIM4>;
-	return_type nu = return_type(zero);
-	nu[0, 0] = -one;
-	nu[1, 1] = +one;
-	nu[2, 2] = +one;
-	nu[3, 3] = +one;
-	return nu;
-}
 
 static void siloErrorHandler(char *errorString_) {
 	std::string const errorString(errorString_);
@@ -57,60 +46,34 @@ template<typename RealType>
 struct LinearGravity {
 	using real_type = RealType;
 	using grid_type = std::valarray<real_type>;
+	using spacetime_type = SymmetricMatrix<grid_type, DIM4>;
 	static constexpr real_type zero = real_type(0), half = real_type(0.5), one = real_type(1);
 	static constexpr int BW = 2;
 	LinearGravity(int N_) :
-			gAttr(Vector<int, NDIM>( { N_, N_, N_ }), BW), Ni(gAttr.intSizes[0]), Ne(gAttr.extSizes[0]), sizes(gAttr.intSizes), strides(gAttr.extStrides), N3(
-					Ne * Ne * Ne), start(Ne * (Ne * BW + BW) + BW) {
-		for (int i = 0; i < DIM4; i++) {
-			for (int j = 0; j <= i; j++) {
-				for (int k = 0; k < DIM4; k++) {
-					U[k][i, j] = grid_type(zero, N3);
-				}
-			}
-		}
-		for (int k = 0; k < NDIM; k++) {
-			X[k] = grid_type(N3);
-			Vector<size_t, NDIM> x;
-			for (x[XDIM] = 0; x[XDIM] != Ne; x[XDIM]++) {
-				for (x[YDIM] = 0; x[YDIM] != Ne; x[YDIM]++) {
-					for (x[ZDIM] = 0; x[ZDIM] != Ne; x[ZDIM]++) {
-						int index = 0;
-						for (int n = 0; n < NDIM; n++) {
-							index += strides[n] * x[n];
-						}
-						X[k][index] = (real_type(((int) x[k]) - BW) + half);
-					}
-				}
-			}
-		}
-		return;
+			gAttr(Vector<int, NDIM>( { N_, N_, N_ }), BW), U(grid_type(zero, gAttr.extSize)) {
 	}
 	void step(SymmetricMatrix<grid_type, DIM4> const &T, real_type dt) {
-		auto const slopeLimiter = [](real_type const &a, real_type const &b) -> real_type {
-			using namespace std;
-			return (copysign(half, a) + copysign(half, b)) * (min(abs(a), abs(b)));
-		};
-		constexpr real_type G = real_type(-8.0 * M_PI);
-		real_type const dx = one / real_type(Ni);
-		real_type const dxinv = real_type(Ni);
-		Vector<grid_type, DIM4> D(grid_type(zero, N3));
+		constexpr real_type G = real_type(-16.0 * M_PI);
+		real_type const dx = one / real_type(gAttr.intSizes[0]);
+		real_type const dxinv = one / dx;
+		Vector<grid_type, DIM4> D(grid_type(zero, gAttr.extSize));
 		auto const &strides = gAttr.extStrides;
 		auto const dV = gAttr.d3R;
 		auto const N3 = gAttr.extSize;
-		grid_type UxR = grid_type(N3);
-		grid_type UtR = grid_type(N3);
-		grid_type UxL = grid_type(N3);
-		grid_type UtL = grid_type(N3);
-		grid_type Fx = grid_type(N3);
-		grid_type Ft = grid_type(N3);
+		auto UtR = grid_type(N3);
+		auto UtL = grid_type(N3);
+		auto UxR = grid_type(N3);
+		auto UxL = grid_type(N3);
+		auto Fx = grid_type(N3);
+		auto Ft = grid_type(N3);
 		decltype(U) U0 = U;
 		decltype(U) dU(grid_type(zero, N3));
 		for (int rkSubstep = 0; rkSubstep < 2; rkSubstep++) {
-			for (int k = 0; k < DIM4; k++) {
-				for (int m = 0; m < DIM4; m++) {
-					for (int j = 0; j <= m; j++) {
-						dU[k][m, j] = (G * dV) * T[m, j];
+			for (int m = 0; m < DIM4; m++) {
+				for (int j = 0; j <= m; j++) {
+					dU[0][m, j] = G * T[m, j];
+					for (int k = 1; k < DIM4; k++) {
+						dU[k][m, j] = zero;
 					}
 				}
 			}
@@ -127,8 +90,8 @@ struct LinearGravity {
 							real_type const ut0 = U[0][m, j][i0];
 							real_type const uxm = U[k][m, j][im];
 							real_type const utm = U[0][m, j][im];
-							real_type const slp_x = slopeLimiter(uxp - ux0, ux0 - uxm);
-							real_type const slp_t = slopeLimiter(utp - ut0, ut0 - utm);
+							real_type const slp_x = vanLeer(uxp - ux0, ux0 - uxm);
+							real_type const slp_t = vanLeer(utp - ut0, ut0 - utm);
 							UxR[i0] = ux0 - half * slp_x;
 							UtR[i0] = ut0 - half * slp_t;
 							UxL[ip] = ux0 + half * slp_x;
@@ -170,16 +133,17 @@ struct LinearGravity {
 		char const *const coordnames[NDIM] = { "x", "y", "z" };
 		Vector<std::vector<real_type>, NDIM> xCoordinates;
 		for (int dim = 0; dim < NDIM; dim++) {
-			xCoordinates[dim].resize(Ni + 1);
-			for (int n = 0; n <= int(Ni); n++) {
-				xCoordinates[dim][n] = real_type(n) / real_type(Ni);
+			xCoordinates[dim].resize(gAttr.intSizes[dim] + 1);
+			for (int n = 0; n <= int(gAttr.intSizes[dim]); n++) {
+				xCoordinates[dim][n] = real_type(n) / real_type(gAttr.intSizes[dim]);
 			}
 		}
 		void const *const coords[NDIM] = { xCoordinates[XDIM].data(), xCoordinates[YDIM].data(), xCoordinates[ZDIM].data() };
-		int const dims2[NDIM] = { (int) Ni, (int) Ni, (int) Ni };
+		int const dims2[NDIM] = { (int) gAttr.intSizes[XDIM], (int) gAttr.intSizes[YDIM], (int) gAttr.intSizes[ZDIM] };
 		int dims1[NDIM] = { dims2[0] + 1, dims2[1] + 1, dims2[2] + 1 };
 		DBPutQuadmesh(db, "quadMesh", coordnames, coords, dims1, NDIM, silo_data_type, DB_COLLINEAR, optList);
-		auto const gSlice = std::gslice(start, sizes, strides);
+		size_t const start = BW * (gAttr.extStrides.sum());
+		auto const gSlice = std::gslice(start, gAttr.intSizes, gAttr.extStrides);
 		for (int i = 0; i < DIM4; i++) {
 			for (int j = 0; j <= i; j++) {
 				for (int k = 0; k < DIM4; k++) {
@@ -214,9 +178,9 @@ struct LinearGravity {
 	auto metricDerivatives(real_type x0, real_type y0, real_type z0) const {
 		using return_type = Vector<SymmetricMatrix<real_type, DIM4>, DIM4>;
 		return_type u = return_type(zero);
-		int const i0 = x0 * real_type(Ni) + BW;
-		int const j0 = y0 * real_type(Ni) + BW;
-		int const k0 = z0 * real_type(Ni) + BW;
+		int const i0 = x0 * real_type(gAttr.intSizes[XDIM]) + BW;
+		int const j0 = y0 * real_type(gAttr.intSizes[YDIM]) + BW;
+		int const k0 = z0 * real_type(gAttr.intSizes[ZDIM]) + BW;
 		Vector<int, NDIM> originIndices( { i0, j0, k0 });
 		Vector<int, NDIM> indices;
 		int &i = indices[XDIM];
@@ -224,18 +188,18 @@ struct LinearGravity {
 		int &k = indices[ZDIM];
 		Vector<SymmetricMatrix<real_type, DIM4>, DIM4> V;
 		Vector<real_type, NDIM> const X0( { x0, y0, z0 });
-		size_t const start = (i0 - 1) * strides[XDIM] + (j0 - 1) * strides[YDIM] + (k0 - 1) * strides[ZDIM];
+		size_t const start = (i0 - 1) * gAttr.extStrides[XDIM] + (j0 - 1) * gAttr.extStrides[YDIM] + (k0 - 1) * gAttr.extStrides[ZDIM];
 		for (i = 0; i < 3; i++) {
 			for (j = 0; j < 3; j++) {
 				for (k = 0; k < 3; k++) {
 					size_t index = start;
 					for (int dim = 0; dim < NDIM; dim++) {
-						index += indices[dim] * strides[dim];
+						index += indices[dim] * gAttr.extStrides[dim];
 					}
 					real_type weight = one;
-					for (int dim = 0; dim < NDIM; dim++) {
-						weight *= kernelTSC(abs(X[dim][index]) - (real_type(Ni) * X0[dim]));
-					}
+					weight *= kernelTSC(abs(real_type(i0 + i - 1) - real_type(gAttr.intSizes[XDIM]) * X0[XDIM]));
+					weight *= kernelTSC(abs(real_type(j0 + j - 1) - real_type(gAttr.intSizes[YDIM]) * X0[YDIM]));
+					weight *= kernelTSC(abs(real_type(k0 + k - 1) - real_type(gAttr.intSizes[ZDIM]) * X0[ZDIM]));
 					for (int l = 0; l < DIM4; l++) {
 						for (int m = 0; m < DIM4; m++) {
 							for (int n = 0; n <= m; n++) {
@@ -265,14 +229,7 @@ struct LinearGravity {
 	}
 private:
 	GridAttributes<real_type> gAttr;
-	size_t const &Ni;
-	size_t const &Ne;
-	std::valarray<size_t> const &sizes;
-	std::valarray<size_t> const &strides;
-	size_t N3;
-	size_t start;
-	Vector<grid_type, NDIM> X;
-	Vector<SymmetricMatrix<grid_type, DIM4>, DIM4> U;
+	Vector<spacetime_type, DIM4> U;
 }
 ;
 

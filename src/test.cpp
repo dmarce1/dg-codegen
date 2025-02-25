@@ -8,6 +8,7 @@
 #include "Timer.hpp"
 #include "LinearGravity.hpp"
 #include "Interpolate.hpp"
+#include "GRGrid.hpp"
 #include "Real.hpp"
 #include "Relativity.hpp"
 #include "Options.hpp"
@@ -67,6 +68,7 @@ struct CosmicGR {
 		frameCount++;
 	}
 	void execute(real_type maxTime) {
+		auto const opts = getOptions();
 		real_type const dt = cfl * dx / c;
 		GR.enforceBoundaryConditions();
 //		auto const grVars = [this](int x, int  y, int  z) {
@@ -140,9 +142,7 @@ private:
 	mutable int frameCount;
 };
 
+void testEinstein();
 void test() {
-	using namespace Math;
-	CosmicGR<Real> test;
-	test.execute(Real(1));
-//TricubicSpline<double> test;
+	testEinstein();
 }
