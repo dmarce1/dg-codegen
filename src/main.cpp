@@ -3,8 +3,10 @@
  *******************************************************************************/
 #include "ValArray.hpp"
 
+#include "Metric.hpp"
 #include "Timer.hpp"
 #include <hpx/hpx_init.hpp>
+#include "Tensor.hpp"
 #include "Interpolate.hpp"
 #include "Hydrodynamics.hpp"
 #include "LegendreP.hpp"
@@ -12,7 +14,6 @@
 #include "Real.hpp"
 #include "HydroGrid.hpp"
 #include "Options.hpp"
-#include "Tensor.hpp"
 #include "Radiation.hpp"
 #include "Relativity.hpp"
 #include "Root.hpp"
@@ -341,13 +342,16 @@ auto genBSplineFunctor(int Order, int Dimension = 3) {
 }
 
 void test();
+void testStrings();
 
 int hpx_main(int argc, char *argv[]) {
 	printf("Reading options...\n");
 	processOptions(argc, argv);
+
 	printf("Done.\n");
-	test();
+	testStrings();
 //	static constexpr int N1 = 2;
+
 //	static constexpr int N2 = 8;
 //	std::ofstream fOut("kernel.hpp");
 //	std::ostringstream code;

@@ -48,7 +48,7 @@ struct testImplicitRadiation {
 			F[n] = U[n];
 		}
 		static constexpr Real zero(0), third(1.0 / 3.0), half(0.5), one(1), two(2), three(3), four(4), twelve(12);
-		static SquareMatrix<Real, NDIM> const I = identityMatrix<Real, NDIM>();
+		static SquareMatrix<Real, NDIM> const I = SquareMatrix<Real, NDIM>::identity();
 		static auto const cHat = c;
 		ColumnVector Beta;
 		for (int n = 0; n < NDIM; n++) {

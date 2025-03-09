@@ -13,6 +13,7 @@ set(CXX_FLAGS  ${ALL_FLAGS} -march=native )
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
+	src/dag.cpp
 	src/main.cpp
 	src/Einstein.cpp
 	src/Integers.cpp
@@ -48,6 +49,7 @@ set(astrotiger_header
 	include/Real.hpp
 	include/Relativity.hpp
 	include/Spacetime.hpp
+	include/Tensor.hpp
 	include/Timer.hpp
 	include/Root.hpp
 	include/RungeKutta.hpp
@@ -57,7 +59,22 @@ set(astrotiger_header
 	include/Utilities.hpp
 	include/ValArray.hpp
 	include/Vector.hpp
+	include/Spacetime.hpp
 ) 
+
+
+add_executable(CodeGenTool src/CodeGen.cpp)
+target_compile_options(CodeGenTool PUBLIC -DNDIM=3)
+
+add_custom_command(
+  OUTPUT ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
+  COMMAND $<TARGET_FILE:CodeGenTool> > ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
+  DEPENDS $<TARGET_FILE:CodeGenTool>
+  COMMENT "Running code generator to create Spacetime.hpp..."
+  VERBATIM
+)
+
+add_custom_target(CodeGenTarget ALL DEPENDS ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp)
 
 add_hpx_executable(
   astrotiger
