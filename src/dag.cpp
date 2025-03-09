@@ -17,6 +17,8 @@
 #include <unordered_set>
 #include <vector>
 
+#define TOKEN_PATTERN R"((\s+)|(_[A-Za-z()]+)|([A-Za-z0-9]+)|([()+\-*/=]))"
+
 struct DagNode {
 	struct term_t {
 		double constant;
@@ -44,6 +46,7 @@ struct DagNode {
 	std::string getTag() const;
 	std::string getVariableName() const;
 	int getTermCount() const;
+	friend std::ostream& operator<<(std::ostream &outStream, DagNode const&);
 	static std::vector<DagNode> getInputNodes();
 private:
 	std::shared_ptr<state_t> state;
@@ -53,6 +56,32 @@ private:
 };
 
 std::unordered_map<std::string, std::shared_ptr<DagNode::state_t>> DagNode::varNameDatabase;
+
+std::ostream& operator<<(std::ostream &outStream, DagNode const &dag) {
+	std::string code;
+	auto const tag = dag.getTag();
+	if (tag.size()) {
+		outStream << tag << " = ";
+	}
+	for (unsigned ti = 0; ti < dag.state->terms.size(); ti++) {
+		auto const &term = dag.state->terms[ti];
+		if (term.constant != 1.0) {
+			outStream << " T(" << std::to_string(term.constant) << ")";
+		}
+		auto fit = term.factors.begin();
+		for (int fi = 0; fi < term.factors.size(); fi++) {
+			auto const &factor = *fit;
+			for (int m = 0; m < factor.second; m++) {
+				outStream << factor.first.getVariableName();
+				outStream << ((m < factor.second - 1) ? " * " : "");
+			}
+			fit++;
+			outStream << ((fi < term.factors.size() - 1) ? " * " : "");
+		}
+		outStream << ((ti == dag.state->terms.size() - 1) ? ";\n" : " + ");
+	}
+	return outStream;
+}
 
 int DagNode::getTermCount() const {
 	return state->terms.size();
@@ -66,7 +95,7 @@ std::string DagNode::getTag() const {
 	return tag;
 }
 
-std::string DagNode::getVariableName() const{
+std::string DagNode::getVariableName() const {
 	return state->varName;
 }
 
@@ -147,6 +176,7 @@ void DagNode::addTerm(std::vector<DagNode> const &factors, double constant) {
 		if (term.factors.find(f) == term.factors.end()) {
 			term.factors[f] = 0;
 		}
+		term.factors[f]++;
 	}
 	auto del = std::move(state->varName);
 	state->terms.push_back(std::move(term));
@@ -316,9 +346,11 @@ struct Token {
 				throw std::invalid_argument("Unrecognized token\n");
 			}
 			if (token.isSymmetricIndex()) {
-				str += " symmetry: group # " + std::to_string(token.getSymmetryGroup());
+				str += " symmetry: group # "
+						+ std::to_string(token.getSymmetryGroup());
 			} else {
-				str += " symmetry:  N/A " + std::to_string(token.getSymmetryGroup());
+				str += " symmetry:  N/A "
+						+ std::to_string(token.getSymmetryGroup());
 			}
 			str += "\n";
 		} else if (type.isOperation()) {
@@ -379,8 +411,7 @@ auto processString(std::string const &input) {
 	std::vector<Token> tokens;
 	Token token;
 
-	std::regex tokenRegex(
-			R"((\s+)|(_[A-Za-z()]+)|([A-Za-z0-9]+)|([()+\-*/=]))");
+	std::regex tokenRegex(TOKEN_PATTERN);
 
 	auto const flush = [&tokens, &theseTokens]() {
 		int nextDummy = 0;
@@ -401,7 +432,8 @@ auto processString(std::string const &input) {
 		tokens.insert(tokens.end(), theseTokens.begin(), theseTokens.end());
 		theseTokens.clear();
 	};
-	for (auto it = std::sregex_iterator(input.begin(), input.end(), tokenRegex); it != std::sregex_iterator(); ++it) {
+	for (auto it = std::sregex_iterator(input.begin(), input.end(), tokenRegex);
+			it != std::sregex_iterator(); ++it) {
 		std::smatch match = *it;
 		if (match[1].matched) {
 			continue;
@@ -424,7 +456,7 @@ auto processString(std::string const &input) {
 					} else {
 						token.setContravariantIndex(letter);
 					}
-					if( isSymmetryGroup) {
+					if (isSymmetryGroup) {
 						token.setSymmetryGroup(groupNumber);
 					}
 					theseTokens.push_back(token);
@@ -451,30 +483,30 @@ auto processString(std::string const &input) {
 
 template<>
 struct std::hash<std::vector<int>> {
-	size_t operator()(std::vector<int> I ) const {
+	size_t operator()(std::vector<int> I) const {
 		size_t key = 1;
-		for( unsigned i = 0; i < I.size(); i++) {
+		for (unsigned i = 0; i < I.size(); i++) {
 			key = (1664525 * key + I[i]) & 0xFFFFFFFF;
 		}
 		return key;
 	}
 };
 
-
-std::vector<int> reduceIndices(std::vector<int> indices, std::vector<int> const& symmetries) {
+std::vector<int> reduceIndices(std::vector<int> indices,
+		std::vector<int> const &symmetries) {
 	std::unordered_set<int> done;
-	for( unsigned n = 0; n < symmetries.size(); n++) {
-		if(symmetries[n] && (done.find(n) == done.end())) {
+	for (unsigned n = 0; n < symmetries.size(); n++) {
+		if (symmetries[n] && (done.find(n) == done.end())) {
 			std::vector<int> values;
-			for( unsigned m = n; m < symmetries.size(); m++) {
-				if(symmetries[m] == symmetries[n]) {
+			for (unsigned m = n; m < symmetries.size(); m++) {
+				if (symmetries[m] == symmetries[n]) {
 					values.push_back(indices[m]);
 					done.insert(m);
 				}
 			}
 			std::sort(values.begin(), values.end());
-			for( unsigned m = n; m < symmetries.size(); m++) {
-				if(symmetries[m] == symmetries[n]) {
+			for (unsigned m = n; m < symmetries.size(); m++) {
+				if (symmetries[m] == symmetries[n]) {
 					indices[m] = values.back();
 					values.pop_back();
 				}
@@ -484,33 +516,38 @@ std::vector<int> reduceIndices(std::vector<int> indices, std::vector<int> const&
 	return indices;
 }
 
-int computeIndex(std::vector<int> indices, std::vector<int> const& symmetries) {
-	static std::unordered_map<std::vector<int>, std::unordered_map<std::vector<int>, int>> indexMaps;
-	if( indexMaps.find(symmetries) == indexMaps.end() ) {
-		auto& thisMap = indexMaps[symmetries];
-		std::vector<int> I(indices.size(), 0);
-		int nextIndex = 0;
-		bool flag = false;
-		while(!flag) {
-			auto reducedI = reduceIndices(I, symmetries);
-			if( thisMap.find(reducedI) == thisMap.end()) {
-				thisMap[reducedI] = nextIndex++;
-			}
-			thisMap[I] = thisMap[reducedI];
-			unsigned dim = 0;
-			while(++I[dim] == NDIM) {
-				I[dim++] = 0;
-				if( dim == I.size()) {
-					flag = true;
-					break;
+int computeIndex(std::vector<int> indices, std::vector<int> const &symmetries) {
+	static std::unordered_map<std::vector<int>,
+			std::unordered_map<std::vector<int>, int>> indexMaps;
+	if (indices.size() == 0) {
+		return 0;
+	} else {
+		if (indexMaps.find(symmetries) == indexMaps.end()) {
+			auto &thisMap = indexMaps[symmetries];
+			std::vector<int> I(indices.size(), 0);
+			int nextIndex = 0;
+			bool flag = false;
+			while (!flag) {
+				auto reducedI = reduceIndices(I, symmetries);
+				if (thisMap.find(reducedI) == thisMap.end()) {
+					thisMap[reducedI] = nextIndex++;
+				}
+				thisMap[I] = thisMap[reducedI];
+				unsigned dim = 0;
+				while (++I[dim] == NDIM) {
+					I[dim++] = 0;
+					if (dim == I.size()) {
+						flag = true;
+						break;
+					}
 				}
 			}
 		}
+		return indexMaps[symmetries][indices];
 	}
-	return indexMaps[symmetries][indices];
 }
 
-std::string genVarName(std::string const& base, int index) {
+std::string genVarName(std::string const &base, int index) {
 	std::string name = base;
 	name += "[";
 	name += std::to_string(index);
@@ -518,156 +555,166 @@ std::string genVarName(std::string const& base, int index) {
 	return name;
 }
 
-std::pair<std::vector<DagNode>,std::vector<DagNode>> processTokenGroup(std::vector<Token> const &tokens) {
-	std::pair<std::vector<DagNode>,std::vector<DagNode>> rc;
-	auto& inputVariables = rc.first;
-	auto& outputVariables = rc.second;
+std::pair<std::vector<DagNode>, std::vector<DagNode>> processTokenGroup(
+		std::vector<Token> const &tokens) {
+	std::pair<std::vector<DagNode>, std::vector<DagNode>> rc;
+	auto &inputVariables = rc.first;
+	auto &outputVariables = rc.second;
 	std::string lhsName;
 	std::map<char, int> lhsGroups;
-	std::vector<std::map<char, int>> rhsGroups;
-	std::vector<char> dummyIndexNames;
 	std::vector<char> lhsIndexNames;
-	std::vector < std::string > rhsNames;
-	std::vector<std::vector<char>> rhsIndexNames;
 	if (!tokens[0].isVar()) {
-		throw std::invalid_argument("First token should be a variable name\n");
+		throw std::invalid_argument(
+				"First token should be a variable name\currentTokenIndex");
 	}
 	lhsName = tokens[0].getName();
-	unsigned n = 1;
-	while (tokens[n].isIndex()) {
-		char const c = tokens[n].getChar();
+	unsigned tokenIndex = 1;
+	while (tokens[tokenIndex].isIndex()) {
+		char const c = tokens[tokenIndex].getChar();
 		lhsIndexNames.push_back(c);
-		lhsGroups[c]= tokens[n].getSymmetryGroup();
-		n++;
+		lhsGroups[c] = tokens[tokenIndex].getSymmetryGroup();
+		tokenIndex++;
 	}
-	if (!tokens[n].isEquals()) {
-		throw std::invalid_argument("Missing equals sign\n");
+	if (!tokens[tokenIndex].isEquals()) {
+		throw std::invalid_argument("Missing equals sign\currentTokenIndex");
 	}
-	n++;
-	while (n < tokens.size()) {
-		std::cout << ": " << toString(tokens[n]);
-		if (tokens[n].isVar()) {
-			rhsNames.push_back(tokens[n].getName());
-			n++;
-			std::vector<char> theseIndices;
-			std::map<char, int> theseGroups;
-			while ((n < tokens.size()) && tokens[n].isIndex()) {
-				char const c = tokens[n].getChar();
-				theseIndices.push_back(c);
-				theseGroups[c] =  tokens[n].getSymmetryGroup();
-				if (tokens[n].isDummy()) {
-					dummyIndexNames.push_back(c);
-				}
-				n++;
-			}
-			rhsIndexNames.push_back(std::move(theseIndices));
-			rhsGroups.push_back(std::move(theseGroups));
-		} else {
-			n++;
-		}
-	}
-	std::sort(dummyIndexNames.begin(), dummyIndexNames.end());
-	for (unsigned i = 1; i < dummyIndexNames.size(); i += 2) {
-		if (i < dummyIndexNames.size() - 1) {
-			dummyIndexNames[i] = dummyIndexNames.back();
-			dummyIndexNames.pop_back();
-			dummyIndexNames.pop_back();
-		} else {
-			dummyIndexNames.pop_back();
-		}
-	}
-	std::unordered_set<char> dummySet(dummyIndexNames.begin(), dummyIndexNames.end());
 	int const Rank = lhsIndexNames.size();
 	std::map<char, int> lhsIndices;
 	for (unsigned i = 0; i < lhsIndexNames.size(); i++) {
 		lhsIndices[lhsIndexNames[i]] = 0;
 	}
+	tokenIndex++;
 	bool outerFlag = false;
-	std::string str;
 	while (!outerFlag) {
+		int currentTokenIndex = tokenIndex;
 		std::vector<int> tmp1;
 		std::vector<int> tmp2;
-		for( auto i : lhsIndices) {
+		for (auto i : lhsIndices) {
 			tmp1.push_back(i.second);
 			tmp2.push_back(lhsGroups[i.first]);
 		}
-		int const lhsIndex = computeIndex(std::move(tmp1),std::move(tmp2) );
+		int const lhsIndex = computeIndex(std::move(tmp1), std::move(tmp2));
 		auto const name = genVarName(lhsName.c_str(), lhsIndex);
-		str += name + " = ";
 		DagNode thisDagNode;
 		thisDagNode.setTag(name);
-		std::map<char, int> dummyIndices;
-		for (unsigned i = 0; i < dummyIndexNames.size(); i++) {
-			dummyIndices[dummyIndexNames[i]] = 0;
-		}
-		bool innerFlag = false;
-		std::vector<DagNode> terms;
-		while (!innerFlag) {
-			for (unsigned n = 0; n < rhsNames.size(); n++) {
-				std::vector<int> theseIndices;
-				std::vector<int> theseSymmetries;
-				for (char index : rhsIndexNames[n]) {
-					if (dummySet.find(index) == dummySet.end()) {
-						theseIndices.push_back(lhsIndices[index]);
-					} else {
-						theseIndices.push_back(dummyIndices[index]);
+		while (currentTokenIndex < tokens.size()) {
+			std::vector<std::string> rhsNames;
+			std::vector<std::map<char, int>> rhsGroups;
+			std::vector<std::vector<char>> rhsIndexNames;
+			std::vector<char> dummyIndexNames;
+			while (currentTokenIndex < tokens.size()) {
+				if (tokens[currentTokenIndex].isVar()) {
+					rhsNames.push_back(tokens[currentTokenIndex].getName());
+					currentTokenIndex++;
+					std::vector<char> theseIndices;
+					std::map<char, int> theseGroups;
+					while ((currentTokenIndex < tokens.size())
+							&& tokens[currentTokenIndex].isIndex()) {
+						char const c = tokens[currentTokenIndex].getChar();
+						theseIndices.push_back(c);
+						theseGroups[c] =
+								tokens[currentTokenIndex].getSymmetryGroup();
+						if (tokens[currentTokenIndex].isDummy()) {
+							dummyIndexNames.push_back(c);
+						}
+						currentTokenIndex++;
 					}
-					theseSymmetries.push_back(rhsGroups[n][index]);
-				}
-				int const rhsIndex = computeIndex(theseIndices, theseSymmetries);
-				auto const name = genVarName(rhsNames[n].c_str(), rhsIndex);
-				terms.push_back(DagNode(name));
-				str += name;
-				if (n + 1 < rhsNames.size()) {
-					str += " * ";
+					rhsIndexNames.push_back(std::move(theseIndices));
+					rhsGroups.push_back(std::move(theseGroups));
+				} else if (tokens[currentTokenIndex].isAdditive()) {
+					currentTokenIndex++;
+					break;
+				} else {
+					currentTokenIndex++;
 				}
 			}
-			unsigned s = 0;
-			while (++dummyIndices[dummyIndexNames[s]] == NDIM) {
-				dummyIndices[dummyIndexNames[s++]] = 0;
-				if (s == dummyIndices.size()) {
+			std::sort(dummyIndexNames.begin(), dummyIndexNames.end());
+			for (unsigned i = 1; i < dummyIndexNames.size(); i += 2) {
+				if (i < dummyIndexNames.size() - 1) {
+					dummyIndexNames[i] = dummyIndexNames.back();
+					dummyIndexNames.pop_back();
+					dummyIndexNames.pop_back();
+				} else {
+					dummyIndexNames.pop_back();
+				}
+			}
+			std::unordered_set<char> dummySet(dummyIndexNames.begin(),
+					dummyIndexNames.end());
+
+			std::map<char, int> dummyIndices;
+			for (unsigned i = 0; i < dummyIndexNames.size(); i++) {
+				dummyIndices[dummyIndexNames[i]] = 0;
+			}
+			bool innerFlag = false;
+			while (!innerFlag) {
+				std::vector<DagNode> factors;
+				for (unsigned n = 0; n < rhsNames.size(); n++) {
+					std::vector<int> theseIndices;
+					std::vector<int> theseSymmetries;
+					for (char index : rhsIndexNames[n]) {
+						if (dummySet.find(index) == dummySet.end()) {
+							theseIndices.push_back(lhsIndices[index]);
+						} else {
+							theseIndices.push_back(dummyIndices[index]);
+						}
+						theseSymmetries.push_back(rhsGroups[n][index]);
+					}
+					int const rhsIndex = computeIndex(theseIndices,
+							theseSymmetries);
+					auto const name = genVarName(rhsNames[n].c_str(), rhsIndex);
+					factors.push_back(DagNode(name));
+				}
+				thisDagNode.addTerm(factors);
+				if (dummyIndices.size() == 0) {
 					innerFlag = true;
+					break;
+				} else {
+					unsigned s = 0;
+					while (++dummyIndices[dummyIndexNames[s]] == NDIM) {
+						dummyIndices[dummyIndexNames[s++]] = 0;
+						if (s == dummyIndices.size()) {
+							innerFlag = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		outputVariables.push_back(thisDagNode);
+		if (lhsIndices.size() == 0) {
+			outerFlag = true;
+			break;
+		} else {
+			int r = 0;
+			while (++lhsIndices[lhsIndexNames[r]] == NDIM) {
+				lhsIndices[lhsIndexNames[r++]] = 0;
+				if (r == Rank) {
+					outerFlag = true;
 					break;
 				}
 			}
-			if (!innerFlag) {
-				str += " + ";
-			}
 		}
-		str += ";\n";
-		int r = 0;
-		while (++lhsIndices[lhsIndexNames[r]] == NDIM) {
-			lhsIndices[lhsIndexNames[r++]] = 0;
-			if (r == Rank) {
-				outerFlag = true;
-				break;
-			}
-		}
-		thisDagNode.addTerm(terms);
-		outputVariables.push_back(thisDagNode);
 	}
 	inputVariables = DagNode::getInputNodes();
-	std::cout << "\n" << str << "\n";
 	return rc;
 }
 
 void testStrings() {
 	int N = 3;
 	int index = 0;
-	for( int i = 0; i < N; i++) {
-		for( int k = 0; k < N; k++) {
-			for( int j = 0; j <= i; j++) {
+	for (int i = 0; i < N; i++) {
+		for (int k = 0; k < N; k++) {
+			for (int j = 0; j <= i; j++) {
 				int i2 = 0;
 				i2 = j + (i + 1) * k + (i + 1) * N * i / 2;
 				//(i + 1) * (N*i/2 + k) + j
-				printf( "%i %i | %i %i %i\n", index++, i2, i, k, j);
+				printf("%i %i | %i %i %i\n", index++, i2, i, k, j);
 			}
-			printf( "\n");
+			printf("\n");
 		}
-		printf( "\n");
+		printf("\n");
 	}
-	const char *A = "D1_k = g_(IJ) * A_(kij)"
-	;
+	const char *A = "D1_ = g_(IJ) * A_(ij) + C_";
 	auto tokens = processString(A);
 	for (auto t : tokens) {
 		std::cout << toString(t);
@@ -675,7 +722,7 @@ void testStrings() {
 	auto rc = processTokenGroup(tokens);
 	auto outputs = std::move(rc.second);
 	for (int i = 0; i < outputs.size(); i++) {
-		std::cout << outputs[i].getTermCount() << "\n";
+		std::cout << outputs[i];
 	}
 
 }
