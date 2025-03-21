@@ -8,7 +8,7 @@ find_package(HPX REQUIRED)
 set(AT_PORDER "2" CACHE STRING "Sets order of spatial discretization")
 set(AT_CHECK_REALS "1" CACHE STRING "Whether to check Real number operations for errors.")
 
-set(ALL_FLAGS  -Wall -I${PROJECT_SOURCE_DIR}/include -DNDIM=3 -DDIM4=4 -DCHECK_REALS=${AT_CHECK_REALS} -DPORDER=${AT_PORDER})
+set(ALL_FLAGS  -Wall -Wno-comma-subscript -I${PROJECT_SOURCE_DIR}/include -DNDIM=3 -DDIM4=4 -DCHECK_REALS=${AT_CHECK_REALS} -DPORDER=${AT_PORDER})
 set(CXX_FLAGS  ${ALL_FLAGS} -march=native )
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 

@@ -188,12 +188,6 @@ polynomial polynomialReduce(polynomial const &D, sparse_polynomial const &I) {
 
 void test() {
 	using namespace Tensors;
-	Tensor1<double, NDIM> A{};
-	SymmetricTensor2<double, NDIM> B{};
-	Tensor1<double, NDIM> C{};
-	Index<'i'> i;
-	Index<'j'> j;
-	auto D =  C(i) * B(i, j);
 	//	auto DD = A(i) * B(j);
 }
 
