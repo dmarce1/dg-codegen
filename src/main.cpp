@@ -16,6 +16,7 @@
 #include "Options.hpp"
 #include "Radiation.hpp"
 #include "Relativity.hpp"
+#include "SparseMatrix.hpp"
 #include "Root.hpp"
 #include "Vector.hpp"
 #include <unordered_map>
@@ -343,13 +344,19 @@ auto genBSplineFunctor(int Order, int Dimension = 3) {
 
 void test();
 void testStrings();
+void testEinstein();
+
+#include <cuda/std/mdspan>
 
 int hpx_main(int argc, char *argv[]) {
+	int data[10];
+	cuda::std::mdspan(data, 2, 3);
 	printf("Reading options...\n");
 	processOptions(argc, argv);
-
+	constexpr int RANK = 3;
+//	Tensors::GeneralTensor<double, NDIM, RANK> A;
+	test();
 	printf("Done.\n");
-	testStrings();
 //	static constexpr int N1 = 2;
 
 //	static constexpr int N2 = 8;

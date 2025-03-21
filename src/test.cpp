@@ -13,6 +13,7 @@
 #include "Relativity.hpp"
 #include "Options.hpp"
 #include "Particles.hpp"
+#include "Tensor.hpp"
 
 #include <unordered_map>
 
@@ -143,6 +144,73 @@ private:
 };
 
 void testEinstein();
-void test() {
-	testEinstein();
+
+// a0 x^0 + a1 x^1 + a2 x ^2 + ... + an x^n
+
+// a0 x^0 + ... + a(n/2) x^(2*n)
+// b0 x^0 + ... + b(n/2) x^(2*n)
+
+void FPT(std::vector<double> &Y, int N) {
+	if (N == 2) {
+		Y[1] -= Y[0];
+		return;
+	}
+	int const N2 = N / 2;
+	std::vector<double> Ye(N2), Yo(N2);
+	for (int n2 = 0; n2 < N2; n2++) {
+		Ye[n2] = Y[2 * n2];
+		Yo[n2] = Y[2 * n2 + 1];
+	}
+	FPT(Ye, N2);
+	FPT(Yo, N2);
+
 }
+
+using sparse_polynomial = std::vector<std::pair<int, double>>;
+
+using polynomial = std::vector<double>;
+
+polynomial polynomialReduce(polynomial const &D, sparse_polynomial const &I) {
+	int const N = D.size() - 1;
+	int const M = I.size() - 1;
+	polynomial Q(N - M + 1, 0.0);
+	polynomial R = D;
+	for (int n = N; n >= M; n--) {
+		for (int m = 1; m <= M; m++) {
+			R[n + I[m].first - M] += R[n] * I[m].second;
+		}
+		Q[n - M] = R[n];
+		R[n] = 0.0;
+	}
+	return Q;
+}
+
+
+void test() {
+	using namespace Tensors;
+	Tensor1<double, NDIM> A{};
+	SymmetricTensor2<double, NDIM> B{};
+	Tensor1<double, NDIM> C{};
+	Index<'i'> i;
+	Index<'j'> j;
+	auto D =  C(i) * B(i, j);
+	//	auto DD = A(i) * B(j);
+}
+
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/
+/***/

@@ -54,6 +54,7 @@ set(astrotiger_header
 	include/Root.hpp
 	include/RungeKutta.hpp
 	include/Sod.hpp
+	include/SparseMatrix.hpp
 	include/Tensor.hpp
 	include/TriangularArray.hpp
 	include/Utilities.hpp
@@ -63,18 +64,18 @@ set(astrotiger_header
 ) 
 
 
-add_executable(CodeGenTool src/CodeGen.cpp)
-target_compile_options(CodeGenTool PUBLIC -DNDIM=3)
+#add_executable(CodeGenTool src/CodeGen.cpp)
+#target_compile_options(CodeGenTool PUBLIC -DNDIM=3)
 
-add_custom_command(
-  OUTPUT ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
-  COMMAND $<TARGET_FILE:CodeGenTool> > ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
-  DEPENDS $<TARGET_FILE:CodeGenTool>
-  COMMENT "Running code generator to create Spacetime.hpp..."
-  VERBATIM
-)
+#add_custom_command(
+#  OUTPUT ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
+#  COMMAND $<TARGET_FILE:CodeGenTool> > ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
+#  DEPENDS $<TARGET_FILE:CodeGenTool>
+#  COMMENT "Running code generator to create Spacetime.hpp..."
+#  VERBATIM
+#)
 
-add_custom_target(CodeGenTarget ALL DEPENDS ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp)
+#add_custom_target(CodeGenTarget ALL DEPENDS ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp)
 
 add_hpx_executable(
   astrotiger
