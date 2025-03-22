@@ -10,6 +10,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 
 namespace Tensors {
 
@@ -26,86 +27,109 @@ struct Tensor;
 template<typename T, int D>
 struct Tensor<T, D, 0> {
 	using value_type = T;
-	auto operator[]() const {
+	auto operator()() const {
 		return a;
 	}
-	auto operator()() const;
+	auto getHandle() const {
+		return [this](int i) -> T& {
+			return a;
+		};
+	}
 private:
 	T a;
 };
 
 template<typename T, int D>
-struct Tensor<T, D, 1> : public std::array<T, D> {
+struct Tensor<T, D, 1> {
 	using value_type = T;
 	auto operator()(int i) const {
-		return (*this)[i];
+		return U[i];
+	}
+	auto& operator()(int i) {
+		return U[i];
 	}
 	template<char C>
+	auto operator()(Index<C>);
+	template<char C>
 	auto operator()(Index<C>) const;
+	auto getHandle() {
+		return [this](int i) -> T& {
+			return U[i];
+		};
+	}
+	auto getHandle() const {
+		return [this](int i) -> T const& {
+			return U[i];
+		};
+	}
+private:
+	std::array<T, D> U;
 };
 
 template<typename T, int D, int ...S>
 struct Tensor<T, D, 2, S...> {
 	using value_type = T;
 	static constexpr bool isSymmetric = sizeof...(S);
-	auto operator[](int i, int j) const {
+	static constexpr int computeIndex(int i, int j) {
 		if constexpr (isSymmetric) {
 			if (i < j) {
 				std::swap(i, j);
 			}
-			return U[((i * (i + 1)) >> 1) + j];
+			return ((i * (i + 1)) >> 1) + j;
 		} else {
-			return U[D * i + j];
+			return D * i + j;
 		}
 	}
-	auto& operator[](int i, int j) {
-		if constexpr (isSymmetric) {
-			if (i < j) {
-				std::swap(i, j);
-			}
-			return U[((i * (i + 1)) >> 1) + j];
+	auto const& operator()(int i, int j) const {
+		return U[computeIndex(i, j)];
+	}
+	auto& operator()(int i, int j) {
+		return U[computeIndex(i, j)];
+	}
+	template<char A, char B> auto operator()(Index<A>, Index<B>);
+	template<char A> auto operator()(int, Index<A>);
+	template<char A> auto operator()(Index<A>, int);
+	template<char A, char B> auto operator()(Index<A>, Index<B>) const;
+	template<char A> auto operator()(int, Index<A>) const;
+	template<char A> auto operator()(Index<A>, int) const;
+	auto getHandle() {
+		return [this](int i, int j) -> T& {
+			return this->operator()(i, j);
+		};
+	}
+	std::function<T& (int)> getHandle(std::optional<int> I, std::optional<int> J) {
+		if (bool(I)) {
+			return [this, I](int j) -> T& {
+				return this->operator()(I.value(), j);
+			};
 		} else {
-			return U[D * i + j];
+			return [this, J](int i) -> T& {
+				return this->operator()(i, J.value());
+			};
 		}
 	}
-	template<char C1, char C2>
-	auto operator()(Index<C1>, Index<C2>) const;
-	template<char C>
-	auto operator()(int, Index<C>) const;
-	template<char C>
-	auto operator()(Index<C>, int) const;
-	template<bool TR>
-	struct access1d {
-		access1d(Tensor const &t, int i) :
-				tensor(t), index(i) {
-		}
-		auto operator[](int i) const {
-			if constexpr (TR) {
-				return tensor[i, index];
-			} else {
-				return tensor[index, i];
-			}
-		}
-	private:
-		Tensor const &tensor;
-		int index;
-	};
+	auto getHandle() const {
+		return const_cast<Tensor&>(*this).getHandle();
+	}
+	std::function<T const& (int)> getHandle(std::optional<int> I, std::optional<int> J) const {
+		return const_cast<Tensor&>(*this).getHandle(I, J);
+	}
 	Tensor<T, D - 1, 2> subTensor(int j, int k) const {
 		Tensor<T, D - 1, 2> sub;
 		for (int n = 0; n < j; n++) {
 			for (int m = 0; m < k; m++) {
-				sub[n, m] = (*this)[n, m];
+				sub(n, m) = (*this)(n, m);
 			}
 			for (int m = k + 1; m < D; m++) {
-				sub[n, m - 1] = (*this)[n, m];
+				sub(n, m - 1) = (*this)(n, m);
 			}
 		}
 		for (int n = j + 1; n < D; n++) {
 			for (int m = 0; m < k; m++) {
-				sub[n - 1, m] = (*this)[n, m];
+				sub(n - 1, m) = (*this)(n, m);
 			}
 			for (int m = k + 1; m < D; m++) {
-				sub[n - 1, m - 1] = (*this)[n, m];
+				sub(n - 1, m - 1) = (*this)(n, m);
 			}
 		}
 		return sub;
@@ -130,18 +154,18 @@ struct Tensor<T, D, 2, S...> {
 		for (int n = 0; n < D; n++) {
 			T sgn = sgn_n;
 			for (int m = 0; m <= n; m++) {
-				I[n, m] = sgn * subTensor(n, m).determinant();
+				I(n, m) = sgn * subTensor(n, m).determinant();
 				sgn = -sgn;
 			}
 			sgn_n = -sgn_n;
 		}
 		for (int n = 0; n < D; n++) {
-			det += I[0, n];
+			det += I(0, n);
 		}
 		T const dinv = T(1) / det;
 		for (int n = 0; n < D; n++) {
 			for (int m = 0; m < D; m++) {
-				I[n, m] *= dinv;
+				I(n, m) *= dinv;
 			}
 		}
 		return I;
@@ -149,7 +173,8 @@ struct Tensor<T, D, 2, S...> {
 private:
 	static constexpr int Size = isSymmetric ? (D * (D + 1) / 2) : (D * D);
 	std::array<T, Size> U;
-};
+}
+;
 
 template<typename T, int D>
 struct Unit {
@@ -157,11 +182,16 @@ struct Unit {
 	Unit(int j_) :
 			j(j_) {
 	}
-	auto operator[](int i) const {
+	auto operator()(int i) const {
 		return T(i == j);
 	}
 	template<char C>
 	auto operator()(Index<C>) const;
+	auto getHandle() const {
+		return [this](int i) {
+			return T(i == j);
+		};
+	}
 private:
 	int const j;
 };
@@ -169,7 +199,7 @@ private:
 template<typename T, int D>
 struct Delta {
 	using value_type = T;
-	auto operator[](int i, int j) const {
+	auto operator()(int i, int j) const {
 		return T(i == j);
 	}
 	template<char C1, char C2>
@@ -178,19 +208,34 @@ struct Delta {
 	auto operator()(int i, Index<C>) const;
 	template<char C>
 	auto operator()(Index<C>, int i) const;
+	auto getHandle() const {
+		return [this](int i, int j) {
+			return T(i == j);
+		};
+	}
 };
 
 template<typename T, int D>
 struct Tensor<T, D, 3> {
 	using value_type = T;
-	auto operator[](int i, int j, int k) const {
+	auto const& operator()(int i, int j, int k) const {
 		return U[D * (D * i + j) + k];
 	}
-	auto& operator[](int i, int j, int k) {
+	auto& operator()(int i, int j, int k) {
 		return U[D * (D * i + j) + k];
 	}
 	template<char C1, char C2, char C3>
+	auto operator()(Index<C1>, Index<C2>, Index<C3>);
+	template<char C1, char C2, char C3>
 	auto operator()(Index<C1>, Index<C2>, Index<C3>) const;
+	auto getHandle() {
+		return [this](int i, int j, int k) -> const T& {
+			return this->operator()(i, j, k);
+		};
+	}
+	auto getHandle() const {
+		return const_cast<Tensor&>(*this).getHandle();
+	}
 private:
 	std::array<T, D * D * D> U;
 };
@@ -198,16 +243,41 @@ private:
 template<typename T, int D>
 struct Tensor<T, D, 3, Sym<0, 1>> {
 	using value_type = T;
-	auto operator[](int i, int j, int k) const {
+	auto operator()(int i, int j, int k) const {
 		return U[i * D2 + ((j * (j + 1)) >> 1) + k];
 	}
-	auto& operator[](int i, int j, int k) {
+	auto& operator()(int i, int j, int k) {
 		return U[i * D2 + ((j * (j + 1)) >> 1) + k];
 	}
-	template<char C1, char C2, char C3>
-	auto operator()(Index<C1>, Index<C2>, Index<C3>) const;
-	template<char C2, char C3>
-	auto operator()(int i, Index<C2>, Index<C3>);
+	template<char C1, char C2, char C3> auto operator()(Index<C1>, Index<C2>, Index<C3>);
+	template<char C1, char C2, char C3> auto operator()(Index<C1>, Index<C2>, Index<C3>) const;
+	template<char C2, char C3> auto operator()(int i, Index<C2>, Index<C3>);
+	auto getHandle() {
+		return [this](int i, int j, int k) -> T& {
+			return this->operator()(i, j, k);
+		};
+	}
+	std::function<T const& (int, int)> getHandle(std::optional<int> I, std::optional<int> J, std::optional<int> K) const {
+		if (bool(I)) {
+			return [this, I](int j, int k) -> T const& {
+				return this->operator()(I.value(), j, k);
+			};
+		} else if (bool(J)) {
+			return [this, J](int i, int k) -> T const& {
+				return this->operator()(i, J.value(), k);
+			};
+		} else {
+			return [this, K](int i, int j) -> T const& {
+				return this->operator()(i, j, K.value());
+			};
+		}
+	}
+	auto getHandle() const {
+		return const_cast<Tensor&>(*this).getHandle();
+	}
+	std::function<T& (int, int)> getHandle(std::optional<int> I, std::optional<int> J, std::optional<int> K) {
+		return const_cast<Tensor&>(*this).getHandle(I, J, K);
+	}
 private:
 	static constexpr int D2 = D * (D + 1) / 2;
 	std::array<T, D * D2> U;
@@ -217,19 +287,19 @@ template<typename A>
 class Tensor0Expr {
 	A ptr;
 public:
-	using value_type = decltype(ptr.operator[]());
+	using value_type = decltype(ptr.operator()());
 	Tensor0Expr(A a) :
 			ptr(a) {
 	}
-	auto operator[]() const {
-		return ptr.operator[]();
+	auto operator()() const {
+		return ptr.operator()();
 	}
 	auto operator=(Tensor0Expr const &other) {
-		ptr.operator[]() = other.operator[]();
+		ptr.operator()() = other.operator()();
 		return *this;
 	}
 	operator value_type() const {
-		return ptr.operator[]();
+		return ptr.operator()();
 	}
 };
 
@@ -237,22 +307,25 @@ template<typename A, int D, char I>
 class Tensor1Expr {
 	A ptr;
 public:
-	using value_type = decltype(ptr[0]);
+	using value_type = decltype(ptr(0));
 	Tensor1Expr(A a) :
 			ptr(a) {
 	}
-	auto operator[](int i) const {
-		return ptr[i];
+	auto operator()(int i) const {
+		return ptr(i);
+	}
+	auto& operator()(int i) {
+		return ptr(i);
 	}
 	template<typename U>
 	auto operator=(U const &other) {
 		if constexpr (std::is_convertible<value_type, U>::value) {
 			for (int i = 0; i < D; i++) {
-				ptr[i] = other;
+				ptr(i) = other;
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
-				ptr[i] = other[i];
+				ptr(i) = other(i);
 			}
 		}
 		return *this;
@@ -261,11 +334,11 @@ public:
 	auto operator+=(U const &other) {
 		if constexpr (std::is_convertible<value_type, U>::value) {
 			for (int i = 0; i < D; i++) {
-				ptr[i] += other;
+				ptr(i) += other;
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
-				ptr[i] += other[i];
+				ptr(i) += other(i);
 			}
 		}
 		return *this;
@@ -286,25 +359,25 @@ template<typename A, int D, char I, char J>
 class Tensor2Expr {
 	A ptr;
 public:
-	using value_type = decltype(ptr[0, 0]);
+	using value_type = decltype(ptr(0, 0));
 	Tensor2Expr(A a) :
 			ptr(a) {
 	}
-	constexpr auto operator[](int i, int j) const {
-		return ptr[i, j];
+	constexpr auto operator()(int i, int j) const {
+		return ptr(i, j);
 	}
 	template<template<typename, int, char, char> class Expr, typename B>
 	auto operator=(Expr<B, D, I, J> const &other) {
 		if constexpr (isSymmetric2<A>::value) {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j <= i; j++) {
-					ptr[i, j] = other[i, j];
+					ptr(i, j) = other(i, j);
 				}
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j < D; j++) {
-					ptr[i, j] = other[i, j];
+					ptr(i, j) = other(i, j);
 				}
 			}
 		}
@@ -315,13 +388,13 @@ public:
 		if constexpr (isSymmetric2<A>::value) {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j <= i; j++) {
-					ptr[i, j] = other;
+					ptr(i, j) = other;
 				}
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j < D; j++) {
-					ptr[i, j] = other;
+					ptr(i, j) = other;
 				}
 			}
 		}
@@ -332,13 +405,13 @@ public:
 		if constexpr (isSymmetric2<A>::value) {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j <= i; j++) {
-					ptr[i, j] += other[i, j];
+					ptr(i, j) += other(i, j);
 				}
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j < D; j++) {
-					ptr[i, j] += other[i, j];
+					ptr(i, j) += other(i, j);
 				}
 			}
 		}
@@ -349,13 +422,13 @@ public:
 		if constexpr (isSymmetric2<A>::value) {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j <= i; j++) {
-					ptr[i, j] -= other[i, j];
+					ptr(i, j) -= other(i, j);
 				}
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j < D; j++) {
-					ptr[i, j] -= other[i, j];
+					ptr(i, j) -= other(i, j);
 				}
 			}
 		}
@@ -366,13 +439,13 @@ public:
 		if constexpr (isSymmetric2<A>::value) {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j <= i; j++) {
-					ptr[i, j] -= other[j, i];
+					ptr(i, j) -= other(j, i);
 				}
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j < D; j++) {
-					ptr[i, j] -= other[j, i];
+					ptr(i, j) -= other(j, i);
 				}
 			}
 		}
@@ -383,13 +456,13 @@ public:
 		if constexpr (isSymmetric2<A>::value) {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j <= i; j++) {
-					ptr[i, j] += other[j, i];
+					ptr(i, j) += other(j, i);
 				}
 			}
 		} else {
 			for (int i = 0; i < D; i++) {
 				for (int j = 0; j < D; j++) {
-					ptr[i, j] += other[j, i];
+					ptr(i, j) += other(j, i);
 				}
 			}
 		}
@@ -401,19 +474,19 @@ template<typename A, int D, char I, char J, char K>
 class Tensor3Expr {
 	A ptr;
 public:
-	using value_type = decltype(ptr[0,0,0]);
+	using value_type = decltype(ptr(0,0,0));
 	Tensor3Expr(A a) :
 			ptr(a) {
 	}
-	auto operator[](int i, int j, int k) const {
-		return ptr[i, j, k];
+	auto operator()(int i, int j, int k) const {
+		return ptr(i, j, k);
 	}
 	template<typename B>
 	auto operator=(B const &other) {
 		for (int i = 0; i < D; i++) {
 			for (int j = 0; j < D; j++) {
 				for (int k = 0; k < D; k++) {
-					ptr[i, j, k] = other;
+					ptr(i, j, k) = other;
 				}
 			}
 		}
@@ -424,7 +497,7 @@ public:
 		for (int i = 0; i < D; i++) {
 			for (int j = 0; j < D; j++) {
 				for (int k = 0; k < D; k++) {
-					ptr[i, j, k] = other[i, j, k];
+					ptr(i, j, k) = other(i, j, k);
 				}
 			}
 		}
@@ -435,7 +508,7 @@ public:
 		for (int i = 0; i < D; i++) {
 			for (int j = 0; j < D; j++) {
 				for (int k = 0; k < D; k++) {
-					ptr[i, j, k] = other[j, k, i];
+					ptr(i, j, k) = other(j, k, i);
 				}
 			}
 		}
@@ -446,7 +519,7 @@ public:
 		for (int i = 0; i < D; i++) {
 			for (int j = 0; j < D; j++) {
 				for (int k = 0; k < D; k++) {
-					ptr[i, j, k] = other[k, j, i];
+					ptr(i, j, k) = other(k, j, i);
 				}
 			}
 		}
@@ -455,20 +528,51 @@ public:
 };
 
 template<typename T, int D>
-auto Tensor<T, D, 0>::operator()() const {
-	return Tensor0Expr<Tensor<T, D, 0>>(&a);
+template<char C>
+auto Tensor<T, D, 1>::operator()(Index<C>) {
+	return Tensor1Expr<decltype(getHandle()), D, C>(getHandle());
 }
 
 template<typename T, int D>
 template<char C>
 auto Tensor<T, D, 1>::operator()(Index<C>) const {
-	return Tensor1Expr<Tensor<T, D, 1>, D, C>(*this);
+	return Tensor1Expr<decltype(getHandle()), D, C>(getHandle());
+}
+
+template<typename T, int D, int ...S>
+template<char C1, char C2>
+auto Tensor<T, D, 2, S...>::operator()(Index<C1>, Index<C2>) {
+	return Tensor2Expr<decltype(getHandle()), D, C1, C2>(getHandle());
+}
+
+template<typename T, int D, int ...S>
+template<char A>
+auto Tensor<T, D, 2, S...>::operator()(int i, Index<A>) {
+	return Tensor1Expr<decltype(getHandle(i, std::nullopt)), D, A>(getHandle(i, std::nullopt));
+}
+
+template<typename T, int D, int ...S>
+template<char A>
+auto Tensor<T, D, 2, S...>::operator()(Index<A>, int i) {
+	return Tensor1Expr<decltype(getHandle(std::nullopt, i)), D, A>(getHandle(std::nullopt, i));
 }
 
 template<typename T, int D, int ...S>
 template<char C1, char C2>
 auto Tensor<T, D, 2, S...>::operator()(Index<C1>, Index<C2>) const {
-	return Tensor2Expr<Tensor<T, D, 2, S...>, D, C1, C2>(*this);
+	return Tensor2Expr<decltype(getHandle()), D, C1, C2>(getHandle());
+}
+
+template<typename T, int D, int ...S>
+template<char A>
+auto Tensor<T, D, 2, S...>::operator()(int i, Index<A>) const {
+	return Tensor1Expr<decltype(getHandle(i, std::nullopt)), D, A>(getHandle(i, std::nullopt));
+}
+
+template<typename T, int D, int ...S>
+template<char A>
+auto Tensor<T, D, 2, S...>::operator()(Index<A>, int i) const {
+	return Tensor1Expr<decltype(getHandle(std::nullopt, i)), D, A>(getHandle(std::nullopt, i));
 }
 
 template<typename T, int D>
@@ -479,34 +583,32 @@ auto Delta<T, D>::operator()(Index<C1>, Index<C2>) const {
 
 template<typename T, int D>
 template<char C1, char C2, char C3>
+auto Tensor<T, D, 3>::operator()(Index<C1>, Index<C2>, Index<C3>) {
+	return Tensor3Expr<decltype(getHandle()), D, C1, C2, C3>(getHandle());
+}
+
+template<typename T, int D>
+template<char C1, char C2, char C3>
 auto Tensor<T, D, 3>::operator()(Index<C1>, Index<C2>, Index<C3>) const {
-	return Tensor3Expr<Tensor<T, D, 3>, D, C1, C2, C3>(*this);
+	return Tensor3Expr<decltype(getHandle()), D, C1, C2, C3>(getHandle());
+}
+
+template<typename T, int D>
+template<char C1, char C2, char C3>
+auto Tensor<T, D, 3, Sym<0, 1>>::operator()(Index<C1>, Index<C2>, Index<C3>) {
+	return Tensor3Expr<decltype(getHandle()), D, C1, C2, C3>(getHandle());
 }
 
 template<typename T, int D>
 template<char C1, char C2, char C3>
 auto Tensor<T, D, 3, Sym<0, 1>>::operator()(Index<C1>, Index<C2>, Index<C3>) const {
-	return Tensor3Expr<Tensor<T, D, 3, Sym<0, 1>>, D, C1, C2, C3>(*this);
+	return Tensor3Expr<decltype(getHandle()), D, C1, C2, C3>(getHandle());
 }
 
 template<typename T, int D>
 template<char C2, char C3>
 auto Tensor<T, D, 3, Sym<0, 1>>::operator()(int i, Index<C2>, Index<C3>) {
-	return Tensor2Expr<value_type*, D, C2, C3>(U.data() + i * D2);
-}
-
-template<typename T, int D, int ...S>
-template<char C>
-auto Tensor<T, D, 2, S...>::operator()(int i, Index<C>) const {
-	Tensor<T, D, 2, S...>::access1d<false> a { *this, i };
-	return Tensor1Expr<Tensor<T, D, 2, S...>::access1d<false>, D, C>(a);
-}
-
-template<typename T, int D, int ...S>
-template<char C>
-auto Tensor<T, D, 2, S...>::operator()(Index<C>, int i) const {
-	Tensor<T, D, 2, S...>::access1d<true> a { *this, i };
-	return Tensor1Expr<Tensor<T, D, 2, S...>::access1d<true>, D, C>(a);
+	return Tensor2Expr<decltype(getHandle(i, std::nullopt, std::nullopt)), D, C2, C3>(getHandle(i, std::nullopt, std::nullopt));
 }
 
 template<typename T, int D>
@@ -523,725 +625,492 @@ auto Delta<T, D>::operator()(Index<C>, int i) const {
 	return Tensor1Expr<Unit<T, D>, D, C>(unit);
 }
 
-template<typename T, typename U>
-using sum_type = decltype(T() + U());
+template<template<typename, int, char...> typename Expr, typename T, int D, char...I>
+auto operator-(Expr<T, D, I...> const &A) {
+	auto const f = [A](auto... is) {
+		return -A(is...);
+	};
+	return Expr<decltype(f), D, I...>(f);
+}
 
-template<typename A>
-struct TensorNegate {
-	TensorNegate(A const &a) :
-			ptrA(a) {
-	}
-	auto operator[](auto ... i) const {
-		return -ptrA.operator[](i...);
-	}
-private:
-	A ptrA;
-};
+template<typename T, typename U, int D, char I>
+auto operator+(Tensor1Expr<T, D, I> const &A, Tensor1Expr<U, D, I> const &B) {
+	auto const f = [A, B](int i) {
+		return A(i) + B(i);
+	};
+	return Tensor1Expr<decltype(f), D, I>(f);
+}
 
-template<typename A, typename B, int D, int T = 0>
-struct Tensor3Add {
+template<typename T, typename U, int D, char I>
+auto operator-(Tensor1Expr<T, D, I> const &A, Tensor1Expr<U, D, I> const &B) {
+	auto const f = [A, B](int i) {
+		return A(i) - B(i);
+	};
+	return Tensor1Expr<decltype(f), D, I>(f);
+}
 
-	Tensor3Add(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-
-	auto operator[](int i, int j, int k) const {
-		if constexpr (T == 0x01) {
-			return ptrA[i, j, k] + ptrB[i, k, j];
-		} else if constexpr (T == 0x02) {
-			return ptrA[i, j, k] + ptrB[k, j, i];
-		} else if constexpr (T == 0x12) {
-			return ptrA[i, j, k] + ptrB[j, i, k];
-		} else {
-			return ptrA[i, j, k] + ptrB[i, j, k];
-		}
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D, typename O, int I0 = -1, int I1 = -1>
-struct TensorBinaryOp {
-	TensorBinaryOp(A const &a, B const &b, O const &op_) :
-			ptrA(a), ptrB(b), op(op_) {
-	}
-	auto operator[](auto ...i) const {
-		static constexpr int Rank = sizeof...(i);
-		std::array<int, Rank> I;
-		int j = 0;
-		((I[j++] = i),...);
-		if (I0 != -1) {
-			std::swap(I[I0], I[I1]);
-		}
-		return op(ptrA.operator[](i...), std::apply([this](auto ...i) {
-			return ptrB.operator[](i...);
-		}, I));
-	}
-private:
-	A ptrA;
-	B ptrB;
-	O op;
-};
-
-template<typename A, typename B>
-struct Tensor0xN {
-
-	Tensor0xN(A const &a_, B const &b) :
-			a(a_), ptrB(b) {
-	}
-
-	auto operator[](auto ...j) const {
-		return a * ptrB.operator[](j...);
-	}
-
-private:
-	A a;
-	B ptrB;
-};
-
-template<typename A, typename B>
-struct Tensor1xN {
-
-	Tensor1xN(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-
-	auto operator[](int i, auto ...j) const {
-		return ptrA[i] * ptrB.operator[](j...);
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B>
-struct TensorNx1 {
-
-	TensorNx1(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-
-	auto operator[](auto ...j, int i) const {
-		return ptrA.operator[](j...) * ptrB[i];
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct Tensor1dot1 {
-
-	Tensor1dot1(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-
-	auto operator[]() const {
-		auto sum = ptrA[0] * ptrB[0];
-		for (int d = 1; d < D; d++) {
-			sum += ptrA[d] * ptrB[d];
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct Tensor1dotN {
-
-	Tensor1dotN(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-
-	auto operator[](auto ...i) const {
-		auto sum = ptrA[0] * ptrB.operator[](0, i...);
-		for (int d = 1; d < D; d++) {
-			sum += ptrA[d] * ptrB.operator[](d, i...);
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct Tensor2dotN {
-
-	Tensor2dotN(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-
-	auto operator[](int i, auto ...j) const {
-		auto sum = ptrA[i, 0] * ptrB.operator[](0, j...);
-		for (int d = 1; d < D; d++) {
-			sum += ptrA[i, d] * ptrB.operator[](d, j...);
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct TensorNdot1 {
-
-	TensorNdot1(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-
-	auto operator[](auto ...i) const {
-		auto sum = ptrA.operator[](i..., 0) * ptrB[0];
-		for (int d = 1; d < D; d++) {
-			sum += ptrA.operator[](i..., d) * ptrB[d];
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct TensorNdotdot2 {
-
-	TensorNdotdot2(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-	auto operator[](auto ...k) const {
-		auto sum = ptrA.operator[](k..., 0, 0) * ptrB[0, 0];
-		for (int j = 1; j < D; j++) {
-			sum += ptrA.operator[](k..., 0, j) * ptrB[0, j];
-			for (int i = 0; i < D; i++) {
-				sum += ptrA.operator[](k..., j, i) * ptrB[j, i];
-			}
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct Tensor2dotdot3 {
-
-	Tensor2dotdot3(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-	auto operator[](auto k) const {
-		auto sum = ptrA.operator[](0, 0) * ptrB[0, 0, k];
-		for (int j = 1; j < D; j++) {
-			sum += ptrA.operator[](0, j) * ptrB[j, 0, k];
-			for (int i = 0; i < D; i++) {
-				sum += ptrA.operator[](j, i) * ptrB[i, j, k];
-			}
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct Tensor3dotdotdot3 {
-
-	Tensor3dotdotdot3(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-	auto operator[]() const {
-		using type = decltype(ptrA.operator[](0, 0, 0) * ptrB[0, 0, 0]);
-		type sum = type(0);
-		for (int k = 0; k < D; k++) {
-			for (int j = 0; j < D; j++) {
-				for (int i = 0; i < D; i++) {
-					sum += ptrA.operator[](k, j, i) * ptrB[k, j, i];
-				}
-			}
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D, int TR>
-struct Tensor3dotdot3 {
-
-	Tensor3dotdot3(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-	auto operator[](auto k, int l) const {
-		auto sum = ptrA.operator[](k, 0, 0) * ptrB[0, 0, l];
-		if constexpr (TR == 0x02) {
-			for (int j = 1; j < D; j++) {
-				sum += ptrA.operator[](k, 0, j) * ptrB[j, 0, l];
-				for (int i = 0; i < D; i++) {
-					sum += ptrA.operator[](k, j, i) * ptrB[i, j, l];
-				}
-			}
-		} else if constexpr (TR == -0x02) {
-			for (int j = 1; j < D; j++) {
-				sum += ptrA.operator[](k, 0, j) * ptrB[0, j, l];
-				for (int i = 0; i < D; i++) {
-					sum += ptrA.operator[](k, j, i) * ptrB[j, i, l];
-				}
-			}
-		} else if constexpr (TR == 0x22) {
-			for (int j = 1; j < D; j++) {
-				sum += ptrA.operator[](0, j, k) * ptrB[j, 0, l];
-				for (int i = 0; i < D; i++) {
-					sum += ptrA.operator[](j, i, k) * ptrB[i, j, l];
-				}
-			}
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D, int TR>
-struct TensorNdot2 {
-
-	TensorNdot2(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-	template<class ...Args>
-	auto operator[](Args ...ks) const {
-		static constexpr int N = sizeof...(ks) - 1;
-		int index = 0;
-		std::array<int, N> K;
-		int i = -1;
-		((((++index < N) ? K[index] : i) = ks),...);
-		auto const fa = [this](auto ...k) {
-			return ptrA.operator[](k...);
+template<typename T, typename U, int D, char I, char J, char K, char L>
+auto operator+(Tensor2Expr<T, D, I, J> const &A, Tensor2Expr<U, D, K, L> const &B) {
+	if constexpr (K == I && L == J) {
+		auto const f = [A, B](int i, int j) {
+			return A(i, j) + B(i, j);
 		};
-		auto const fb = [this](int i, int j) {
-			if constexpr (TR & 0x01) {
-				std::swap(i, j);
-			}
-			return ptrB.operator[](i, j);
+		return Tensor2Expr<decltype(f), D, I, J>(f);
+	} else if constexpr (K == J && L == I) {
+		auto const f = [A, B](int i, int j) {
+			return A(i, j) + B(j, i);
 		};
-		if constexpr (TR & 0x10) {
-			auto sum = std::apply(fa, std::tuple_cat(K, std::tuple<int>(0))) * fb(0, i);
-			for (int j = 1; j < D; j++) {
-				sum += std::apply(fa, std::tuple_cat(K, std::tuple<int>(j))) * fb(j, i);
-			}
-			return sum;
-		} else {
-			auto sum = std::apply(fa, std::tuple_cat(std::tuple<int>(0), K)) * fb(0, i);
-			for (int j = 1; j < D; j++) {
-				sum += std::apply(fa, std::tuple_cat(std::tuple<int>(j), K)) * fb(j, i);
-			}
-			return sum;
-		}
+		return Tensor2Expr<decltype(f), D, I, J>(f);
 	}
+}
 
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct Tensor3dot2 {
-
-	Tensor3dot2(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
+template<typename T, typename U, int D, char I, char J, char K, char L>
+auto operator-(Tensor2Expr<T, D, I, J> const &A, Tensor2Expr<U, D, K, L> const &B) {
+	if constexpr (K == I && L == J) {
+		auto const f = [A, B](int i, int j) {
+			return A(i, j) - B(i, j);
+		};
+		return Tensor2Expr<decltype(f), D, I, J>(f);
+	} else if constexpr (K == J && L == I) {
+		auto const f = [A, B](int i, int j) {
+			return A(i, j) - B(j, i);
+		};
+		return Tensor2Expr<decltype(f), D, I, J>(f);
 	}
-	auto operator[](int i, int j, int k) const {
-		auto sum = ptrA.operator[](i, 0, j) * ptrB.operator[](0, k);
-		for (int l = 1; l < D; l++) {
-			sum += ptrA.operator[](i, l, j) * ptrB.operator[](l, k);
-		}
-		return sum;
+}
+
+template<typename T, typename U, int D, char I, char J, char K, char L, char M, char N>
+auto operator+(Tensor3Expr<T, D, I, J, K> const &A, Tensor3Expr<U, D, L, M, N> const &B) {
+	if constexpr (L == I && M == J && N == K) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) + B(i, j, k);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == J && M == K && N == I) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) + B(j, k, i);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == K && M == I && N == J) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) + B(k, i, j);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == J && M == I && N == K) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) + B(j, i, k);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == I && M == K && N == J) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) + B(i, k, j);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == K && M == J && N == I) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) + B(k, j, i);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
 	}
+}
 
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D>
-struct TensorNdotdot2Tr {
-
-	TensorNdotdot2Tr(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
+template<typename T, typename U, int D, char I, char J, char K, char L, char M, char N>
+auto operator-(Tensor3Expr<T, D, I, J, K> const &A, Tensor3Expr<U, D, L, M, N> const &B) {
+	if constexpr (L == I && M == J && N == K) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) - B(i, j, k);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == J && M == K && N == I) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) - B(j, k, i);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == K && M == I && N == J) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) - B(k, i, j);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == J && M == I && N == K) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) - B(j, i, k);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == I && M == K && N == J) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) - B(i, k, j);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	} else if constexpr (L == K && M == J && N == I) {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j, k) - B(k, j, i);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
 	}
-
-	auto operator[](auto ...k) const {
-		auto sum = ptrA.operator[](0, k..., 0) * ptrB[0, 0];
-		for (int j = 1; j < D; j++) {
-			sum += ptrA.operator[](0, k..., j) * ptrB[0, j];
-			for (int i = 0; i < D; i++) {
-				sum += ptrA.operator[](j, k..., i) * ptrB[j, i];
-			}
-		}
-		return sum;
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<typename A, typename B, int D, bool TR>
-struct Tensor2dotdot2 {
-	Tensor2dotdot2(A const &a, B const &b) :
-			ptrA(a), ptrB(b) {
-	}
-	auto operator[]() const {
-		auto sum = ptrA[0, 0] * ptrB[0, 0];
-		if constexpr(TR) {
-			for (int k = 1; k < D; k++) {
-				sum += ptrA[k, 0] * ptrB[0, k];
-				for (int n = 0; n < D; n++) {
-					sum += ptrA[n, k] * ptrB[k, n];
-				}
-			}
-			return sum;
-		} else {
-			for (int k = 1; k < D; k++) {
-				sum += ptrA[k, 0] * ptrB[k, 0];
-				for (int n = 0; n < D; n++) {
-					sum += ptrA[n, k] * ptrB[n, k];
-				}
-			}
-			return sum;
-		}
-	}
-
-private:
-	A ptrA;
-	B ptrB;
-};
-
-template<template<typename, int, char...> typename Expr, typename A, int D, char...I>
-auto operator-(Expr<A, D, I...> const &a) {
-	TensorNegate<Expr<A, D, I...>> const neg(a);
-	return Expr<decltype(neg), D, I...>(neg);
-}
-
-template<template<typename, int, char...> typename Expr, typename A, typename B, int D, char...I>
-auto operator+(Expr<A, D, I...> const &a, Expr<B, D, I...> const &b) {
-	using typeA = std::remove_reference<typename Expr<A, D, I...>::value_type>::type;
-	using typeB = std::remove_reference<typename Expr<B, D, I...>::value_type>::type;
-	using value_type = decltype(typeA() + typeB());
-	static constexpr std::plus<value_type> o {};
-	TensorBinaryOp<Expr<A, D, I...>, Expr<B, D, I...>, D, std::plus<value_type>> const sum(a, b, o);
-	return Expr<decltype(sum), D, I...>(sum);
-}
-
-template<template<typename, int, char...> typename Expr, typename A, typename B, int D, char I, char J, char...K>
-auto operator+(Expr<A, D, I, J, K...> const &a, Expr<B, D, J, I, K...> const &b) {
-	using typeA = std::remove_reference<typename Expr<A, D, I, J, K...>::value_type>::type;
-	using typeB = std::remove_reference<typename Expr<B, D, J, I, K...>::value_type>::type;
-	using value_type = decltype(typeA() + typeB());
-	static constexpr std::plus<value_type> o {};
-	TensorBinaryOp<Expr<A, D, I, J, K...>, Expr<B, D, J, I, K...>, D, std::plus<value_type>, 0, 1> const sum(a, b, o);
-	return Expr<decltype(sum), D, I, J, K...>(sum);
-}
-
-template<template<typename, int, char...> typename Expr, typename A, typename B, int D, char...I>
-auto operator-(Expr<A, D, I...> const &a, Expr<B, D, I...> const &b) {
-	using typeA = std::remove_reference<typename Expr<A, D, I...>::value_type>::type;
-	using typeB = std::remove_reference<typename Expr<B, D, I...>::value_type>::type;
-	using value_type = decltype(typeA() - typeB());
-	static constexpr std::minus<value_type> o {};
-	TensorBinaryOp<Expr<A, D, I...>, Expr<B, D, I...>, D, std::minus<value_type>> const sum(a, b, o);
-	return Expr<decltype(sum), D, I...>(sum);
-}
-
-template<template<typename, int, char...> typename Expr, typename A, typename B, int D, char I, char J, char...K>
-auto operator-(Expr<A, D, I, J, K...> const &a, Expr<B, D, J, I, K...> const &b) {
-	using typeA = std::remove_reference<typename Expr<A, D, I, J, K...>::value_type>::type;
-	using typeB = std::remove_reference<typename Expr<B, D, J, I, K...>::value_type>::type;
-	using value_type = decltype(typeA() - typeB());
-	static constexpr std::minus<value_type> o {};
-	TensorBinaryOp<Expr<A, D, I, J, K...>, Expr<B, D, J, I, K...>, D, std::minus<value_type>, 0, 1> const sum(a, b, o);
-	return Expr<decltype(sum), D, I, J, K...>(sum);
-}
-
-template<template<typename, int, char...> typename Expr, typename A, typename B, int D, char I, char J, char K>
-auto operator-(Expr<A, D, J, K, I> const &a, Expr<B, D, I, K, J> const &b) {
-	using typeA = std::remove_reference<typename Expr<A, D, J, K, I>::value_type>::type;
-	using typeB = std::remove_reference<typename Expr<B, D, I, K, J>::value_type>::type;
-	using value_type = decltype(typeA() - typeB());
-	static constexpr std::minus<value_type> o {};
-	TensorBinaryOp<Expr<A, D, J, K, I>, Expr<B, D, I, K, J>, D, std::minus<value_type>, 0, 2> const sum(a, b, o);
-	return Expr<decltype(sum), D, J, K, I>(sum);
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator+(Tensor3Expr<A, D, I, J, K> const &a, Tensor3Expr<B, D, I, K, J> const &b) {
-	Tensor3Add<Tensor3Expr<A, D, I, J, K>, Tensor3Expr<B, D, I, K, J>, D, 0x12> const sum(a, b);
-	return Tensor3Expr<decltype(sum), D, I, J, K>(sum);
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator+(Tensor3Expr<A, D, I, J, K> const &a, Tensor3Expr<B, D, K, J, I> const &b) {
-	Tensor3Add<Tensor3Expr<A, D, I, J, K>, Tensor3Expr<B, D, I, K, J>, D, 0x02> const sum(a, b);
-	return Tensor3Expr<decltype(sum), D, I, J, K>(sum);
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator+(Tensor3Expr<A, D, I, J, K> const &a, Tensor3Expr<B, D, J, I, K> const &b) {
-	Tensor3Add<Tensor3Expr<A, D, I, J, K>, Tensor3Expr<B, D, J, I, K>, D, 0x01> const sum(a, b);
-	return Tensor3Expr<decltype(sum), D, I, J, K>(sum);
 }
 
 /* 0 ? */
-template<template<typename, int, char...> typename Expr, typename B, int D, char... I>
-auto operator*(auto a, Expr<B, D, I...> const &b) {
-	Tensor0xN<decltype(a), Expr<B, D, I...>> product(a, b);
-	return Expr<Tensor0xN<decltype(a), Expr<B, D, I...>>, D, I...>(product);
+template<template<typename, int, char...> typename Expr, typename T, int D, char... I>
+auto operator*(auto a, Expr<T, D, I...> const &B) {
+	auto const f = [a, B](auto...is) {
+		return a * B(is...);
+	};
+	return Expr<decltype(f), D, I...>(f);
 }
 
-/* 1 0 */
-template<typename A, typename B, int D, char I, char J>
-auto operator*(Tensor1Expr<A, D, I> const &a, Tensor2Expr<B, D, J, I> const &b) {
-	return b * a;
+template<template<typename, int, char...> typename Expr, typename T, int D, char... I>
+auto operator*(Expr<T, D, I...> const &B, auto a) {
+	return a * B;
 }
 
 /* 1 1 */
-template<typename A, typename B, int D, char I>
-auto operator*(Tensor1Expr<A, D, I> const &a, Tensor1Expr<B, D, I> const &b) {
-	using type1 = Tensor1Expr<A, D, I>;
-	using type2 = Tensor1Expr<B, D, I>;
-	using rctype = Tensor1dot1<type1, type2, D>;
-	return Tensor0Expr<rctype>(rctype(a, b));
-}
 
-template<typename A, typename B, int D, char I, char J>
-auto operator*(Tensor1Expr<A, D, I> const &a, Tensor1Expr<B, D, J> const &b) {
-	Tensor1xN<Tensor1Expr<A, D, I>, Tensor1Expr<B, D, J>> product(a, b);
-	return Tensor2Expr<Tensor1xN<Tensor1Expr<A, D, I>, Tensor1Expr<B, D, J>>, D, I, J>(product);
+template<typename T, typename U, int D, char I, char J>
+auto operator*(Tensor1Expr<T, D, I> const &A, Tensor1Expr<U, D, J> const &B) {
+	if constexpr (I == J) {
+		auto const f = [A, B]() {
+			using type = decltype(A(0) * B(0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(j) * B(j);
+			}
+			return sum;
+		};
+		return Tensor0Expr<decltype(f)>(f);
+	} else {
+		auto const f = [A, B](int i, int j) {
+			return A(i) * B(j);
+		};
+		return Tensor2Expr<decltype(f), D, I, J>(f);
+	}
 }
 
 /* 1 2 */
-template<typename A, typename B, int D, char I, char J>
-auto operator*(Tensor1Expr<A, D, I> const &a, Tensor2Expr<B, D, I, J> const &b) {
-	using type2 = Tensor2Expr<B, D, I, J>;
-	using type1 = Tensor1Expr<A, D, I>;
-	using rctype = Tensor1dotN<type1, type2, D>;
-	return Tensor1Expr<rctype, D, J>(rctype(a, b));
-}
 
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor1Expr<A, D, I> const &a, Tensor2Expr<B, D, J, K> const &b) {
-	using type2 = Tensor2Expr<B, D, J, K>;
-	using type1 = Tensor1Expr<A, D, I>;
-	using rctype = Tensor1xN<type1, type2>;
-	return Tensor3Expr<rctype, D, I, J, K>(rctype(a, b));
+template<typename T, typename U, int D, char I, char J, char K>
+auto operator*(Tensor1Expr<T, D, I> const &A, Tensor2Expr<U, D, J, K> const &B) {
+	if constexpr (I == J) {
+		auto const f = [A, B](int k) {
+			using type = decltype(A(0) * B(0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(j) * B(j, k);
+			}
+			return sum;
+		};
+		return Tensor1Expr<decltype(f), D, K>(f);
+	} else if constexpr (I == K) {
+		auto const f = [A, B](int j) {
+			using type = decltype(A(0) * B(0, 0));
+			type sum = type(0);
+			for (int k = 0; k < D; k++) {
+				sum += A(k) * B(j, k);
+			}
+			return sum;
+		};
+		return Tensor1Expr<decltype(f), D, J>(f);
+	} else {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i) * B(j, k);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	}
 }
 
 /* 1 3 */
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor1Expr<A, D, I> const &a, Tensor3Expr<B, D, I, J, K> const &b) {
-	using type1 = Tensor1Expr<A, D, I>;
-	using type2 = Tensor3Expr<B, D, I, J, K>;
-	using rctype = Tensor1dotN<type1, type2, D>;
-	return Tensor2Expr<rctype, D, J, K>(rctype(a, b));
-}
 
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor1Expr<A, D, I> const &a, Tensor3Expr<B, D, J, K, I> const &b) {
-	return b * a;
+template<typename T, typename U, int D, char I, char J, char K, char L>
+auto operator*(Tensor1Expr<T, D, I> const &A, Tensor3Expr<U, D, J, K, L> const &B) {
+	if constexpr (I == J) {
+		auto const f = [A, B](int k, int l) {
+			using type = decltype(A(0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(j) * B(j, k, l);
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, K, L>(f);
+	} else if constexpr (I == K) {
+		auto const f = [A, B](int j, int l) {
+			using type = decltype(A(0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int k = 0; k < D; k++) {
+				sum += A(k) * B(j, k, l);
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, J, L>(f);
+	} else if constexpr (I == L) {
+		auto const f = [A, B](int j, int k) {
+			using type = decltype(A(0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int l = 0; l < D; l++) {
+				sum += A(l) * B(j, k, l);
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, J, K>(f);
+	}
 }
 
 /* 2 1 */
-template<typename A, typename B, int D, char I, char J>
-auto operator*(Tensor2Expr<B, D, I, J> const &a, Tensor1Expr<A, D, J> const &b) {
-	using type2 = Tensor1Expr<A, D, J>;
-	using type1 = Tensor2Expr<B, D, I, J>;
-	using rctype = TensorNdot1<type1, type2, D>;
-	return Tensor1Expr<rctype, D, I>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J>
-auto operator*(Tensor2Expr<B, D, J, I> const &a, Tensor1Expr<A, D, J> const &b) {
-	return b * a;
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor2Expr<A, D, I, J> const &a, Tensor1Expr<B, D, K> const &b) {
-	TensorNx1<Tensor2Expr<A, D, I, J>, Tensor1Expr<B, D, K>> product(a, b);
-	return Tensor3Expr<TensorNx1<Tensor2Expr<A, D, I, J>, Tensor1Expr<B, D, K>>, D, I, J, K>(product);
+template<typename T, typename U, int D, char I, char J, char K>
+auto operator*(Tensor2Expr<T, D, I, J> const &A, Tensor1Expr<U, D, K> const &B) {
+	if constexpr (J == K) {
+		auto const f = [A, B](int i) {
+			using type = decltype(A(0, 0) * B(0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(i, j) * B(j);
+			}
+			return sum;
+		};
+		return Tensor1Expr<decltype(f), D, I>(f);
+	} else if constexpr (I == K) {
+		auto const f = [A, B](int j) {
+			using type = decltype(A(0, 0) * B(0));
+			type sum = type(0);
+			for (int i = 0; i < D; i++) {
+				sum += A(i, j) * B(i);
+			}
+			return sum;
+		};
+		return Tensor1Expr<decltype(f), D, J>(f);
+	} else {
+		auto const f = [A, B](int i, int j, int k) {
+			return A(i, j) * B(k);
+		};
+		return Tensor3Expr<decltype(f), D, I, J, K>(f);
+	}
 }
 
 /* 2 2 */
-
-template<typename A, typename B, int D, char I, char J>
-auto operator*(Tensor2Expr<A, D, I, J> const &a, Tensor2Expr<B, D, J, I> const &b) {
-	using type1 = Tensor2Expr<A, D, I, J>;
-	using type2 = Tensor2Expr<B, D, J, I>;
-	Tensor2dotdot2<type1, type2, D, true> dot(a, b);
-	return Tensor0Expr<Tensor2dotdot2<type1, type2, D, true>>(dot);
-}
-
-template<typename A, typename B, int D, char I, char J>
-auto operator*(Tensor2Expr<A, D, I, J> const &a, Tensor2Expr<B, D, I, J> const &b) {
-	using type1 = Tensor2Expr<A, D, I, J>;
-	using type2 = Tensor2Expr<B, D, I, J>;
-	Tensor2dotdot2<type1, type2, D, false> dot(a, b);
-	return Tensor0Expr<Tensor2dotdot2<type1, type2, D, false>>(dot);
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor2Expr<B, D, J, I> const &a, Tensor2Expr<A, D, J, K> const &b) {
-	using type1 = Tensor2Expr<B, D, J, I>;
-	using type2 = Tensor2Expr<A, D, J, K>;
-	using rctype = TensorNdot2<type1, type2, D, 0x00>;
-	return Tensor2Expr<rctype, D, I, K>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor2Expr<B, D, I, J> const &a, Tensor2Expr<A, D, J, K> const &b) {
-	using type1 = Tensor2Expr<B, D, I, J>;
-	using type2 = Tensor2Expr<A, D, J, K>;
-	using rctype = TensorNdot2<type1, type2, D, 0x10>;
-	return Tensor2Expr<rctype, D, I, K>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor2Expr<B, D, J, I> const &a, Tensor2Expr<A, D, K, J> const &b) {
-	using type1 = Tensor2Expr<B, D, J, I>;
-	using type2 = Tensor2Expr<A, D, K, J>;
-	using rctype = TensorNdot2<type1, type2, D, 0x01>;
-	return Tensor2Expr<rctype, D, I, K>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor2Expr<B, D, I, J> const &a, Tensor2Expr<A, D, K, J> const &b) {
-	using type1 = Tensor2Expr<B, D, I, J>;
-	using type2 = Tensor2Expr<A, D, K, J>;
-	using rctype = TensorNdot2<type1, type2, D, 0x11>;
-	return Tensor2Expr<rctype, D, I, K>(rctype(a, b));
+template<typename T, typename U, int D, char I, char J, char K, char L>
+auto operator*(Tensor2Expr<T, D, I, J> const &A, Tensor2Expr<U, D, K, L> const &B) {
+	if constexpr (I == K && J == L) {
+		auto const f = [A, B]() {
+			using type = decltype(A(0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int i = 0; i < D; i++) {
+				for (int j = 0; j < D; j++) {
+					sum += A(j, i) * B(i, j);
+				}
+			}
+			return sum;
+		};
+		return Tensor0Expr<decltype(f)>(f);
+	} else if constexpr (I == L && J == K) {
+		auto const f = [A, B]() {
+			using type = decltype(A(0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int i = 0; i < D; i++) {
+				for (int j = 0; j < D; j++) {
+					sum += A(j, i) * B(j, i);
+				}
+			}
+			return sum;
+		};
+		return Tensor0Expr<decltype(f)>(f);
+	} else if constexpr (J == L) {
+		auto const f = [A, B](int i, int k) {
+			using type = decltype(A(0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(i, j) * B(k, j);
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, I, K>(f);
+	} else if constexpr (I == L) {
+		auto const f = [A, B](int i, int k) {
+			using type = decltype(A(0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(j, i) * B(k, j);
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, J, K>(f);
+	} else if constexpr (J == K) {
+		auto const f = [A, B](int i, int k) {
+			using type = decltype(A(0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(i, j) * B(j, k);
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, I, L>(f);
+	} else if constexpr (I == K) {
+		auto const f = [A, B](int i, int k) {
+			using type = decltype(A(0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(j, i) * B(j, k);
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, J, L>(f);
+	}
 }
 
 /* 2 3 */
-template<typename A, typename B, int D, char I, char J, char K, char L>
-auto operator*(Tensor2Expr<A, D, I, J> const &a, Tensor3Expr<B, D, J, K, L> const &b) {
-	using type1 = Tensor2Expr<A, D, I, J>;
-	using type2 = Tensor3Expr<B, D, J, K, L>;
-	using rctype = Tensor2dotN<type1, type2, D>;
-	return Tensor3Expr<rctype, D, I, K, L>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K, char L>
-auto operator*(Tensor2Expr<A, D, I, J> const &a, Tensor3Expr<B, D, K, L, J> const &b) {
-	using type1 = Tensor2Expr<A, D, I, J>;
-	using type2 = Tensor3Expr<B, D, K, L, J>;
-	using rctype = Tensor2dotN<type1, type2, D>;
-	return Tensor3Expr<rctype, D, I, K, L>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor2Expr<A, D, I, J> const &a, Tensor3Expr<B, D, J, I, K> const &b) {
-	using type1 = Tensor2Expr<A, D, I, J>;
-	using type2 = Tensor3Expr<B, D, J, I, K>;
-	using rctype = Tensor2dotdot3<type1, type2, D>;
-	return Tensor1Expr<rctype, D, K>(rctype(a, b));
+template<typename T, typename U, int D, char I, char J, char K, char L, char M>
+auto operator*(Tensor2Expr<T, D, I, J> const &A, Tensor3Expr<U, D, K, L, M> const &B) {
+	if constexpr (I == L && J == K) {
+		auto const f = [A, B](int k) {
+			using type = decltype(A(0, 0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int i = 0; i < D; i++) {
+				for (int j = 0; j < D; j++) {
+					sum += A(i, j) * B(j, i, k);
+				}
+			}
+			return sum;
+		};
+		return Tensor1Expr<decltype(f), D, M>(f);
+	} else if constexpr (K == J) {
+		auto const f = [A, B](int i, int k, int l) {
+			using type = decltype(A(0, 0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(i, j) * B(j, k, l);
+			}
+			return sum;
+		};
+		return Tensor3Expr<decltype(f), D, I, L, M>(f);
+	} else if constexpr (M == J) {
+		auto const f = [A, B](int i, int k, int l) {
+			using type = decltype(A(0, 0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(i, j) * B(k, l, j);
+			}
+			return sum;
+		};
+		return Tensor3Expr<decltype(f), D, I, K, L>(f);
+	}
 }
 
 /* 3 1 */
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor3Expr<B, D, I, J, K> const &a, Tensor1Expr<A, D, K> const &b) {
-	using type1 = Tensor3Expr<B, D, I, J, K>;
-	using type2 = Tensor1Expr<A, D, K>;
-	using rctype = TensorNdot1<type1, type2, D>;
-	return Tensor2Expr<rctype, D, I, J>(rctype(a, b));
+template<typename T, typename U, int D, char I, char J, char K>
+auto operator*(Tensor3Expr<T, D, I, J, K> const &A, Tensor1Expr<U, D, K> const &B) {
+	auto const f = [A, B](int i, int j) {
+		using type = decltype(A(0, 0, 0) * B(0));
+		type sum = type(0);
+		for (int k = 0; k < D; k++) {
+			sum += A(i, j, k) * B(k);
+		}
+		return sum;
+	};
+	return Tensor2Expr<decltype(f), D, I, J>(f);
 }
 
 /* 3 2 */
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor3Expr<B, D, I, J, K> const &a, Tensor2Expr<A, D, J, K> const &b) {
-	using type1 = Tensor3Expr<B, D, I, J, K>;
-	using type2 = Tensor2Expr<A, D, J, K>;
-	using rctype = TensorNdotdot2<type1, type2, D>;
-	return Tensor1Expr<rctype, D, I>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor3Expr<B, D, J, I, K> const &a, Tensor2Expr<A, D, J, K> const &b) {
-	using type1 = Tensor3Expr<B, D, J, I, K>;
-	using type2 = Tensor2Expr<A, D, J, K>;
-	using rctype = TensorNdotdot2Tr<type1, type2, D>;
-	return Tensor1Expr<rctype, D, I>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K, char L>
-auto operator*(Tensor3Expr<B, D, I, J, K> const &a, Tensor2Expr<A, D, K, L> const &b) {
-	using type1 = Tensor3Expr<B, D, I, J, K>;
-	using type2 = Tensor2Expr<A, D, K, L>;
-	using rctype = TensorNdot2<type1, type2, D, 0x10>;
-	return Tensor3Expr<rctype, D, I, J, L>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K, char L>
-auto operator*(Tensor3Expr<B, D, I, J, K> const &a, Tensor2Expr<A, D, J, L> const &b) {
-	using type1 = Tensor3Expr<B, D, I, J, K>;
-	using type2 = Tensor2Expr<A, D, J, L>;
-	using rctype = Tensor3dot2<type1, type2, D>;
-	return Tensor3Expr<rctype, D, I, K, L>(rctype(a, b));
+template<typename T, typename U, int D, char I, char J, char K, char L, char M>
+auto operator*(Tensor3Expr<T, D, I, J, K> const &A, Tensor2Expr<U, D, L, M> const &B) {
+	if constexpr (L == J && M == K) {
+		auto const f = [A, B](int i) {
+			using type = decltype(A(0, 0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				for (int k = 0; k < D; k++) {
+					sum += A(i, j, k) * B(j, k);
+				}
+			}
+			return sum;
+		};
+		return Tensor1Expr<decltype(f), D, I>(f);
+	} else if constexpr (L == I && M == K) {
+		auto const f = [A, B](int j) {
+			using type = decltype(A(0, 0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int i = 0; i < D; i++) {
+				for (int k = 0; k < D; k++) {
+					sum += A(i, j, k) * B(i, k);
+				}
+			}
+			return sum;
+		};
+		return Tensor1Expr<decltype(f), D, J>(f);
+	} else if constexpr (L == J) {
+		auto const f = [A, B](int i, int k, int l) {
+			using type = decltype(A(0, 0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int j = 0; j < D; j++) {
+				sum += A(i, j, k) * B(j, l);
+			}
+			return sum;
+		};
+		return Tensor3Expr<decltype(f), D, I, K, M>(f);
+	} else if constexpr (L == K) {
+		auto const f = [A, B](int i, int j, int l) {
+			using type = decltype(A(0, 0, 0) * B(0, 0));
+			type sum = type(0);
+			for (int k = 0; k < D; k++) {
+				sum += A(i, j, k) * B(k, l);
+			}
+			return sum;
+		};
+		return Tensor3Expr<decltype(f), D, I, J, M>(f);
+	}
 }
 
 /* 3 3 */
-template<typename A, typename B, int D, char I, char J, char K, char L>
-auto operator*(Tensor3Expr<B, D, I, J, K> const &a, Tensor3Expr<A, D, J, K, L> const &b) {
-	using type1 = Tensor3Expr<B, D, I, J, K>;
-	using type2 = Tensor3Expr<A, D, J, K, L>;
-	using rctype = Tensor3dotdot3<type1, type2, D, 0x02>;
-	return Tensor2Expr<rctype, D, I, L>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K, char L>
-auto operator*(Tensor3Expr<B, D, J, K, I> const &a, Tensor3Expr<A, D, K, J, L> const &b) {
-	using type1 = Tensor3Expr<B, D, J, K, I>;
-	using type2 = Tensor3Expr<A, D, K, J, L>;
-	using rctype = Tensor3dotdot3<type1, type2, D, 0x22>;
-	return Tensor2Expr<rctype, D, I, L>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K, char L>
-auto operator*(Tensor3Expr<B, D, I, J, K> const &a, Tensor3Expr<A, D, K, J, L> const &b) {
-	using type1 = Tensor3Expr<B, D, I, J, K>;
-	using type2 = Tensor3Expr<A, D, K, J, L>;
-	using rctype = Tensor3dotdot3<type1, type2, D, -0x02>;
-	return Tensor2Expr<rctype, D, I, L>(rctype(a, b));
-}
-
-template<typename A, typename B, int D, char I, char J, char K>
-auto operator*(Tensor3Expr<B, D, I, J, K> const &a, Tensor3Expr<A, D, I, J, K> const &b) {
-	using type2 = Tensor3Expr<A, D, I, J, K>;
-	using type1 = Tensor3Expr<B, D, I, J, K>;
-	using rctype = Tensor3dotdotdot3<type1, type2, D>;
-	return Tensor0Expr<rctype>(rctype(a, b));
-}
-
-/* ? 0 */
-template<template<typename, int, char...> typename Expr, typename B, int D, char... I>
-auto operator*(Expr<B, D, I...> const &b, auto a) {
-	Tensor0xN<decltype(a), Expr<B, D, I...>> product(a, b);
-	return Expr<Tensor0xN<decltype(a), Expr<B, D, I...>>, D, I...>(product);
+template<typename T, typename U, int D, char I, char J, char K, char L, char M, char N>
+auto operator*(Tensor3Expr<T, D, I, J, K> const &A, Tensor3Expr<U, D, L, M, N> const &B) {
+	if constexpr (I == L && J == M && K == N) {
+		auto const f = [A, B]() {
+			using type = decltype(A(0, 0, 0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int k = 0; k < D; k++) {
+				for (int j = 0; j < D; j++) {
+					for (int i = 0; i < D; i++) {
+						sum += A(i, j, k) * B(i, j, k);
+					}
+				}
+			}
+			return sum;
+		};
+		return Tensor0Expr<decltype(f)>(f);
+	} else if constexpr (L == K && M == J) {
+		auto const f = [A, B](int i, int l) {
+			using type = decltype(A(0, 0, 0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int k = 0; k < D; k++) {
+				for (int j = 0; j < D; j++) {
+					sum += A(i, j, k) * B(k, j, l);
+				}
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, I, N>(f);
+	} else if constexpr (L == J && M == I) {
+		auto const f = [A, B](int k, int l) {
+			using type = decltype(A(0, 0, 0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int i = 0; i < D; i++) {
+				for (int j = 0; j < D; j++) {
+					sum += A(i, j, k) * B(j, i, l);
+				}
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, K, N>(f);
+	} else if constexpr (L == J && M == K) {
+		auto const f = [A, B](int i, int l) {
+			using type = decltype(A(0, 0, 0) * B(0, 0, 0));
+			type sum = type(0);
+			for (int k = 0; k < D; k++) {
+				for (int j = 0; j < D; j++) {
+					sum += A(i, j, k) * B(j, k, l);
+				}
+			}
+			return sum;
+		};
+		return Tensor2Expr<decltype(f), D, I, N>(f);
+	}
 }
 
 }

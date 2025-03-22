@@ -12,7 +12,7 @@
 using namespace Tensors;
 
 template<typename T>
-struct SpaceTime {
+struct Z4SpaceTime {
 	using tensor0 = T;
 	using tensor1 = Tensor<T, NDIM, 1>;
 	using tensor2 = Tensor<T, NDIM, 2>;
@@ -42,11 +42,11 @@ private:
 	tensorS K;
 	tensor3 D;
 public:
-	SpaceTime flux(int l) {
+	Z4SpaceTime flux(int l) {
 		tensor0 trK, Q0;
 		tensor1 trD, E, V, Q1;
 		tensorS gamma_inv, Q2, lambda;
-		SpaceTime F;
+		Z4SpaceTime F;
 		gamma_inv = gamma.inverse();
 		trD(i) = D(i, j, m) * gamma_inv(j, m);
 		E(i) = D(j, i, m) * gamma_inv(j, m);
@@ -73,12 +73,12 @@ public:
 		}
 		return F;
 	}
-	SpaceTime vacuum_source() {
+	Z4SpaceTime vacuum_source() {
 		tensor0 trK, Q0, trB;
 		tensor1 Q1, trD, E;
 		tensorS gamma_inv, Q2;
 		tensor3 Gamma;
-		SpaceTime src;
+		Z4SpaceTime src;
 		gamma_inv = gamma.inverse();
 		trB = delta(m, k) * B(m, k);
 		trK = K(m, k) * gamma_inv(m, k);
@@ -112,9 +112,9 @@ public:
 		src.Theta -= 0.5 * alpha * (gamma_inv(p, m) * K(m, q) * gamma_inv(q, k) * K(k, p) - trK * (trK - 2 * Theta));
 		return src;
 	}
-	SpaceTime matter_source(tensor0 const &tau, tensor1 const &s, tensorS const &S) {
+	Z4SpaceTime matter_source(tensor0 const &tau, tensor1 const &s, tensorS const &S) {
 		tensorS gamma_inv;
-		SpaceTime src;
+		Z4SpaceTime src;
 		gamma_inv = gamma.inverse();
 		src.alpha = 0;
 		src.beta(i) = 0;
@@ -131,9 +131,9 @@ public:
 };
 
 void testEinstein() {
-	SpaceTime<double> st;
+	Z4SpaceTime<double> st;
 	st.flux(0);
 	st.vacuum_source();
-	st.matter_source(SpaceTime<double>::tensor0(), SpaceTime<double>::tensor1(), SpaceTime<double>::tensorS());
+	st.matter_source(Z4SpaceTime<double>::tensor0(), Z4SpaceTime<double>::tensor1(), Z4SpaceTime<double>::tensorS());
 }
 
