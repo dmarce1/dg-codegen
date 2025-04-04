@@ -13,6 +13,7 @@
 #include "Relativity.hpp"
 #include "Options.hpp"
 #include "Particles.hpp"
+#include "Polynomial.hpp"
 #include "Tensor.hpp"
 
 #include <unordered_map>
@@ -187,7 +188,13 @@ polynomial polynomialReduce(polynomial const &D, sparse_polynomial const &I) {
 
 
 void test() {
-	using namespace Tensors;
+	for(size_t d = 0; d < 5; d++) {
+		Polynomial<double> P;
+		P[d] = 1.0;
+		std::cout << toString(P) << " ";
+		P = polynomialDiscreteAntiDerivative(P, d);
+		std::cout << toString(P) << "\n";
+	}
 	//	auto DD = A(i) * B(j);
 }
 

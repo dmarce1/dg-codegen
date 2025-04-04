@@ -2,15 +2,17 @@
  Copyright (C) 2024  Dominic C. Marcello
  *******************************************************************************/
 #include "ValArray.hpp"
-
+#include <optional>
 #include "Metric.hpp"
 #include "Timer.hpp"
 #include <hpx/hpx_init.hpp>
 #include "Tensor.hpp"
 #include "Interpolate.hpp"
+#include "IndexTuple.hpp"
 #include "Hydrodynamics.hpp"
 #include "LegendreP.hpp"
 #include "Polynomial.hpp"
+#include "Permutation.hpp"
 #include "Real.hpp"
 #include "HydroGrid.hpp"
 #include "Options.hpp"
@@ -347,33 +349,111 @@ void testStrings();
 void testEinstein();
 
 #include <cuda/std/mdspan>
+#include <unordered_set>
+
+template<size_t D, size_t R>
+struct TensorIndexing {
+	using poly_t = double;
+	using index_t = IndexTuple<D, R>;
+	TensorIndexing(std::vector<Permutation<R>> const &permutations, std::vector<bool> anti = std::vector<bool>()) {
+		std::unordered_set<Permutation<R>> antisymmetric;
+
+		for (size_t i = 0; i < anti.size(); i++) {
+			auto const &p = permutations[i];
+			if (anti[i] && (p.parity() < 0)) {
+				antisymmetric.insert(p);
+			}
+		}
+		auto const isAntisymmetric = [&antisymmetric](Permutation<R> const &P) {
+			return antisymmetric.find(P) != antisymmetric.end();
+		};
+
+		auto const isSymmetric = [&antisymmetric](Permutation<R> const &P) {
+			return antisymmetric.find(P) == antisymmetric.end();
+		};
+		auto const inOrder = [&permutations, &isSymmetric](index_t const &indices) {
+			auto const &I = indices;
+			for (const auto &p : permutations) {
+				auto const J = p.apply(I);
+				if (J > I) {
+					return false;
+				}
+			}
+			return true;
+		};
+		for (size_t i = 0; i < R; i++) {
+			std::array<std::array<int, D>, D> forwardDifference;
+			size_t jLast = -1;
+			size_t k = 0;
+			size_t count = 0;
+			index_t indices = index_t::begin();
+			for (; indices != index_t::end(); indices++) {
+				if (indices[i] != jLast) {
+					jLast = indices[i];
+					forwardDifference[0][k++] = count;
+					if (k % D == 0) {
+						break;
+					}
+				}
+				if (inOrder(indices)) {
+					count++;
+				}
+			}
+			for (size_t j = 1; j < D; j++) {
+				for (size_t k = 0; k < D - j; k++) {
+					forwardDifference[j][k] = forwardDifference[j - 1][k + 1] - forwardDifference[j - 1][k];
+				}
+			}
+			for (size_t k = 0; k < D; k++) {
+				for (size_t j = 0; j < D - k; j++) {
+					printf("%i ", forwardDifference[j][k]);
+				}
+				printf("\n");
+			}
+			printf("\n");
+			double q = 1.0;
+			Polynomial<double> xn;
+			xn[0] = 1.0;
+			for (size_t j = 0; j < D; j++) {
+				polynomials[i] += q * xn * forwardDifference[j][0];
+				q /= (j + 1);
+				Polynomial<double> xm;
+				xm[0] = -double(j);
+				xm[1] = 1.0;
+				xn = xn * xm;
+			}
+			std::cout << "rank = " << std::to_string(i) << " " << toString(polynomials[i]) << "\n";
+		}
+
+		for (index_t indices = index_t::begin(); indices != index_t::end(); indices++) {
+			if (inOrder(indices)) {
+				std::cout << toString(indices) << " ";
+				size_t sum = 0;
+				for (size_t r = 0; r < R; r++) {
+					size_t const term = std::round(polynomials[r](indices[r]));
+					std::cout << " + " << std::to_string(term) << " ";
+					sum += term;
+				}
+				std::cout << " = " << sum << "\n";
+			}
+		}
+
+	}
+private:
+
+	std::array<Polynomial<double>, R> polynomials;
+};
 
 int hpx_main(int argc, char *argv[]) {
-	int data[10];
-	cuda::std::mdspan(data, 2, 3);
 	printf("Reading options...\n");
 	processOptions(argc, argv);
-	constexpr int RANK = 3;
-//	Tensors::GeneralTensor<double, NDIM, RANK> A;
-	test();
 	printf("Done.\n");
-//	static constexpr int N1 = 2;
-
-//	static constexpr int N2 = 8;
-//	std::ofstream fOut("kernel.hpp");
-//	std::ostringstream code;
-//	code << "\n";
-//	code << "#pragma once\n\n";
-//	code << "template<typename, int, int = 3> \n";
-//	code << "struct BSpline;\n";
-//	code << "\n";
-//	code << "template<typename, int, int = 3> \n";
-//	code << "struct DerivativeBSpline;\n";
-//	code << "\n" << std::ends;
-//	for (int n = N1; n < N2; n++) {
-//		code << genBSplineFunctor(n, 3);
-//	}
-//	fOut << code.str() << "\n" << std::endl;
+	using namespace Tensors;
+	constexpr size_t D = 3;
+	constexpr size_t R = 2;
+	using symmetry_type = std::pair<int, Permutation<R>>;
+	Tensor<double, D, R, symmetry_type( { 1, { 1, 2 } }), symmetry_type( { 1, { 2, 1 } })> ten;
+	auto test = ten(Index<'a'>(), 2);
 	return hpx::local::finalize();
 }
 

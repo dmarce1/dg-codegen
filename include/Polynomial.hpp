@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "Complex.hpp"
+#include "Numbers.hpp"
 #include "Vector.hpp"
 
 namespace Math {
@@ -131,7 +132,7 @@ struct Polynomial: public std::vector<Type> {
 };
 
 template<typename Type>
-std::string toString(Polynomial<Type> const& P) {
+std::string toString(Polynomial<Type> const &P) {
 	using std::to_string;
 	std::string str;
 	str += "(";
@@ -205,6 +206,17 @@ Polynomial<Type> polynomialAntiDerivative(Polynomial<Type> const &dfdx) {
 	return f;
 }
 
+template<typename Type>
+Polynomial<Type> polynomialDiscreteAntiDerivative(Polynomial<Type> const &P, size_t N) {
+	Polynomial<Type> Q;
+	for (size_t p = 0; p <= P.degree(); p++) {
+		Q[p + 1] += P[p] / Type(p + 1);
+		for (size_t j = 0; j < p; j++) {
+			Q[p - j] -= P[p] * Math::nChooseK<size_t>(p, j) * std::riemann_zeta(-j);
+		}
+	}
+	return Q;
+}
 
 template<typename Type>
 Polynomial<Polynomial<Type>> polynomialAntiDerivative(Polynomial<Polynomial<Type>> const &dfdx) {
@@ -227,7 +239,7 @@ Type polynomialIntegrate(Polynomial<Type> const &f, Type const &a, Type const &b
 template<typename Type>
 Type polynomialFindRoot(Polynomial<Type> const &F, Type guess = 0.5) {
 	constexpr int maxIters = 64;
-	constexpr Type tolerance = Type(100) * std::numeric_limits<Type>::epsilon();
+	constexpr Type tolerance = Type(100) * std::numeric_limits < Type > ::epsilon();
 	auto const dFdx = polynomialDerivative(F);
 	auto const normInv = abs(Type(1) / F.back());
 	Type x = guess;
