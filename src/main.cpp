@@ -452,8 +452,13 @@ int hpx_main(int argc, char *argv[]) {
 	constexpr size_t D = 3;
 	constexpr size_t R = 2;
 	using symmetry_type = std::pair<int, Permutation<R>>;
-	Tensor<double, D, R, symmetry_type( { 1, { 1, 2 } }), symmetry_type( { 1, { 2, 1 } })> ten;
-	auto test = ten(Index<'a'>(), 2);
+	static constexpr Index<'i'> i;
+	static constexpr Index<'j'> j;
+	static constexpr Index<'k'> k;
+	Tensor<double, D, R, symmetry_type( { 1, { 1, 2 } }), symmetry_type( { 1, { 2, 1 } })> A;
+	Tensor<double, D, R, symmetry_type( { 1, { 1, 2 } }), symmetry_type( { 1, { 2, 1 } })> B;
+	Tensor<double, D, R, symmetry_type( { 1, { 1, 2 } }), symmetry_type( { 1, { 2, 1 } })> C;
+	C(i, k) = A(i, j) * B(j, k);
 	return hpx::local::finalize();
 }
 

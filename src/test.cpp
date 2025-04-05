@@ -30,9 +30,6 @@ static std::string readTimers() {
 	return output;
 }
 
-static void resetTimers() {
-	timerDatabase.clear();
-}
 
 static void startTimer(char const *name) {
 	timerDatabase[name].start();

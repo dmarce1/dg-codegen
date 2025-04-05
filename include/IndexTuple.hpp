@@ -19,6 +19,9 @@ struct IndexTuple {
 	constexpr IndexTuple(std::initializer_list<size_t> init) {
 		std::copy(init.begin(), init.end(), indices.begin());
 	}
+	constexpr IndexTuple(std::array<size_t, R> const& init) {
+		std::copy(init.begin(), init.end(), indices.begin());
+	}
 	constexpr IndexTuple& operator++() {
 		size_t k = R;
 		while (++indices[--k] == D) {
@@ -105,6 +108,9 @@ struct IndexTuple {
 		IndexTuple e = begin();
 		e.indices[0] = D;
 		return e;
+	}
+	operator std::array<size_t, R>() const {
+		return indices;
 	}
 private:
 	std::array<size_t, R> indices;

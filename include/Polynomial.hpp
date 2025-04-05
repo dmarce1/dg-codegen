@@ -209,9 +209,9 @@ Polynomial<Type> polynomialAntiDerivative(Polynomial<Type> const &dfdx) {
 template<typename Type>
 Polynomial<Type> polynomialDiscreteAntiDerivative(Polynomial<Type> const &P, size_t N) {
 	Polynomial<Type> Q;
-	for (size_t p = 0; p <= P.degree(); p++) {
+	for (int p = 0; p <= P.degree(); p++) {
 		Q[p + 1] += P[p] / Type(p + 1);
-		for (size_t j = 0; j < p; j++) {
+		for (int j = 0; j < p; j++) {
 			Q[p - j] -= P[p] * Math::nChooseK<size_t>(p, j) * std::riemann_zeta(-j);
 		}
 	}

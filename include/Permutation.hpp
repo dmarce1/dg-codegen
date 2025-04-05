@@ -131,12 +131,18 @@ struct Permutation: public std::array<size_t, N> {
 	}();
 	constexpr Permutation() {
 	}
-	constexpr Permutation(Permutation const &other) :
-			base_type { other.size() } {
+	constexpr Permutation(Permutation const &other) {
 		reinterpret_cast<base_type&>(*this) = other;
 	}
 	constexpr Permutation& operator=(Permutation const &other) {
 		reinterpret_cast<base_type&>(*this) = other;
+		return *this;
+	}
+	constexpr Permutation(Permutation &&other) {
+		reinterpret_cast<base_type&>(*this) = std::move(other);
+	}
+	constexpr Permutation& operator=(Permutation &&other) {
+		reinterpret_cast<base_type&>(*this) = std::move(other);
 		return *this;
 	}
 	template<typename IT>
