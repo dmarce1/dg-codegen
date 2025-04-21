@@ -513,7 +513,6 @@ struct TensorExpression {
 		static constexpr auto tup2 = pruneCharTuple<1, std::tuple<Index<J> ...>, N2, pairs>();
 		static constexpr auto charTuple = std::tuple_cat(tup1, tup2);
 		static constexpr auto S2 = charPack.template concatenatePermutations<R, N, S, R1, N1, S1, J...>();
-		//		static constexpr std::array<SymmetryPermutation<R2>, 1> S2 = { SymmetryPermutation<R2>( { 1, Permutation<R2>::identity }) };
 		return createTensorExpression<decltype(thisHandle), R2, S2.size(), S2>(thisHandle, charTuple);
 	}
 	template<typename AS, typename F1, size_t N1, std::array<SymmetryPermutation<R>, N1> S1, char ...I1>
@@ -589,6 +588,22 @@ inline constexpr auto createTensorExpression(F const &handle, std::tuple<Index<C
 	return TensorExpression<F, T, D, R, N, S, C...>(handle);
 }
 
+template<char...C>
+static consteval size_t contractionCount() {
+	static constexpr size_t N = sizeof...(C);
+	static constexpr std::array<char, N> chars = {C...};
+	size_t count = 0;
+	for( size_t i = 0; i < N; i++) {
+		for( size_t j = 0; j < N; j++) {
+			if(chars[i] == chars[j]) {
+				count++;
+			}
+		}
+	}
+	count -= chars.size();
+	return count >> 1;
+}
+
 template<typename T, size_t D, size_t R, SymmetryPermutation<R> ...S>
 struct Tensor {
 	using value_type = T;
@@ -619,12 +634,12 @@ struct Tensor {
 		}
 	}
 
-	template<char ...I>
+	template<char ...I> requires (contractionCount<I...>() != 0)
 	inline constexpr auto operator()(Index<I> ...) const {
 		return const_char<Tensor const&>(*this).operator()(Index<I>() ...);
 	}
 
-	template<char ...I>
+	template<char ...I> requires (contractionCount<I...>() != 0)
 	inline constexpr auto operator()(Index<I> ...) {
 		auto const handle = [this](auto ...is) {
 			return this->operator()(is...);

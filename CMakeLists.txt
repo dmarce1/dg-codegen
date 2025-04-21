@@ -13,7 +13,6 @@ set(CXX_FLAGS  ${ALL_FLAGS} -march=native )
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
-	src/dag.cpp
 	src/main.cpp
 	src/Einstein.cpp
 	src/Integers.cpp
