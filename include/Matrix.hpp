@@ -1,15 +1,4 @@
-/*
- * Matrix.hpp
- *
- *  Created on: Dec 12, 2024
- *      Author: dmarce1
- */
-
-#ifndef INCLUDE_MATRIX_HPP_
-#define INCLUDE_MATRIX_HPP_
-
-#include "ForwardDeclarations.hpp"
-#include "Utilities.hpp"
+#pragma once
 
 #include <algorithm>
 #include <array>
@@ -356,6 +345,12 @@ struct Matrix<Type, RowCount, 1> {
 	}
 	auto end() {
 		return values.end();
+	}
+	auto* data() {
+		return values.data();
+	}
+	auto const* data() const {
+		return values.data();
 	}
 private:
 	std::array<Type, size()> values;
@@ -1107,7 +1102,3 @@ SymmetricMatrix<T, 4> minkowskiMetric() {
 }
 
 }
-
-#include "Numbers.hpp"
-
-#endif /* INCLUDE_MATRIX_HPP_ */

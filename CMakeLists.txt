@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.18)
 
 project(astrotiger CXX CUDA)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 find_package(HDF5 REQUIRED COMPONENTS C CXX)
 find_package(HPX REQUIRED)
 
@@ -14,67 +18,23 @@ set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
 	src/main.cpp
-	src/Einstein.cpp
-	src/Integers.cpp
 	src/Options.cpp
-	src/Radiation.cpp
-	src/Sod.cpp
-	src/test.cpp
 ) 
 
 set(astrotiger_header
-	include/Complex.hpp
-	include/Constants.hpp
-	include/ForwardDeclarations.hpp
-	include/Grid.hpp
-	include/GridAttributes.hpp
-	include/Hydrodynamics.hpp
+	include/Basis.hpp
+	include/EulerState.hpp
+	include/Hdf5.hpp
+	include/HyperGrid.hpp
+	include/IndexTuple.hpp
 	include/HydroGrid.hpp
-	include/GRGrid.hpp
-	include/Kernels.hpp
-	include/Integrate.hpp
-	include/Interpolate.hpp
-	include/Interval.hpp
-	include/LegendreP.hpp
-	include/Limiters.hpp
-	include/LinearGravity.hpp
 	include/Matrix.hpp
-	include/Numbers.hpp
 	include/Options.hpp
-	include/Particles.hpp
-	include/Polynomial.hpp
-	include/Quadrature.hpp
-	include/Radiation.hpp
-	include/Real.hpp
-	include/Relativity.hpp
-	include/Spacetime.hpp
-	include/Tensor.hpp
-	include/Timer.hpp
-	include/Root.hpp
 	include/RungeKutta.hpp
-	include/Sod.hpp
-	include/SparseMatrix.hpp
-	include/Tensor.hpp
-	include/TriangularArray.hpp
-	include/Utilities.hpp
-	include/ValArray.hpp
 	include/Vector.hpp
-	include/Spacetime.hpp
+	include/Zobrist.hpp
 ) 
 
-
-#add_executable(CodeGenTool src/CodeGen.cpp)
-#target_compile_options(CodeGenTool PUBLIC -DNDIM=3)
-
-#add_custom_command(
-#  OUTPUT ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
-#  COMMAND $<TARGET_FILE:CodeGenTool> > ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp
-#  DEPENDS $<TARGET_FILE:CodeGenTool>
-#  COMMENT "Running code generator to create Spacetime.hpp..."
-#  VERBATIM
-#)
-
-#add_custom_target(CodeGenTarget ALL DEPENDS ${PROJECT_SOURCE_DIR}/include/Spacetime.hpp)
 
 add_hpx_executable(
   astrotiger
@@ -88,6 +48,8 @@ add_hpx_executable(
 )
 set_property(TARGET astrotiger PROPERTY CUDA_ARCHITECTURES native)
 set_property(TARGET astrotiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+
+target_link_libraries(astrotiger PRIVATE HDF5::HDF5)
 
 target_link_options(
 	astrotiger

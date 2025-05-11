@@ -12,7 +12,6 @@
 #include <cstddef>
 
 #include "Matrix.hpp"
-#include "Utilities.hpp"
 #include "Zobrist.hpp"
 
 namespace Math {

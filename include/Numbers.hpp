@@ -66,7 +66,7 @@ constexpr T negativeOne2Power(int k) {
 }
 
 template<typename T>
-constexpr T nChooseK(int n, int k) {
+constexpr T binCo(int n, int k) {
 	static constexpr T one = T(1);
 	T num = one;
 	T den = one;
@@ -76,6 +76,7 @@ constexpr T nChooseK(int n, int k) {
 	}
 	return num / den;
 }
+
 
 template<typename T>
 constexpr T nFactorial(int n) {
