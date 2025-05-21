@@ -2,6 +2,7 @@
 
 #include "Basis.hpp"
 #include "ContainerArithmetic.hpp"
+#include "Hdf5.hpp"
 #include "Quadrature.hpp"
 
 #include <numeric>
@@ -29,6 +30,7 @@ class HyperGrid {
 	static constexpr int H3 = ipow(H, D);
 	static constexpr int N3 = ipow(N, D);
 	static constexpr Range<int, D> oBox { repeat<D>(-BW), repeat<D>(Span + BW) };
+	using quad_type = Quadrature<T, P, D>;
 	std::vector<std::array<std::array<std::array<T, N3>, P3>, NF>> k_;
 	std::vector<std::array<std::array<T, N3>, P3>> U_;
 	std::vector<std::array<std::array<T, N3>, P3>> Un_;
@@ -42,10 +44,9 @@ public:
 			U_(NF), dx(xSpan / T(Span)), dxinv(T(Span) / xSpan) {
 	}
 	void initialize(std::function<State(std::array<T, D> const&)> const &f) {
-		using quad_type = Quadrature<GaussLegendreQuadrature<T, P>, D>;
-		constexpr Range<int, D> iBox { repeat<D>(0), repeat<D>(N) };
+		constexpr Range<int, D> iBox { repeat<D>(0), repeat<D>(Span) };
 		constexpr int NH = quad_type::size();
-		quad_type const quadrature;
+		constexpr quad_type quadrature;
 		constexpr Basis<T, P, D> basis;
 		using index_type = MultiIndex<oBox, iBox>;
 		T const hdx = T(0.5) * dx;
@@ -61,6 +62,9 @@ public:
 						x[d] = (T(2 * I[d] + 1) + x0[d]) * hdx;
 					}
 					auto const dU = w * phi[pi] * f(x);
+					if (pi == 0) {
+						printf("%e\n", dU[0]);
+					}
 					for (int fi = 0; fi < NF; fi++) {
 						U_[fi][pi][ii] += dU[fi];
 					}
@@ -68,8 +72,41 @@ public:
 			}
 		}
 	}
+	void output(const char *nameBase, int i, T const &t) {
+		std::string filename = std::string(nameBase) + "." + std::to_string(i) + ".h5";
+		writeHdf5<T, D, Span, P, BW>(filename, dx, U_, State::getFieldNames());
+	}
+	void enforceBoundaryConditions() {
+		constexpr Range<int, D> ghostBox { repeat<D>(-BW), repeat<D>(Span + BW) };
+		using index_type = MultiIndex<oBox>;
+		for (auto I = index_type::begin(); I != index_type::end(); ++I) {
+			std::array<int, D> clamped { };
+			bool isGhost = false;
+			for (int d = 0; d < D; ++d) {
+				int xi = I[d];
+				if (xi < 0) {
+					isGhost = true;
+					xi = 0;
+				} else if (xi >= Span) {
+					isGhost = true;
+					xi = Span - 1;
+				}
+				clamped[d] = xi;
+			}
+			if (!isGhost) {
+				continue;
+			}
+			index_type J0 { clamped };
+			auto interiorIdx = int(J0);
+			auto ghostIdx = int(I);
+			for (int fi = 0; fi < NF; ++fi) {
+				for (int pi = 0; pi < P3; ++pi) {
+					U_[fi][pi][ghostIdx] = U_[fi][pi][interiorIdx];
+				}
+			}
+		}
+	}
 	T beginStep() {
-		using quad_type = Quadrature<GaussLegendreQuadrature<T, P>, D>;
 		constexpr Range<int, D> iBox { repeat<D>(0), repeat<D>(N) };
 		constexpr int NH = quad_type::size();
 		const quad_type quadrature;
@@ -204,7 +241,7 @@ public:
 	template<int DIM>
 	std::vector<std::array<T, N3>> computeFlux() const {
 		static_assert(DIM < D);
-		using quad_type = Quadrature<GaussLegendreQuadrature<T, P>, D - 1>;
+		using quad_type = Quadrature<T, P, D - 1>;
 		using index_type = quad_type::index_type;
 		quad_type const quadrature;
 		constexpr int NH = quad_type::size();
@@ -257,7 +294,6 @@ public:
 		(applyFluxByDim<DIM>(fi, lambda, dUdt), ...);
 	}
 	std::vector<std::array<std::array<T, N3>, P3>> computeSource() const {
-		using quad_type = Quadrature<GaussLegendreQuadrature<T, P>, D>;
 		using index_type = quad_type::index_type;
 		quad_type const quadrature;
 		constexpr int NH = quad_type::size();
