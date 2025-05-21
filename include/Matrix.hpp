@@ -76,8 +76,11 @@ struct Matrix {
 			}
 		}
 	}
-	Matrix(std::initializer_list<Type> initList) :
-			values(initList) {
+	Matrix(std::initializer_list<Type> initList) {
+		int i = 0;
+		for (auto const &v : initList) {
+			values[i++] = v;
+		}
 	}
 	Matrix(std::initializer_list<std::initializer_list<Type>> init) {
 		int i = 0;

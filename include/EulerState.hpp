@@ -16,16 +16,25 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 	static constexpr T half = T(0.5);
 	static constexpr T one = T(1);
 	static constexpr T gamma = G;
-	static constexpr T igamma = one / gamma;
 	static constexpr T gamm1 = gamma - one;
+	static constexpr T igamma = one / gamma;
+	static constexpr T igamm1 = one / gamm1;
 	static constexpr T des1 = T(1e-1);
 	static constexpr T des2 = T(1e-3);
-	using base_type = Math::Vector<T, 3 + D>;
-	using eigensys_type = std::pair<std::array<T, 3 + D>, Math::SquareMatrix<T, 3 + D>>;
+	static constexpr int NF = 3 + D;
+	using value_type = T;
+	using base_type = Math::Vector<T, NF>;
+	using eigensys_type = std::pair<std::array<T, NF>, Math::SquareMatrix<T, NF>>;
+	static constexpr int dimCount() noexcept {
+		return D;
+	}
 	static constexpr int fieldCount() noexcept {
-		return 3 + D;
+		return NF;
 	}
 	constexpr EulerState() EULERS_CONSTRUCTION {
+	}
+	constexpr EulerState(base_type const &other) EULERS_CONSTRUCTION {
+		((base_type&)(*this)).operator=(other);
 	}
 	constexpr EulerState(EulerState const &other) EULERS_CONSTRUCTION {
 		*this = other;
@@ -46,6 +55,20 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 		static_cast<base_type&>(*this) = std::move(static_cast<base_type&&>(other));
 		return *this;
 	}
+	constexpr std::array<T, NF> eigenValues(int dim) const {
+		std::array<T, NF> lambda;
+		T const irho = one / rho;
+		T const v = S[dim] * irho;
+		T const ek = half * irho * Math::vectorDotProduct(S, S);
+		T const ei = ((eg - ek) > des2 * eg) ? (eg - ek) : std::pow(tau, gamma);
+		T const p = gamm1 * ei * rho;
+		T const a = std::sqrt(gamma * p * irho);
+		std::fill(lambda.begin(), lambda.end(), v);
+		lambda[NF - 2] += a;
+		lambda[NF - 1] -= a;
+		return lambda;
+
+	}
 	constexpr eigensys_type eigenSystem(int dim) const {
 		eigensys_type rc { {zero}, {zero}};
 		auto& lambda = rc.first;
@@ -64,22 +87,22 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 		lambda[D + 0] -= a;
 		lambda[D + 1] += a;
 		for( int d = 0; d < D; d++) {
-			R[d][D + 0] = v[d];
-			R[d][D + 1] = v[d];
+			R[d, D + 0] = v[d];
+			R[d, D + 1] = v[d];
 		}
 		for( int d = 0; d < D; d++) {
-			R[d][d] = one;
+			R[d, d] = one;
 		}
-		R[dim][D + 0] -= a;
-		R[dim][D + 1] += a;
-		R[D + 0][D + 0] = one;
-		R[D + 0][D + 1] = one;
-		R[D + 1][D + 0] = h - u * a;
-		R[D + 1][D + 1] = h + u * a;
+		R[dim, D + 0] -= a;
+		R[dim, D + 1] += a;
+		R[D + 0, D + 0] = one;
+		R[D + 0, D + 1] = one;
+		R[D + 1, D + 0] = h - u * a;
+		R[D + 1, D + 1] = h + u * a;
 		for( int i = 0; i < D; i++) {
-			R[D + 1][i] = v[i];
+			R[D + 1, i] = v[i];
 		}
-		R[D + 2][D + 2] = one;
+		R[D + 2, D + 2] = one;
 		return rc;
 	}
 	constexpr EulerState flux(int d) const noexcept {
@@ -87,7 +110,7 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 		T const irho = one / rho;
 		auto const v = S * irho;
 		T const ek = half * Math::vectorDotProduct(v, S);
-		T const ei = ((eg - ek) < des2 * eg) ? (eg - ek) : std::pow(tau, gamma);
+		T const ei = ((eg - ek) > des2 * eg) ? (eg - ek) : std::pow(tau, gamma);
 		T const p = gamm1 * ei;
 		T const u = v[d];
 		F.rho = S[d];
@@ -97,7 +120,7 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 		F.S[d] += p;
 		return F;
 	}
-	constexpr void syncEntropy() noexcept {
+	constexpr void normalize() noexcept {
 		T const irho = one / rho;
 		auto const v = S * irho;
 		T const ekin = half * Math::vectorDotProduct(v, S);
@@ -107,12 +130,16 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 		}
 	}
 	constexpr EulerState toCharacteristic(int dim) const {
-		return EulerState {matrixInverse(eigenSystem(dim).second) * (base_type const&)(*this)};
+		auto const [_, A] = eigenSystem(dim);
+		auto const v = (base_type const&)(*this);
+		return EulerState {matrixInverse(A) * v};
 	}
 	constexpr EulerState fromCharacteristic(int dim) const {
-		return EulerState {eigenSystem(dim).second * (base_type const&)(*this)};
+		auto const [_, A] = eigenSystem(dim);
+		auto const v = (base_type const&)(*this);
+		return EulerState {A * v};
 	}
-	friend constexpr EulerState riemann(const EulerState &uL, const EulerState &uR, int d) noexcept {
+	friend constexpr EulerState solveRiemannProblem(const EulerState &uL, const EulerState &uR, int d) noexcept {
 		using state_type = EulerState;
 		T const irhoL = one / uL.rho;
 		T const irhoR = one / uR.rho;
@@ -120,8 +147,8 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 		T const vR = uR.S[d] * irhoR;
 		T const ekL = half * irhoL * Math::vectorDotProduct(uL.S, uL.S);
 		T const ekR = half * irhoR * Math::vectorDotProduct(uR.S, uR.S);
-		T const eiL = ((uL.eg - ekL) < des2 * uL.eg) ? (uL.eg - ekL) : std::pow(uL.tau, gamma);
-		T const eiR = ((uR.eg - ekR) < des2 * uR.eg) ? (uR.eg - ekR) : std::pow(uR.tau, gamma);
+		T const eiL = ((uL.eg - ekL) > des2 * uL.eg) ? (uL.eg - ekL) : std::pow(uL.tau, gamma);
+		T const eiR = ((uR.eg - ekR) > des2 * uR.eg) ? (uR.eg - ekR) : std::pow(uR.tau, gamma);
 		T const pL = gamm1 * eiL * uL.rho;
 		T const pR = gamm1 * eiR * uR.rho;
 		T const aL = std::sqrt(gamma * pL * irhoL);
@@ -213,7 +240,7 @@ private:
 };
 
 template<typename T, int D>
-EulerState<T, D> initSodShockTube(Math::Vector<T, D> x) {
+EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	/*********************************************************/
 	static constexpr T rhoL = T(1.0);
 	static constexpr T pL = T(1.0);

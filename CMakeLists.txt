@@ -2,10 +2,6 @@ cmake_minimum_required(VERSION 3.18)
 
 project(astrotiger CXX CUDA)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 find_package(HDF5 REQUIRED COMPONENTS C CXX)
 find_package(HPX REQUIRED)
 
@@ -13,24 +9,32 @@ set(AT_PORDER "2" CACHE STRING "Sets order of spatial discretization")
 set(AT_CHECK_REALS "1" CACHE STRING "Whether to check Real number operations for errors.")
 
 set(ALL_FLAGS  -Wall -Wno-comma-subscript -I${PROJECT_SOURCE_DIR}/include -DNDIM=3 -DDIM4=4 -DCHECK_REALS=${AT_CHECK_REALS} -DPORDER=${AT_PORDER})
-set(CXX_FLAGS  ${ALL_FLAGS} -march=native )
+set(CXX_FLAGS  ${ALL_FLAGS} -std=c++23 -march=native )
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native )
 
 set(astrotiger_src
 	src/main.cpp
 	src/Options.cpp
+	src/Util.cpp
 ) 
 
 set(astrotiger_header
+	include/Array.hpp
 	include/Basis.hpp
+	include/ContainerArithmetic.hpp
 	include/EulerState.hpp
 	include/Hdf5.hpp
 	include/HyperGrid.hpp
-	include/IndexTuple.hpp
 	include/HydroGrid.hpp
+	include/Legendre.hpp
 	include/Matrix.hpp
+	include/MultiIndex.hpp
+	include/Octant.hpp
 	include/Options.hpp
+	include/Quadrature.hpp
+	include/Range.hpp
 	include/RungeKutta.hpp
+	include/Util.hpp
 	include/Vector.hpp
 	include/Zobrist.hpp
 ) 
@@ -65,7 +69,7 @@ target_link_options(
 target_compile_options(
     astrotiger
     PUBLIC
-        $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS}>>
+        $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} >>
         $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CUDA>:-G ${CUDA_FLAGS}>>
         
         $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:-DNDEBUG -Ofast ${CXX_FLAGS}>>

@@ -1,74 +1,186 @@
-/*
- * RungeKutta.hpp
- *
- *  Created on: Jan 25, 2025
- *      Author: dmarce1
- */
+#pragma once
 
-#ifndef INCLUDE_RUNGEKUTTA_HPP_
-#define INCLUDE_RUNGEKUTTA_HPP_
+#include "Matrix.hpp"
+#include "Polynomial.hpp"
+#include "Vector.hpp"
 
-template<typename T, int O>
+template<typename T>
+struct RK_1_1 {
+	constexpr RK_1_1() :
+			a_( { { T(0) } }), b_( { T(1) }), c_( { T(0) }) {
+	}
+	T a(int i, int j) const {
+		return a_[i, j];
+	}
+	T b(int k) const {
+		return b_[k];
+	}
+	T c(int k) const {
+		return c_[k];
+	}
+	static constexpr int stageCount() {
+		return 1;
+	}
+	static constexpr T cfl() {
+		return T(1);
+	}
+private:
+	Math::SquareMatrix<T, 1> a_;
+	Math::Vector<T, 1> b_;
+	Math::Vector<T, 1> c_;
+};
+
+template<typename T>
+struct RK_2_2 {
+	constexpr RK_2_2() :
+			a_( { { T(0), T(0) }, { T(1), T(0) } }), b_( { T(0.5), T(0.5) }), c_( { T(0), T(1) }) {
+	}
+	T a(int i, int j) const {
+		return a_[i, j];
+	}
+	T b(int k) const {
+		return b_[k];
+	}
+	T c(int k) const {
+		return c_[k];
+	}
+	static constexpr int stageCount() {
+		return 2;
+	}
+	static constexpr T cfl() {
+		return T(1);
+	}
+private:
+	Math::SquareMatrix<T, 2> a_;
+	Math::Vector<T, 2> b_;
+	Math::Vector<T, 2> c_;
+};
+
+template<typename T>
+struct RK_3_3 {
+	constexpr RK_3_3() :
+			a_( { { T(0), T(0), T(0) }, { T(1), T(0), T(0) }, { T(0.25), T(0.25), T(0) } }), b_( { T(1) / T(6), T(1) / T(6), T(2) / T(3) }), c_( { T(0), T(1),
+					T(0.5) }) {
+	}
+	T a(int i, int j) const {
+		return a_[i, j];
+	}
+	T b(int k) const {
+		return b_[k];
+	}
+	T c(int k) const {
+		return c_[k];
+	}
+	static constexpr int stageCount() {
+		return 3;
+	}
+	static constexpr T cfl() {
+		return T(1);
+	}
+private:
+	Math::SquareMatrix<T, 3> a_;
+	Math::Vector<T, 3> b_;
+	Math::Vector<T, 3> c_;
+};
+
+template<typename T>
+struct RK_10_4 {
+	static constexpr T c0 = T(0);
+	static constexpr T c1 = T(1) / T(15);
+	static constexpr T c2 = T(1) / T(6);
+	constexpr RK_10_4() :
+			a_( { { c0, c0, c0, c0, c0, c0, c0, c0, c0, c0 }, { c2, c0, c0, c0, c0, c0, c0, c0, c0, c0 }, { c2, c2, c0, c0, c0, c0, c0, c0, c0, c0 }, { c2, c2,
+					c2, c0, c0, c0, c0, c0, c0, c0 }, { c2, c2, c2, c2, c0, c0, c0, c0, c0, c0 }, { c1, c1, c1, c1, c1, c0, c0, c0, c0, c0 }, { c1, c1, c1, c1,
+					c1, c2, c0, c0, c0, c0 }, { c1, c1, c1, c1, c1, c2, c2, c0, c0, c0 }, { c1, c1, c1, c1, c1, c2, c2, c2, c0, c0 }, { c1, c1, c1, c1, c1, c2,
+					c2, c2, c2, c0 } }), b_( { T(.1), T(.1), T(.1), T(.1), T(.1), T(.1), T(.1), T(.1), T(.1), T(.1) }), c_(
+					{ T(0), T(1) / T(6), T(1) / T(3), T(1) / T(2), T(2) / T(3), T(1) / T(3), T(1) / T(2), T(2) / T(3), T(5) / T(6), T(1) }) {
+	}
+	T a(int i, int j) const {
+		return a_[i, j];
+	}
+	T b(int k) const {
+		return b_[k];
+	}
+	T c(int k) const {
+		return c_[k];
+	}
+	static constexpr int stageCount() {
+		return 10;
+	}
+	static constexpr T cfl() {
+		return T(6);
+	}
+private:
+	Math::SquareMatrix<T, 10> a_;
+	Math::Vector<T, 10> b_;
+	Math::Vector<T, 10> c_;
+};
+
+template<typename T, int>
 struct RungeKutta;
 
 template<typename T>
 struct RungeKutta<T, 1> {
-	static constexpr int s = 1;
-	static constexpr std::array<T, s> a = { { } };
-	static constexpr std::array<T, s> b = { T(1.00000000000000) };
-	static constexpr std::array<T, s> c = { T(0.00000000000000) };
+	using type = RK_1_1<T>;
 };
 
 template<typename T>
 struct RungeKutta<T, 2> {
-	static constexpr int s = 2;
-	static constexpr std::array<T, s> a = { { }, //
-			{ T(1.00000000000000) } //
-	};
-	static constexpr std::array<T, s> b = { T(0.50000000000000), T(0.50000000000000) };
-	static constexpr std::array<T, s> c = { T(0.00000000000000), T(1.00000000000000) };
+	using type = RK_2_2<T>;
 };
 
 template<typename T>
 struct RungeKutta<T, 3> {
-	static constexpr int s = 3;
-	static constexpr std::array<T, s> a = { { }, //
-			{ T(1.00000000000000) }, //
-			{ T(0.25000000000000), T(0.25000000000000) } }; //
-	static constexpr std::array<T, s> b = { T(0.16666666666667), T(0.16666666666667), T(0.66666666666667) }; //
-	static constexpr std::array<T, s> c = { T(0.00000000000000), T(1.00000000000000), T(0.50000000000000) };
+	using type = RK_3_3<T>;
 };
 
 template<typename T>
 struct RungeKutta<T, 4> {
-	static constexpr int s = 5;
-	static constexpr std::array<T, s> a = { { }, //
-			{ T(0.39175222700392) }, //
-			{ T(0.21766909633821), T(0.36841059262959) }, //
-			{ T(0.08269208670950), T(0.13995850206999), T(0.25189177424738) }, //
-			{ T(0.06796628370320), T(0.11503469844438), T(0.20703489864929), T(0.50000000000000) } //
-	};
-	static constexpr std::array<T, s> b = { T(0.14681187618661), T(0.24848290924556), T(0.10425883036650), T(0.27443890091960), T(0.22600748319395) };
-	static constexpr std::array<T, s> c = { T(0.00000000000000), T(0.39175222700392), T(0.58607968896779), T(0.47454236302687), T(0.93501063100924) };
+	using type = RK_10_4<T>;
 };
 
-template<typename T>
-struct RungeKutta<T, 5> {
-	static constexpr int s = 7;
-	static constexpr std::array<T, s> a = { { }, //
-			{ T(+0.392382208054010) }, //
-			{ T(+0.310348765296963), T(+0.523846724909595) }, //
-			{ T(+0.114817342432177), T(+0.248293597111781), T(+0.000000000000000) }, //
-			{ T(+0.136041285050893), T(+0.163250087363657), T(+0.000000000000000), T(+0.557898557725281) }, //
-			{ T(+0.135252145083336), T(+0.207274083097540), T(-0.180995372278096), T(+0.326486467604174), T(+0.348595427190109) }, //
-			{ T(+0.082675687408986), T(+0.146472328858960), T(-0.160507707995237), T(+0.161924299217425), T(+0.028864227879979), T(+0.070259587451358) }  //
-	};
-	static constexpr std::array<T, s> b = //
-			{ T(+0.110184169931401), T(+0.122082833871843), T(-0.117309105328437), T(+0.169714358772186), T(+0.143346980044187), T(+0.348926696469455), T(
-					+0.223054066239366) }; //
-	static constexpr std::array<T, s> c = //
-			{ T(+0.000000000000000), T(+0.392382208054010), T(+0.310348765296963), T(+0.523846724909595), T(+0.114817342432177), T(+0.248293597111781), T(
-					+0.557898557725281) }; //
-};
+template<typename T, typename RK>
+Math::Polynomial<T> rungeKuttaStabilityPolynomial() {
+	static const RK rk { };
+	static constexpr int S = rk.stageCount();
+	Math::Polynomial<T> R;
+	Math::Vector<Math::Polynomial<T>, S> w;
+	Math::Polynomial<T> z;
+	z[1] = T(1);
+	for (int i = 0; i < S; i++) {
+		for (int j = 0; j < i; j++) {
+			w[i] += rk.a(i, j) * w[j];
+		}
+		w[i] *= z;
+		w[i] += T(1);
+	}
+	for (int k = 0; k < S; k++) {
+		R += rk.b(k) * w[k];
+	}
+	R *= z;
+	R += T(1);
+	return R;
+}
 
-#endif /* INCLUDE_RUNGEKUTTA_HPP_ */
+template<typename T, typename RK>
+T rungeKuttaStabilityRadius() {
+	static const RK rk { };
+	auto const R = rungeKuttaStabilityPolynomial<T, RK>();
+	auto g = [R](T const &x) {
+		return std::abs(R(-x)) - T(1);
+	};
+	T x1 = T(0);
+	T x2 = T(2);
+	while (g(x2) <= T(0)) {
+		x2 *= T(2);
+	}
+	for (int iter = 0; iter < 64; ++iter) {
+		T xm = (x1 + x2) * T(0.5);
+		if (g(xm) <= T(0)) {
+			x1 = xm;
+		} else {
+			x2 = xm;
+		}
+	}
+	return x1;
+}
