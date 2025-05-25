@@ -16,18 +16,17 @@
 #include <TriIndex.hpp>
 
 #include "Matrix.hpp"
-#include "Vector.hpp"
 #include "Util.hpp"
 
 template<typename T, int D, int N, int P, int BW>
-void writeHdf5(std::string filename, T const &h, std::vector<std::array<std::array<T, ipow(N + 2 * BW, D)>, TriIndex<P, D>::size()>> const &fieldData,
+void writeHdf5(std::string filename, T const &h, std::vector<std::array<std::array<T, ipow(N + 2 * BW, D)>, BasisIndexType<P, D>::count()>> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
 	constexpr Range<int, D> Box { repeat<D>(-BW), repeat<D>(N + BW) };
 	using hindex_t = MultiIndex<Box>;
 	hid_t file_id;
 	file_id = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 	constexpr int M = N + 2 * BW + 1;
-	std::array<T*, D> coordArrays;
+	std::array<double*, D> coordArrays;
 	std::array<hsize_t, D> dims;
 	int N3;
 	for (int d = 0; d < D; d++) {
@@ -38,17 +37,17 @@ void writeHdf5(std::string filename, T const &h, std::vector<std::array<std::arr
 		N3 *= dims[d];
 	}
 	for (int d = 0; d < D; d++) {
-		coordArrays[d] = (T*) malloc(N3 * sizeof(T));
+		coordArrays[d] = (double*) malloc(N3 * sizeof(T));
 		for (auto I = hindex_t::begin(); I != hindex_t::end(); I++) {
 			coordArrays[d][I] = I[d] * h;
 		}
 	}
-	std::string coordNames[NDIM];
+	std::string coordNames[D];
 	for (int d = 0; d < D; d++) {
 		coordNames[d] = std::string(1, 'x' + d);
 	}
 	hid_t dataset_id, dataspace_id;
-	auto const H5T_data_type = std::is_same<T, double>::value ? H5T_NATIVE_DOUBLE : H5T_NATIVE_FLOAT;
+	auto const H5T_data_type = (sizeof(T) == sizeof(double)) ? H5T_NATIVE_DOUBLE : H5T_NATIVE_FLOAT;
 	for (int d = 0; d < D; ++d) {
 		dataspace_id = H5Screate_simple(D, dims.data(), NULL);
 		dataset_id = H5Dcreate(file_id, coordNames[d].c_str(), H5T_data_type, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -63,7 +62,7 @@ void writeHdf5(std::string filename, T const &h, std::vector<std::array<std::arr
 	for (int d = 0; d < D; d++) {
 		N3 *= dims[d];
 	}
-	using index_type = TriIndex<P, D>;
+	using index_type = BasisIndexType<P, D>;
 	int const nf = fieldNames.size();
 	std::vector<T> buffer(N3);
 	for (int fi = 0; fi < nf; fi++) {
@@ -88,8 +87,8 @@ void writeHdf5(std::string filename, T const &h, std::vector<std::array<std::arr
 	if (!xmfFile) {
 		throw std::runtime_error("Unable to open XDMF file \"" + xFilename + "\" for writing");
 	}
-	std::string const precision = std::is_same<T, double>::value ? "8" : "4";
-	std::string const dataType = std::is_same<T, double>::value ? "double" : "float";
+	std::string const precision =  (sizeof(T) == sizeof(double)) ? "8" : "4";
+	std::string const dataType =  (sizeof(T) == sizeof(double)) ? "double" : "float";
 	std::string const topology = std::to_string(D) + "DCoRectMesh";
 	std::string cDimensions, nDimensions, geometry = "ORIGIN_";
 	for (int d = 0; d < D; d++) {

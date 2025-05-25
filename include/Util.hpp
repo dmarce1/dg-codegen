@@ -1,11 +1,19 @@
 #pragma once
 
 #include <array>
+#include <cmath>
+#include <string>
 
-#include "Vector.hpp"
+namespace Math {
+using std::abs;
+using std::copysign;
+using std::max;
+using std::min;
+}
 
 void enableFPE();
 void disableFPE();
+bool writeList(std::string const&, std::string const&, std::string const&);
 
 template<int N, typename T>
 inline constexpr auto repeat(T const &value) {
@@ -35,8 +43,10 @@ inline constexpr T ipow(T x, int n) {
 			if (n & 1) {
 				xn *= xm;
 			}
-			xm *= xm;
 			n >>= 1;
+			if (n) {
+				xm *= xm;
+			}
 		}
 		return xn;
 	} else {
@@ -89,10 +99,18 @@ inline constexpr int nonepow(int k) {
 }
 
 template<typename T, int D>
-inline constexpr std::array<T, D> unit(int d) {
+inline constexpr std::array<T, D> zero() {
 	std::array<T, D> u;
 	u.fill(T(0));
-	u[d] = T(1);
 	return u;
 }
+
+template<int D>
+inline constexpr std::array<int, D> unit(int d) {
+	auto u = zero<int, D>();
+	u[d] = 1;
+	return u;
+}
+
+void installFpeHandler();
 

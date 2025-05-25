@@ -1,30 +1,20 @@
 #pragma once
 
-#include "Vector.hpp"
 #include <array>
 #include <cmath>
 
-#define EULERS_CONSTRUCTION       :                    \
-	rho(*((T*) (base_type::data() + 0))),              \
-	eg(*((T*) (base_type::data() + 1))),               \
-	tau(*((T*) (base_type::data() + 2))),              \
-	S(*((Math::Vector<T, D>*) (base_type::data() + 3)))
+#define EULERS_CONSTRUCTION : \
+	rho(*std::launder(reinterpret_cast<T*>(base_type::data() + 0))), \
+	eg (*std::launder(reinterpret_cast<T*>(base_type::data() + 1))), \
+	S  (*std::launder(reinterpret_cast<std::array<T, D>*>(base_type::data() + 2)))
 
-template<typename T, int D, T G = 5.0 / 3.0>
-struct EulerState: public Math::Vector<T, 3 + D> {
-	static constexpr T zero = T(0);
-	static constexpr T half = T(0.5);
-	static constexpr T one = T(1);
+template<typename T, int D, T G = T(5.0 / 3.0)>
+struct EulerState: public std::array<T, 2 + D> {
+	static constexpr int NF = 2 + D;
+	using base_type = std::array<T, NF>;
 	static constexpr T gamma = G;
-	static constexpr T gamm1 = gamma - one;
-	static constexpr T igamma = one / gamma;
-	static constexpr T igamm1 = one / gamm1;
-	static constexpr T des1 = T(1e-1);
-	static constexpr T des2 = T(1e-3);
-	static constexpr int NF = 3 + D;
 	using value_type = T;
-	using base_type = Math::Vector<T, NF>;
-	using eigensys_type = std::pair<std::array<T, NF>, Math::SquareMatrix<T, NF>>;
+	using eigensys_type = std::pair<std::array<T, NF>, SquareMatrix<T, NF>>;
 	static constexpr int dimCount() noexcept {
 		return D;
 	}
@@ -55,137 +45,143 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 		static_cast<base_type&>(*this) = std::move(static_cast<base_type&&>(other));
 		return *this;
 	}
-	constexpr std::array<T, NF> eigenValues(int dim) const {
+	constexpr std::array<T, NF> eigenvalues(int dim) const {
 		std::array<T, NF> lambda;
-		T const irho = one / rho;
+		using std::sqrt;
+		T const irho = T(1) / rho;
 		T const v = S[dim] * irho;
-		T const ek = half * irho * Math::vectorDotProduct(S, S);
-		T const ei = ((eg - ek) > des2 * eg) ? (eg - ek) : std::pow(tau, gamma);
-		T const p = gamm1 * ei * rho;
-		T const a = std::sqrt(gamma * p * irho);
+		T const ek = T(0.5) * irho * dot(S, S);
+		T const ei = std::max(eg - ek, T(0));
+		T const p = (gamma - T(1)) * ei;
+		T const a = sqrt(gamma * p * irho);
 		std::fill(lambda.begin(), lambda.end(), v);
-		lambda[NF - 2] += a;
-		lambda[NF - 1] -= a;
+		lambda.front() -= a;
+		lambda.back() += a;
 		return lambda;
 
 	}
 	constexpr eigensys_type eigenSystem(int dim) const {
-		eigensys_type rc { {zero}, {zero}};
-		auto& lambda = rc.first;
-		auto& R = rc.second;
-		T const irho = one / rho;
-		auto const v = S * irho;
-		T const ek = half * Math::vectorDotProduct(v, S);
-		T const ei = ((eg - ek) < des2 * eg) ? (eg - ek) : std::pow(tau, gamma);
-		T const p = gamm1 * ei;
-		T const a = std::sqrt(gamma * p * irho);
-		T const h = (ei + p) * irho;
-		T const u = v[dim];
-		for( int d = 0; d < D + 3; d++) {
-			lambda[d] = u;
+		eigensys_type rc;
+		using std::sqrt;
+
+		auto& λ = rc.first;     // eigenvalues
+		auto& R = rc.second;// right‐eigenvector matrix (NF×NF)
+		std::fill(R.begin(), R.end(), T(0));
+
+		// primitive variables
+		T const invρ = T(1)/rho;
+		auto const v = S * invρ;// velocity vector
+		T ke = T(0);
+		for(int d = 0; d < D; ++d)
+		ke += T(0.5)*v[d]*S[d];
+		T const ei = std::max(T(0), eg - ke);
+		T const p = (gamma - T(1))*ei;
+		T const c = sqrt(gamma*p*invρ);
+		T const h = (eg + p)*invρ;
+		T const u_n = v[dim];// normal velocity
+
+		// fill eigenvalues: [u-c, u, …, u, u+c]
+		for(int i = 0; i < NF; ++i) λ[i] = u_n;
+		λ[0] = u_n - c;
+		λ[NF-1] = u_n + c;
+
+		int col = 0;
+
+		// 1) slow acoustic wave (u-c)
+		R(0, col) = T(1);
+		for(int i = 0; i < D; ++i) {
+			R(1 + i, col) = (i == dim ? u_n - c : v[i]);
 		}
-		lambda[D + 0] -= a;
-		lambda[D + 1] += a;
-		for( int d = 0; d < D; d++) {
-			R[d, D + 0] = v[d];
-			R[d, D + 1] = v[d];
+		R(D+1, col) = h - u_n*c;
+		++col;
+
+		// 2) D−1 shear waves (speed = u_n), each with jump only in one transverse momentum
+		for(int i = 0; i < D; ++i) {
+			if (i == dim) continue;
+			R(0, col) = T(0);         // no density jump
+			R(1 + i, col) = T(1);// δS_i = 1
+			R(D+1, col) = T(0);// no energy jump
+			++col;
 		}
-		for( int d = 0; d < D; d++) {
-			R[d, d] = one;
+
+		// 3) entropy/contact wave (speed = u_n)
+		R(0, col) = T(1);
+		for(int i=0; i<D; ++i)
+		R(1+i, col) = v[i];
+		R(D+1, col) = T(0);// no pressure/energy jump
+		++col;
+
+		// 4) fast acoustic wave (u+c)
+		R(0, col) = T(1);
+		for(int i=0; i<D; ++i) {
+			R(1 + i, col) = (i == dim ? u_n + c : v[i]);
 		}
-		R[dim, D + 0] -= a;
-		R[dim, D + 1] += a;
-		R[D + 0, D + 0] = one;
-		R[D + 0, D + 1] = one;
-		R[D + 1, D + 0] = h - u * a;
-		R[D + 1, D + 1] = h + u * a;
-		for( int i = 0; i < D; i++) {
-			R[D + 1, i] = v[i];
-		}
-		R[D + 2, D + 2] = one;
+		R(D+1, col) = h + u_n*c;
+
 		return rc;
 	}
 	constexpr EulerState flux(int d) const noexcept {
 		EulerState F;
-		T const irho = one / rho;
+		T const irho = T(1) / rho;
 		auto const v = S * irho;
-		T const ek = half * Math::vectorDotProduct(v, S);
-		T const ei = ((eg - ek) > des2 * eg) ? (eg - ek) : std::pow(tau, gamma);
-		T const p = gamm1 * ei;
+		T const ek = T(0.5) * dot(v, S);
+		T const ei = std::max(T(0), eg - ek);
+		T const p = (gamma - T(1)) * ei;
 		T const u = v[d];
 		F.rho = S[d];
 		F.eg = u * (eg + p);
-		F.tau = u * tau;
 		F.S = u * S;
 		F.S[d] += p;
 		return F;
 	}
-	constexpr void normalize() noexcept {
-		T const irho = one / rho;
-		auto const v = S * irho;
-		T const ekin = half * Math::vectorDotProduct(v, S);
-		T const eint = eg - ekin;
-		if (eint > des1 * eg) {
-			tau = std::pow(eint, igamma);
+	friend constexpr EulerState solveRiemannProblem(const EulerState &uL, const EulerState &uR, int dim) noexcept {
+		using std::sqrt;
+		using state_t = EulerState;
+		constexpr int N2 = 2;
+		constexpr int N3 = 3;
+		constexpr int L = 0;
+		constexpr int R = 1;
+		constexpr int STAR = 2;
+		std::array<state_t, N3> u = {uL, uR};
+		std::array<state_t, N2> f;
+		std::array<T, N2> irho, v, ek, ei, a;
+		std::array<T, N3> s, p;
+		for(int i = 0; i < N2; i++) {
+			irho[i] = T(1) / u[i].rho;
+			v[i] = irho[i] * u[i].S[dim];
+			ek[i] = T(0);
+			for(int d = 0; d < D; d++) {
+				ek[i] += T(0.5) * irho[i] * sqr(u[i].S[d]);
+			}
+			ei[i] = std::max(T(0), u[i].eg - ek[i]);
+			p[i] = (gamma - T(1)) * ei[i];
+			a[i] = sqrt(gamma * p[i] * irho[i]);
 		}
-	}
-	constexpr EulerState toCharacteristic(int dim) const {
-		auto const [_, A] = eigenSystem(dim);
-		auto const v = (base_type const&)(*this);
-		return EulerState {matrixInverse(A) * v};
-	}
-	constexpr EulerState fromCharacteristic(int dim) const {
-		auto const [_, A] = eigenSystem(dim);
-		auto const v = (base_type const&)(*this);
-		return EulerState {A * v};
-	}
-	friend constexpr EulerState solveRiemannProblem(const EulerState &uL, const EulerState &uR, int d) noexcept {
-		using state_type = EulerState;
-		T const irhoL = one / uL.rho;
-		T const irhoR = one / uR.rho;
-		T const vL = uL.S[d] * irhoL;
-		T const vR = uR.S[d] * irhoR;
-		T const ekL = half * irhoL * Math::vectorDotProduct(uL.S, uL.S);
-		T const ekR = half * irhoR * Math::vectorDotProduct(uR.S, uR.S);
-		T const eiL = ((uL.eg - ekL) > des2 * uL.eg) ? (uL.eg - ekL) : std::pow(uL.tau, gamma);
-		T const eiR = ((uR.eg - ekR) > des2 * uR.eg) ? (uR.eg - ekR) : std::pow(uR.tau, gamma);
-		T const pL = gamm1 * eiL * uL.rho;
-		T const pR = gamm1 * eiR * uR.rho;
-		T const aL = std::sqrt(gamma * pL * irhoL);
-		T const aR = std::sqrt(gamma * pR * irhoR);
-		T const sL = std::min(vL - aL, vR - aR);
-		T const sR = std::max(vL + aL, vR + aR);
-		T const num = pR - pL + uL.S[d] * (sL - vL) - uR.S[d] * (sR - vR);
-		T const den = uL.rho * (sL - vL) - uR.rho * (sR - vR);
-		T const sM = num / den;
-		if (sM > zero) {
-			auto const f = uL.flux(d);
-			if (sL > zero) {
-				return f;
-			} else {
-				state_type u;
-				T const rho = uL.rho * (sL - vL) / (sL - sM);
-				u.rho = rho;
-				u.S = uL.S;
-				u.S[d] += rho * (sM - vL);
-				u.eg = uL.eg + (sM - vL) * (rho * sM + pL / (sL - vL));
-				u.tau = uL.tau * (sL - vL) / (sL - sM);
-				return f + sL * (u - uL) / (sL - sM);
-			}
+		s[L] = std::min(v[L] - a[L], v[R] - a[R]);
+		s[R] = std::max(v[L] + a[L], v[R] + a[R]);
+		T const num = p[R] - p[L] + u[L].rho * v[L] * (s[L] - v[L]) - u[R].rho * v[R] * (s[R] - v[R]);
+		T const den = u[L].rho * (s[L] - v[L]) - u[R].rho * (s[R] - v[R]);
+		s[STAR] = num / den;
+		for(int i = 0; i < N2; i++) {
+			f[i] = u[i].flux(dim);
+		}
+		if (T(0) < s[L]) {
+			return f[L];
+		} else if (T(0) > s[R]) {
+			return f[R];
 		} else {
-			auto const f = uR.flux(d);
-			if (sR > zero) {
-				state_type u;
-				T const rho = uR.rho * (sR - vR) / (sR - sM);
-				u.rho = rho;
-				u.S = uR.S;
-				u.S[d] += rho * (sM - vR);
-				u.eg = uR.eg + (sM - vR) * (rho * sM + pR / (sR - vR));
-				u.tau = uR.tau * (sR - vR) / (sR - sM);
-				return f + sR * (u - uR) / (sR - sM);
-			} else {
-				return f;
+			int const i = ((s[STAR] > T(0)) ? L : R);
+			u[STAR].rho = u[i].rho * (s[i] - v[i]) / (s[i] - s[STAR]);
+			for(int dir = 0; dir < D; dir++) {
+				if(dim != dir ) {
+					u[STAR].S[dir] = u[STAR].rho * irho[i] * u[i].S[dir];
+				} else {
+					u[STAR].S[dir] = u[STAR].rho * s[STAR];
+				}
 			}
+			p[STAR] = p[i] + u[i].rho * (s[i] - v[i]) * (s[STAR] - v[i]);
+			u[STAR].eg = ((s[i] - v[i]) * u[i].eg - p[i] * v[i] + p[STAR] * s[STAR]) / (s[i] - s[STAR]);
+			return f[i] + s[i] * (u[STAR] - u[i]);
 		}
 	}
 	constexpr T const& getDensity() const {
@@ -194,10 +190,7 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 	constexpr T const& getEnergy() const {
 		return eg;
 	}
-	T const& getEntropy() const {
-		return tau;
-	}
-	constexpr Math::Vector<T, D> const& getMomentum() const {
+	constexpr std::array<T, D> const& getMomentum() const {
 		return S;
 	}
 	constexpr T const& getMomentum(int d) const {
@@ -209,10 +202,7 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 	constexpr void setEnergy(T const& value) {
 		eg = value;
 	}
-	constexpr void setEntropy(T const& value) {
-		tau = value;
-	}
-	constexpr void setMomentum(Math::Vector<T, D> const& value) {
+	constexpr void setMomentum(std::array<T, D> const& value) {
 		S = value;
 	}
 	constexpr void setMomentum(int d, T const& value) {
@@ -223,7 +213,6 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 			std::vector<std::string> names;
 			names.push_back("rho");
 			names.push_back("eg");
-			names.push_back("tau");
 			for(int d = 0; d < D; d++) {
 				std::string const name = std::string("s_") + std::string(1, 'x' + d);
 				names.push_back(name);
@@ -235,9 +224,15 @@ struct EulerState: public Math::Vector<T, 3 + D> {
 private:
 	T& rho;
 	T& eg;
-	T& tau;
-	Math::Vector<T, D>& S;
+	std::array<T, D>& S;
 };
+
+template<typename T, int D>
+struct CanDoArithmetic<EulerState<T, D>> {
+	static constexpr bool value = true;
+};
+
+
 
 template<typename T, int D>
 EulerState<T, D> initSodShockTube(std::array<T, D> x) {
@@ -248,25 +243,19 @@ EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	static constexpr T pR = T(0.1);
 	/*********************************************************/
 	static constexpr T c0 = T(1) / (EulerState<T, D>::gamma - T(1));
-	static constexpr T c1 = T(1) / EulerState<T, D>::gamma;
 	static constexpr T eL = c0 * pL;
 	static constexpr T eR = c0 * pR;
-	static constexpr T tauL = std::pow(eL, c1);
-	static constexpr T tauR = std::pow(eR, c1);
 	EulerState<T, D> u;
-	u.setMomentum(T(0));
+	u.setMomentum(zero<T, D>());
 	if (x[0] < T(0.5)) {
 		u.setDensity(rhoL);
 		u.setEnergy(eL);
-		u.setEntropy(tauL);
 	} else if (x[0] > T(0.5)) {
 		u.setDensity(rhoR);
 		u.setEnergy(eR);
-		u.setEntropy(tauR);
 	} else {
-		u.setDensity(0.5 * (rhoL + rhoR));
-		u.setEnergy(0.5 * (eL + eR));
-		u.setEntropy(0.5 * (tauL + tauR));
+		u.setDensity(T(0.5) * (rhoL + rhoR));
+		u.setEnergy(T(0.5) * (eL + eR));
 	}
 	return u;
 }

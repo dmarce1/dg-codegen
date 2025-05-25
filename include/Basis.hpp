@@ -1,48 +1,57 @@
 #pragma once
 
+#include <cassert>
 #include <cmath>
 
 #include "Legendre.hpp"
+#include "Matrix.hpp"
 #include "TriIndex.hpp"
 
-template<typename T, int O, int D>
+template<int basisOrder, int dimensionCount>
+using BasisIndexType = MultiIndex<basisOrder, dimensionCount>;
+
+template<typename Type_, int basisOrder_, int dimensionCount_>
 struct Basis {
-	using index_type = TriIndex<D, O>;
-	constexpr auto operator()(std::array<T, D> const &x) const {
-		std::array<T, size()> phi;
-		phi.fill(T(1));
-		for (int d = 0; d < D; d++) {
-			auto const Pn = legendreP<T, O>(x[d]);
-			for (auto P = index_type::begin(); P != index_type::end(); P++) {
-				phi[P] *= Pn[P[d]];
+	static constexpr int basisOrder = basisOrder_;
+	static constexpr int dimensionCount = dimensionCount_;
+	using Type = Type_;
+	using IndexType = BasisIndexType<basisOrder, dimensionCount>;
+	constexpr auto operator()(std::array<Type, dimensionCount> const &position) const {
+		std::array<Type, size()> basis;
+		basis.fill(Type(1));
+		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			auto const legendrePolynomial = legendreP<Type, basisOrder>(position[dimension]);
+			for (auto basisIndex = IndexType::begin(); basisIndex != IndexType::end(); basisIndex++) {
+					basis[basisIndex] *= legendrePolynomial[basisIndex[dimension]];
 			}
 		}
-		return phi;
+		return basis;
 	}
-	constexpr auto gradient(int dim, std::array<T, D> const &x) const {
-		std::array<T, size()> phi;
-		phi.fill(T(1));
-		for (int d = 0; d < D; d++) {
-			auto const Pn = dMLegendrePdXm<T, O, 1>(x[d]);
-			for (auto P = index_type::begin(); P != index_type::end(); P++) {
-				phi[P] *= Pn[int(d == dim)][P[d]];
+	constexpr auto gradient(int gradientDirection, std::array<Type, dimensionCount> const &position) const {
+		std::array<Type, size()> basisGradient;
+		basisGradient.fill(Type(1));
+		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			auto const legendrePolynomialWithDerivative = dMLegendrePdXm<Type, basisOrder, 1>(position[dimension]);
+			for (auto basisIndex = IndexType::begin(); basisIndex != IndexType::end(); basisIndex++) {
+				basisGradient[basisIndex] *= legendrePolynomialWithDerivative[int(dimension == gradientDirection)][basisIndex[dimension]];
 			}
 		}
-		return phi;
+		return basisGradient;
 	}
-	constexpr auto norm() const {
-		std::array<T, size()> N;
-		for (auto P = index_type::begin(); P != index_type::end(); P++) {
-			T &n = N[P];
-			n = T(1);
-			for (int d = 0; d < D; d++) {
-				n *= T(P[d]) + T(0.5);
+	constexpr auto massMatrix() const {
+		DiagonalMatrix<Type, size()> massMatrix;
+		for (auto basisMultiIndex = IndexType::begin(); basisMultiIndex != IndexType::end(); basisMultiIndex++) {
+			int const basisFlatIndex = basisMultiIndex;
+			Type mass = Type(1);
+			for (int dimension = 0; dimension < dimensionCount; dimension++) {
+				mass /= Type(0.5) * Type(2 * basisMultiIndex[dimension] + 1);
 			}
+			massMatrix(basisFlatIndex, basisFlatIndex) = mass;
 		}
-		return N;
+		return massMatrix;
 	}
 	static constexpr int size() {
-		return index_type::size();
+		return IndexType::count();
 	}
 };
 

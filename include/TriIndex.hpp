@@ -89,8 +89,11 @@ struct TriIndex {
 	static auto end() {
 		return TriIndex(repeat<D>(O));
 	}
+	static constexpr int count() {
+		return binco(O + D - 1, D);
+	}
 	static constexpr auto size() {
-		return binco(O + D, D + 1);
+		return D;
 	}
 private:
 	std::array<int, D> I_;

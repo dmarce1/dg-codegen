@@ -3,18 +3,19 @@
 #include <type_traits>
 #include <utility>
 
-template<typename T, typename = void>
-struct isArithmeticable {
+template<typename T>
+struct CanDoArithmetic {
 	static constexpr bool value = false;
 };
 
-template<typename T>
-struct isArithmeticable<T, std::void_t<decltype(std::declval<T&>()[std::declval<std::size_t>()]), decltype(std::declval<T&>().size())>> {
-	static constexpr bool value = std::is_integral<decltype(std::declval<T&>().size())>::value;
+template<typename T, auto N>
+struct CanDoArithmetic<std::array<T, N>> {
+	static constexpr bool value = true;
 };
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
-inline constexpr T& operator+=(T &A, T const &B) {
+
+template<typename T, typename U, std::enable_if_t<CanDoArithmetic<T>::value && CanDoArithmetic<U>::value, int> = 0>
+inline constexpr T& operator+=(T &A, U const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
 		A[i] += B[i];
@@ -22,7 +23,7 @@ inline constexpr T& operator+=(T &A, T const &B) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T& operator-=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -31,7 +32,7 @@ inline constexpr T& operator-=(T &A, T const &B) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T& operator*=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -40,7 +41,7 @@ inline constexpr T& operator*=(T &A, T const &B) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T& operator/=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -49,7 +50,7 @@ inline constexpr T& operator/=(T &A, T const &B) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T& operator%=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -58,12 +59,12 @@ inline constexpr T& operator%=(T &A, T const &B) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator+(T const &A) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator-(T const &A) {
 	auto B = A;
 	for (auto &b : B) {
@@ -72,42 +73,42 @@ inline constexpr T operator-(T const &A) {
 	return B;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
-inline constexpr T operator+(T const &A, T const &B) {
+template<typename T, typename U, std::enable_if_t<CanDoArithmetic<T>::value && CanDoArithmetic<U>::value, int> = 0>
+inline constexpr T operator+(T const &A, U const &B) {
 	auto C = A;
 	C += B;
 	return C;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator-(T const &A, T const &B) {
 	auto C = A;
 	C -= B;
 	return C;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
-inline constexpr T operator*(T const &A, T const &B) {
+template<typename T, typename U, std::enable_if_t<CanDoArithmetic<T>::value && CanDoArithmetic<U>::value, int> = 0>
+inline constexpr T operator*(T const &A, U const &B) {
 	auto C = A;
 	C *= B;
 	return C;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator/(T const &A, T const &B) {
 	auto C = A;
 	C /= B;
 	return C;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator%(T const &A, T const &B) {
 	auto C = A;
 	C %= B;
 	return C;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T& operator*=(T &A, typename T::value_type const &b) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -116,7 +117,7 @@ inline constexpr T& operator*=(T &A, typename T::value_type const &b) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T& operator/=(T &A, typename T::value_type const &b) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -125,22 +126,32 @@ inline constexpr T& operator/=(T &A, typename T::value_type const &b) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator*(T const &A, typename T::value_type const &b) {
 	auto C = A;
 	C *= b;
 	return C;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator*(typename T::value_type const &a, T const &B) {
 	return B * a;
 }
 
-template<typename T, std::enable_if_t<isArithmeticable<T>::value, int> = 0>
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr T operator/(T const &A, typename T::value_type const &b) {
 	auto C = A;
 	C /= b;
 	return C;
 }
+
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+inline constexpr auto dot(T const& a, T const& b) {
+	auto sum = a[0] * b[0];
+	for (int d = 1; d < (int) a.size(); d++) {
+		sum += a[d] * b[d];
+	}
+	return sum;
+}
+
 

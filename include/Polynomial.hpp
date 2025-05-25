@@ -9,7 +9,6 @@
 
 #include "Complex.hpp"
 #include "Util.hpp"
-#include "Vector.hpp"
 
 namespace Math {
 

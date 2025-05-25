@@ -7,100 +7,103 @@
 #include "MultiIndex.hpp"
 #include "Util.hpp"
 
-template<typename T, int N>
-using quad_rc_type = std::tuple<std::array<T, N>, std::array<T, N>>;
+template<typename Type, int oneDimensionalPointCount>
+using QuadratureReturnType = std::tuple<std::array<Type, oneDimensionalPointCount>, std::array<Type, oneDimensionalPointCount>>;
 
-template<typename T, int N>
+template<typename Type, int oneDimensionalPointCount>
 constexpr auto GaussLegendreQuadrature() {
-	constexpr T pi = std::numbers::pi_v<T>;
-	std::array<T, N> weights;
-	std::array<T, N> points;
-	for (int n = 0; n < N; n++) {
-		std::array<std::array<T, N + 1>, 2> Pn;
-		T theta, x;
-		T newTheta = pi * (T(1) - (T(n) + T(0.5)) / T(N));
+	constexpr Type pi = std::numbers::pi_v<Type>;
+	std::array<Type, oneDimensionalPointCount> weights;
+	std::array<Type, oneDimensionalPointCount> points;
+	for (int pointIndex = 0; pointIndex < oneDimensionalPointCount; pointIndex++) {
+		std::array<std::array<Type, oneDimensionalPointCount + 1>, 2> legendrePolynomial;
+		Type theta, position;
+		Type newTheta = pi * (Type(1) - (Type(pointIndex) + Type(0.5)) / Type(oneDimensionalPointCount));
 		do {
 			theta = newTheta;
-			x = cos(theta);
-			Pn = dMLegendrePdXm<T, N + 1, 1>(x);
-			newTheta = theta + Pn[0].back() / (sin(theta) * Pn[1].back());
-		} while (theta != newTheta);
-		T const z = Pn[1].back();
-		points[n] = x;
-		weights[n] = T(2) / (z * z * (T(1) - x * x));
+			position = cos(theta);
+			legendrePolynomial = dMLegendrePdXm<Type, oneDimensionalPointCount + 1, 1>(position);
+			newTheta = theta + legendrePolynomial[0].back() / (sin(theta) * legendrePolynomial[1].back());
+		} while (newTheta != std::nextafter(theta, newTheta));
+		points[pointIndex] = position;
+		weights[pointIndex] = Type(2) / (sqr(legendrePolynomial[1].back()) * (Type(1) - position * position));
 	}
-	return quad_rc_type<T, N>(points, weights);
+	return QuadratureReturnType<Type, oneDimensionalPointCount>(points, weights);
 }
 
-template<typename T, int N>
-constexpr auto GaussLobattoQuadrature() {
-	constexpr T pi = std::numbers::pi_v<T>;
-	std::array<T, N> weights;
-	std::array<T, N> points;
-	for (int n = 1; n < N - 1; n++) {
-		T theta, x, y;
-		T newTheta = pi * (T(1) - (T(n) + T(0.5)) / T(N));
-		do {
-			theta = newTheta;
-			x = cos(theta);
-			y = sin(theta);
-			auto const dPnDx = legendreP<T, N, 1>(x);
-			auto const d2PnDx2 = legendreP<T, N, 2>(x);
-			newTheta = theta + dPnDx.back() * y / (y * y * d2PnDx2.back() - dPnDx.back() * x);
-		} while (newTheta != theta);
-		std::array<T, N> const z = legendreP<T, N>(x);
-		points[n] = x;
-		weights[n] = T(2) / (T(N * N - N) * z.back() * z.back());
-	}
-	points[0] = -T(1);
-	points[N - 1] = +T(1);
-	weights[0] = weights[N - 1] = T(2) / T(N * N - N);
-	return quad_rc_type<T, N>(points, weights);
-}
-
-template<typename T, int N, int D, quad_rc_type<T, N> (*Q)() = &GaussLegendreQuadrature<T, N>>
+template<typename Type, int oneDimensionalPointCount, int dimensionCount>
 struct Quadrature {
-	using index_type = MultiIndex<Range<int, D> {repeat<D>(0), repeat<D>(N)}>;
-	constexpr T const& weight(int i) const {
-		return std::get<1>(points_)[i];
+	using IndexType = MultiIndex<Range<int, dimensionCount> {repeat<dimensionCount>(0), repeat<dimensionCount>(oneDimensionalPointCount)}>;
+	constexpr Type const& weight(int i) const {
+		return std::get<1>(pointsAndWeights_)[i];
 	}
 	constexpr auto const& point(int i) const {
-		return std::get<0>(points_)[i];
+		return std::get<0>(pointsAndWeights_)[i];
 	}
 	static constexpr int size() {
-		return index_type::size();
+		return IndexType::count();
 	}
 private:
 	static constexpr auto initialize() {
-		auto [points1, weights1] = Q();
-		std::array<T, size()> weights;
-		std::array<std::array<T, D>, size()> points;
-		for (int dim = 0; dim < D; dim++) {
-			for (auto I = index_type::begin(); I != index_type::end(); I++) {
-				int const pi = I;
-				weights[pi] = T(1);
-				for (int d = 0; d < D; d++) {
-					weights[pi] *= weights1[I[d]];
-					points[pi][d] = points1[I[d]];
+		auto [oneDimensionalPoints, oneDimensionalWeights] = GaussLegendreQuadrature<Type, oneDimensionalPointCount>();
+		std::array<Type, size()> multiDimensionalWeights;
+		std::array<std::array<Type, dimensionCount>, size()> multiDimensionalPoints;
+		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			for (auto multiIndex = IndexType::begin(); multiIndex != IndexType::end(); multiIndex++) {
+				int const pi = multiIndex;
+				multiDimensionalWeights[pi] = Type(1);
+				for (int d = 0; d < dimensionCount; d++) {
+					multiDimensionalWeights[pi] *= oneDimensionalWeights[multiIndex[d]];
+					multiDimensionalPoints[pi][d] = oneDimensionalPoints[multiIndex[d]];
 				}
 			}
 		}
-		return std::tuple(points, weights);
+		return std::tuple(multiDimensionalPoints, multiDimensionalWeights);
 	}
-	static constexpr std::tuple<std::array<std::array<T, D>, size()>, std::array<T, size()>> points_ = initialize();
+	static constexpr std::tuple<std::array<std::array<Type, dimensionCount>, size()>, std::array<Type, size()>> pointsAndWeights_ = initialize();
 };
 
-template<typename T, int N, quad_rc_type<T, N> (*Q)()>
-struct Quadrature<T, N, 0, Q> {
-	using index_type = MultiIndex<Range<int, 0> {repeat<0>(0), repeat<0>(1)}>;
-	constexpr T const& weight(int i) const {
-		return T(1);
+template<typename Type, int oneDimensionalPointCount>
+struct Quadrature<Type, oneDimensionalPointCount, 0> {
+	using IndexType = MultiIndex<Range<int, 0> {repeat<0>(0), repeat<0>(1)}>;
+	constexpr Type const& weight(int i) const {
+		return Type(1);
 	}
 	constexpr auto point(int i) const {
-		return std::array<T, 0> { };
+		return std::array<Type, 0> { };
 	}
 	static constexpr int size() {
 		return 1;
 	}
+};
+
+template<typename Basis>
+struct FourierLegendreTransform {
+	static constexpr Basis basis { };
+	static constexpr int pointCount = basis.size();
+	static constexpr int oneDimensionalPointCount = basis.oneDimensionalPointCount;
+	static constexpr int dimensionCount = basis.dimensionCount;
+	static constexpr Quadrature<typename Basis::Type, oneDimensionalPointCount, dimensionCount> quadrature { };
+	using Type = Basis::Type;
+	auto operator()(std::array<Type, pointCount> const& valuesAtQuadraturePoints ) {
+	}
+private:
+	constexpr auto initializeTransformMatrices() {
+		constexpr auto massMatrix = basis.massMatrix();
+		SquareMatrix<Type, pointCount> transformMatrix;
+		SquareMatrix<Type, pointCount> inverseTransformMatrix;
+		for (int basisIndex = 0; basisIndex < pointCount; basisIndex++) {
+			for (int quadratureIndex = 0; quadratureIndex < pointCount; quadratureIndex++) {
+				auto const basisValue = basis(quadrature.point(quadratureIndex));
+				auto const mass = massMatrix(basisIndex, basisIndex);
+				auto const weight = quadrature.weight(quadratureIndex);
+				transformMatrix(basisIndex, quadratureIndex) = mass * weight * basisValue;
+				inverseTransformMatrix(basisIndex, quadratureIndex) = basisValue;
+			}
+		}
+		return std::pair(transformMatrix, inverseTransformMatrix);
+	}
+	static constexpr SquareMatrix<Type, pointCount> transformMatrix_ = initializeTransformMatrices().first;
+	static constexpr SquareMatrix<Type, pointCount> inverseTransformMatrix_ = initializeTransformMatrices().second;
 };
 
