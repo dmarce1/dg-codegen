@@ -18,22 +18,22 @@ struct MultiIndex {
 		if constexpr (std::is_integral<decltype(firstArgument)>::value) {
 			return Range<int, dimensionCount> {
 					repeat<dimensionCount>(0),
-					repeat<dimensionCount>(secondArgument) };
+					repeat<dimensionCount>(firstArgument) };
 		} else {
-			return firstArgument;
+			return secondArgument;
 		}
 	}
 	static constexpr auto initializeExteriorRange() {
 		if constexpr (std::is_integral<decltype(firstArgument)>::value) {
 			return Range<int, dimensionCount> {
 					repeat<dimensionCount>(0),
-					repeat<dimensionCount>(secondArgument) };
+					repeat<dimensionCount>(firstArgument) };
 		} else {
-			return secondArgument;
+			return firstArgument;
 		}
 	}
 	static constexpr Range<int, dimensionCount> interiorRange = initializeInteriorRange();
-	static constexpr Range<int, dimensionCount> exteriorRange = initializeInteriorRange();
+	static constexpr Range<int, dimensionCount> exteriorRange = initializeExteriorRange();
 	MultiIndex() = default;
 	MultiIndex(MultiIndex const&) = default;
 	MultiIndex(MultiIndex&&) = default;

@@ -212,6 +212,8 @@ struct Real {
 			std::string errorString = "FATAL ERROR: Illegal operation on negative number.\n";
 			errorString += "Stack trace:\n";
 			errorString += std::to_string(std::stacktrace::current());
+			std::cout << errorString;
+			assert(false);
 			throw std::invalid_argument(errorString);
 		}
 	}
@@ -220,6 +222,8 @@ struct Real {
 			std::string errorString = "FATAL ERROR: Divide by zero\n";
 			errorString += "Stack trace:\n";
 			errorString += std::to_string(std::stacktrace::current());
+			std::cout << errorString;
+			assert(false);
 			throw std::invalid_argument(errorString);
 		}
 	}
@@ -228,6 +232,8 @@ struct Real {
 			std::string errorString = "FATAL ERROR: Operation on NaN\n";
 			errorString += "Stack trace:\n";
 			errorString += std::to_string(std::stacktrace::current());
+			std::cout << errorString;
+			assert(false);
 			throw std::invalid_argument(errorString);
 		}
 	}
@@ -236,7 +242,9 @@ struct Real {
 			std::string errorString = "FATAL ERROR: Range violation\n";
 			errorString += "Stack trace:\n";
 			errorString += std::to_string(std::stacktrace::current());
-			throw std::invalid_argument(errorString);
+			std::cout << errorString;
+			assert(false);
+		throw std::invalid_argument(errorString);
 		}
 	}
 };

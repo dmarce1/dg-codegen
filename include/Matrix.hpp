@@ -75,11 +75,10 @@ struct Matrix {
 		return ColumnCount;
 	}
 
-	Matrix() :
-			values { } {
+	constexpr Matrix() {
 	}
 
-	Matrix(std::array<std::array<Type, ColumnCount>, RowCount> const &initList) :
+	constexpr Matrix(std::array<std::array<Type, ColumnCount>, RowCount> const &initList) :
 			values { } {
 		for (int n = 0; n < RowCount; n++) {
 			for (int m = 0; m < ColumnCount; m++) {
@@ -88,14 +87,14 @@ struct Matrix {
 		}
 	}
 
-	Matrix(std::initializer_list<Type> initList) {
+	constexpr Matrix(std::initializer_list<Type> initList) {
 		int i = 0;
 		for (auto const &v : initList) {
 			values[i++] = v;
 		}
 	}
 
-	Matrix(std::initializer_list<std::initializer_list<Type>> init) {
+	constexpr Matrix(std::initializer_list<std::initializer_list<Type>> init) {
 		int i = 0;
 		for (auto const &row : init) {
 			for (auto const &val : row) {
@@ -104,54 +103,54 @@ struct Matrix {
 		}
 	}
 
-	Matrix(Type const &init) :
+	constexpr Matrix(Type const &init) :
 			values { } {
 		for (std::size_t i = 0; i < size(); i++) {
 			values[i] = init;
 		}
 	}
 
-	Matrix(Matrix const &other) :
+	constexpr Matrix(Matrix const &other) :
 			values(other.values) {
 	}
-	Matrix(Matrix &&other) :
+	constexpr Matrix(Matrix &&other) :
 			values(std::move(other.values)) {
 	}
 
-	Matrix& operator=(Matrix const &other) {
+	constexpr Matrix& operator=(Matrix const &other) {
 		values = other.values;
 		return *this;
 	}
-	Matrix& operator=(Matrix &&other) {
+	constexpr Matrix& operator=(Matrix &&other) {
 		values = std::move(other.values);
 		return *this;
 	}
 
-	Type& operator()(int n, int m) {
+	constexpr Type& operator()(int n, int m) {
 		return values[n * ColumnCount + m];
 	}
-	Type const& operator()(int n, int m) const {
+	constexpr Type const& operator()(int n, int m) const {
 		return values[n * ColumnCount + m];
 	}
 
-	Matrix& operator+=(Matrix const &A) {
+	constexpr Matrix& operator+=(Matrix const &A) {
 		*this = *this + A;
 		return *this;
 	}
-	Matrix& operator-=(Matrix const &A) {
+	constexpr Matrix& operator-=(Matrix const &A) {
 		*this = *this - A;
 		return *this;
 	}
-	Matrix& operator*=(Type const &a) {
+	constexpr Matrix& operator*=(Type const &a) {
 		*this = *this * a;
 		return *this;
 	}
-	Matrix& operator/=(Type const &a) {
+	constexpr Matrix& operator/=(Type const &a) {
 		*this = *this / a;
 		return *this;
 	}
 
-	Matrix operator*(Type const &a) const {
+	constexpr Matrix operator*(Type const &a) const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++) {
 			B.values[k] = a * values[k];
@@ -159,7 +158,7 @@ struct Matrix {
 		return B;
 	}
 
-	Matrix operator/(Type const &a) const {
+	constexpr Matrix operator/(Type const &a) const {
 		static constexpr Type one = Type(1);
 		Matrix B;
 		Type const aInv = one / a;
@@ -169,10 +168,10 @@ struct Matrix {
 		return B;
 	}
 
-	Matrix operator+() const {
+	constexpr Matrix operator+() const {
 		return *this;
 	}
-	Matrix operator-() const {
+	constexpr Matrix operator-() const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++) {
 			B.values[k] = -values[k];
@@ -180,7 +179,7 @@ struct Matrix {
 		return B;
 	}
 
-	Matrix operator+(Matrix const &A) const {
+	constexpr Matrix operator+(Matrix const &A) const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++) {
 			B.values[k] = values[k] + A.values[k];
@@ -188,7 +187,7 @@ struct Matrix {
 		return B;
 	}
 
-	Matrix operator-(Matrix const &A) const {
+	constexpr Matrix operator-(Matrix const &A) const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++) {
 			B.values[k] = values[k] - A.values[k];
@@ -196,10 +195,10 @@ struct Matrix {
 		return B;
 	}
 
-	bool operator==(Matrix const &A) const {
+	constexpr bool operator==(Matrix const &A) const {
 		return values == A.values;
 	}
-	bool operator!=(Matrix const &A) const {
+	constexpr bool operator!=(Matrix const &A) const {
 		return !(*this == A);
 	}
 
@@ -1000,14 +999,14 @@ void matrixLURecompose(SquareMatrix<T, N> &A) {
 
 template<typename T, int N>
 struct DiagonalMatrix {
-	T operator()(int c, int r) const {
+	constexpr T operator()(int c, int r) const {
 		if (c == r) {
 			return D[r];
 		} else {
 			return T(0);
 		}
 	}
-	T& operator()(int c, int r) {
+	constexpr T& operator()(int c, int r) {
 		assert(c == r);
 		if (c != r) {
 			throw std::runtime_error("Attempt to assign to diagnal matrix off diagonal\n");
@@ -1041,26 +1040,33 @@ constexpr DiagonalMatrix<T, N> matrixInverse(DiagonalMatrix<T, N> const &A) {
 
 template<typename Type, int R, int C>
 std::string toString(Matrix<Type, R, C> const &M) {
-	using std::to_string;
+	auto formatEntry = [](Type const &value) {
+		std::ostringstream oss;
+		oss << std::scientific << std::setprecision(3) << value;
+		return oss.str();
+	};
 	int maxLen = 0;
-	for (int i = 0; i < R; i++) {
-		for (int j = 0; j < C; j++) {
-			auto s = to_string(M(i, j));
-			maxLen = std::max(maxLen, int(s.size()));
+	for (int i = 0; i < R; ++i) {
+		for (int j = 0; j < C; ++j) {
+			std::string const entry = formatEntry(M(i, j));
+			maxLen = std::max(maxLen, static_cast<int>(entry.size()));
 		}
 	}
 	std::string line((C * (maxLen + 3) + 1), '-');
 	line += "\n";
 	std::string out = line;
-	for (int i = 0; i < R; i++) {
-		for (int j = 0; j < C; j++) {
-			auto s = to_string(M(i, j));
-			while (int(s.size()) < maxLen)
-				s = " " + s;
-			out += "| " + s + " ";
+	for (int i = 0; i < R; ++i) {
+		for (int j = 0; j < C; ++j) {
+			std::string cellStr = formatEntry(M(i, j));
+			// pad on the left to align
+			while (static_cast<int>(cellStr.size()) < maxLen) {
+				cellStr = " " + cellStr;
+			}
+			out += "| " + cellStr + " ";
 		}
 		out += "|\n" + line;
 	}
+
 	return out;
 }
 
@@ -1083,7 +1089,6 @@ std::string toMathematica(Matrix<Type, R, C> const &M) {
 	out += "}";
 	return out;
 }
-
 
 template<typename T, auto N, int M, typename Container>
 inline constexpr auto operator*(Matrix<T, N, M> const &A, Container const &B) {

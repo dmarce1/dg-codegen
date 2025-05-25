@@ -6,9 +6,12 @@
 #include "Legendre.hpp"
 #include "Matrix.hpp"
 #include "TriIndex.hpp"
+//
+//template<int basisOrder, int dimensionCount>
+//using BasisIndexType = MultiIndex<basisOrder, dimensionCount>;
 
 template<int basisOrder, int dimensionCount>
-using BasisIndexType = MultiIndex<basisOrder, dimensionCount>;
+using BasisIndexType = TriIndex<basisOrder, dimensionCount>;
 
 template<typename Type_, int basisOrder_, int dimensionCount_>
 struct Basis {

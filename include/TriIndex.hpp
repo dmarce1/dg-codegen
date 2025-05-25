@@ -4,15 +4,15 @@
 
 template<int O, int D>
 struct TriIndex {
-	TriIndex() = default;
-	TriIndex(TriIndex const&) = default;
-	TriIndex(TriIndex&&) = default;
-	TriIndex& operator=(TriIndex const&) = default;
-	TriIndex& operator=(TriIndex&&) = default;
-	TriIndex(std::array<int, D> const &I) :
+	constexpr TriIndex() = default;
+	constexpr TriIndex(TriIndex const&) = default;
+	constexpr TriIndex(TriIndex&&) = default;
+	constexpr TriIndex& operator=(TriIndex const&) = default;
+	constexpr TriIndex& operator=(TriIndex&&) = default;
+	constexpr TriIndex(std::array<int, D> const &I) :
 			I_(I), deg_(std::accumulate(I_.begin(), I_.end(), 0)) {
 	}
-	TriIndex& operator++() {
+	constexpr TriIndex& operator++() {
 		while (true) {
 			for (int i = 1; i < D; i++) {
 				if (I_[i] > 0) {
@@ -36,18 +36,18 @@ struct TriIndex {
 			return *this;
 		}
 	}
-	TriIndex operator++(int) const {
+	constexpr TriIndex operator++(int) const {
 		auto const rc = *this;
 		const_cast<TriIndex*>(this)->operator++();
 		return rc;
 	}
-	TriIndex inc(int d) {
+	constexpr TriIndex inc(int d) {
 		TriIndex rc = *this;
 		rc.I_[d]++;
 		rc.deg_++;
 		return rc;
 	}
-	TriIndex dec(int d) {
+	constexpr TriIndex dec(int d) {
 		TriIndex rc = *this;
 		rc.I_[d]--;
 		rc.deg_--;
@@ -61,14 +61,17 @@ struct TriIndex {
 		}
 		return i;
 	}
-	constexpr int operator[](int i) const {
-		return I_[i];
-	}
 	constexpr int degree() const {
 		return deg_;
 	}
 	constexpr bool operator==(TriIndex const &other) const {
 		return I_ == other.I_;
+	}
+	constexpr int& operator[](int i) {
+		return I_[i];
+	}
+	constexpr int operator[](int i) const {
+		return I_[i];
 	}
 	static constexpr auto begin(int deg) {
 		TriIndex I;
@@ -83,10 +86,10 @@ struct TriIndex {
 		}
 		return begin(deg + 1);
 	}
-	static auto begin() {
+	static constexpr auto begin() {
 		return TriIndex(repeat<D>(0));
 	}
-	static auto end() {
+	static constexpr auto end() {
 		return TriIndex(repeat<D>(O));
 	}
 	static constexpr int count() {

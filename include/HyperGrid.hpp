@@ -7,6 +7,10 @@
 
 #include <numeric>
 
+enum class MultiDimensionalBasisType : int {
+	tensorProduct, totalDegree
+};
+
 template<typename Type>
 inline constexpr Type minmod(Type const &a, Type const &b) {
 	using namespace Math;
@@ -15,9 +19,10 @@ inline constexpr Type minmod(Type const &a, Type const &b) {
 	return sgn * mag;
 }
 
-template<typename State, int cellsAcrossInterior, int basisOrder, typename RungeKutta>
+template<typename State, int cellsAcrossInterior, int basisOrder, typename RungeKutta, MultiDimensionalBasisType multiDimensionalBasisType =
+		MultiDimensionalBasisType::tensorProduct>
 class HyperGrid {
-
+	using enum MultiDimensionalBasisType;
 	static constexpr int dimensionCount = State::dimCount();
 	static constexpr int ghostWidth = 2;
 	static constexpr int fieldCount = State::fieldCount();
@@ -62,29 +67,25 @@ public:
 	}
 	void initialize(std::function<State(std::array<Type, dimensionCount> const&)> const &initialState) {
 		Type const halfCellWidth = Type(0.5) * cellWidth;
-		auto const massMatrix = orthogonalBasis.massMatrix();
-		auto const inverseMassMatrix = matrixInverse(massMatrix);
 		for (auto cellMultiIndex = InteriorIndex::begin(); cellMultiIndex != InteriorIndex::end(); cellMultiIndex++) {
 			int const cellFlatIndex = cellMultiIndex;
+			assert(cellFlatIndex >= 0);
 			for (int basisIndex = 0; basisIndex < basisSize; basisIndex++) {
 				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
 					nextState[fieldIndex][basisIndex][cellFlatIndex] = Type(0);
 				}
+				std::array<State, volumeQuadrature.size()> stateAtQuadraturePoint;
 				for (int quadratureIndex = 0; quadratureIndex < volumeQuadrature.size(); quadratureIndex++) {
-					auto const basis = orthogonalBasis(volumeQuadrature.point(quadratureIndex));
-					auto const weight = volumeQuadrature.weight(quadratureIndex);
 					auto const quadraturePoint = volumeQuadrature.point(quadratureIndex);
-					std::array<Type, dimensionCount> position;
+					std::array<Type, dimensionCount> scaledQuadraturePoint;
 					for (int dimension = 0; dimension < dimensionCount; dimension++) {
-						position[dimension] = (Type(2 * cellMultiIndex[dimension] + 1) + quadraturePoint[dimension]) * halfCellWidth;
+						scaledQuadraturePoint[dimension] = (Type(2 * cellMultiIndex[dimension] + 1) + quadraturePoint[dimension]) * halfCellWidth;
 					}
-					auto const thisState = initialState(position);
-					for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-						nextState[fieldIndex][basisIndex][cellFlatIndex] += weight * basis[basisIndex] * thisState[fieldIndex];
-					}
+					stateAtQuadraturePoint[quadratureIndex] = initialState(scaledQuadraturePoint);
 				}
+				auto modalState = transformMatrix * stateAtQuadraturePoint;
 				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-					nextState[fieldIndex][basisIndex][cellFlatIndex] *= inverseMassMatrix(basisIndex, basisIndex);
+					nextState[fieldIndex][basisIndex][cellFlatIndex] = modalState[basisIndex][fieldIndex];
 				}
 			}
 		}
