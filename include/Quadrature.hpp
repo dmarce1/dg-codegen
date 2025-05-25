@@ -77,33 +77,43 @@ struct Quadrature<Type, oneDimensionalPointCount, 0> {
 	}
 };
 
+
+
 template<typename Basis>
-struct FourierLegendreTransform {
-	static constexpr Basis basis { };
-	static constexpr int pointCount = basis.size();
-	static constexpr int oneDimensionalPointCount = basis.oneDimensionalPointCount;
-	static constexpr int dimensionCount = basis.dimensionCount;
-	static constexpr Quadrature<typename Basis::Type, oneDimensionalPointCount, dimensionCount> quadrature { };
+constexpr auto fourierLegendreTransform() {
 	using Type = Basis::Type;
-	auto operator()(std::array<Type, pointCount> const& valuesAtQuadraturePoints ) {
-	}
-private:
-	constexpr auto initializeTransformMatrices() {
-		constexpr auto massMatrix = basis.massMatrix();
-		SquareMatrix<Type, pointCount> transformMatrix;
-		SquareMatrix<Type, pointCount> inverseTransformMatrix;
-		for (int basisIndex = 0; basisIndex < pointCount; basisIndex++) {
-			for (int quadratureIndex = 0; quadratureIndex < pointCount; quadratureIndex++) {
-				auto const basisValue = basis(quadrature.point(quadratureIndex));
-				auto const mass = massMatrix(basisIndex, basisIndex);
-				auto const weight = quadrature.weight(quadratureIndex);
-				transformMatrix(basisIndex, quadratureIndex) = mass * weight * basisValue;
-				inverseTransformMatrix(basisIndex, quadratureIndex) = basisValue;
-			}
+	constexpr Basis basis { };
+	constexpr int pointCount = basis.size();
+	constexpr int dimensionCount = basis.dimensionCount;
+	constexpr int oneDimensionalPointCount = basis.oneDimensionalPointCount;
+	constexpr auto massMatrix = basis.massMatrix();
+	constexpr Quadrature<Type, oneDimensionalPointCount, dimensionCount> quadrature { };
+	SquareMatrix<Type, pointCount> transformMatrix;
+	for (int basisIndex = 0; basisIndex < pointCount; basisIndex++) {
+		for (int quadratureIndex = 0; quadratureIndex < pointCount; quadratureIndex++) {
+			auto const basisValue = basis(quadrature.point(quadratureIndex));
+			auto const mass = massMatrix(basisIndex, basisIndex);
+			auto const weight = quadrature.weight(quadratureIndex);
+			transformMatrix(basisIndex, quadratureIndex) = mass * weight * basisValue;
 		}
-		return std::pair(transformMatrix, inverseTransformMatrix);
 	}
-	static constexpr SquareMatrix<Type, pointCount> transformMatrix_ = initializeTransformMatrices().first;
-	static constexpr SquareMatrix<Type, pointCount> inverseTransformMatrix_ = initializeTransformMatrices().second;
-};
+	return transformMatrix;
+}
+
+template<typename Basis>
+constexpr auto inverseFourierLegendreTransform() {
+	using Type = Basis::Type;
+	constexpr Basis basis { };
+	constexpr int pointCount = basis.size();
+	constexpr int dimensionCount = basis.dimensionCount;
+	constexpr int oneDimensionalPointCount = basis.oneDimensionalPointCount;
+	constexpr Quadrature<Type, oneDimensionalPointCount, dimensionCount> quadrature { };
+	SquareMatrix<Type, pointCount> inverseTransformMatrix;
+	for (int basisIndex = 0; basisIndex < pointCount; basisIndex++) {
+		for (int quadratureIndex = 0; quadratureIndex < pointCount; quadratureIndex++) {
+			inverseTransformMatrix(basisIndex, quadratureIndex) = basis(quadrature.point(quadratureIndex));
+		}
+	}
+	return inverseTransformMatrix;
+}
 

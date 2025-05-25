@@ -34,6 +34,8 @@ class HyperGrid {
 			repeat<dimensionCount>(cellsAcrossInterior) };
 	static constexpr Quadrature<typename State::value_type, basisOrder, dimensionCount> volumeQuadrature { };
 	static constexpr Basis<typename State::value_type, basisOrder, dimensionCount> orthogonalBasis { };
+	static constexpr auto inverseTransformMatrix = inverseFourierLegendreTransform<decltype(orthogonalBasis)>();
+	static constexpr auto transformMatrix = fourierLegendreTransform<decltype(orthogonalBasis)>();
 
 	using Type = State::value_type;
 	using BasisIndex = BasisIndexType<basisOrder, dimensionCount>;
