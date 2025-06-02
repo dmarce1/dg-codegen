@@ -7,10 +7,6 @@
 
 #include <numeric>
 
-enum class MultiDimensionalBasisType : int {
-	tensorProduct, totalDegree
-};
-
 template<typename Type>
 inline constexpr Type minmod(Type const &a, Type const &b) {
 	using namespace Math;
@@ -19,10 +15,8 @@ inline constexpr Type minmod(Type const &a, Type const &b) {
 	return sgn * mag;
 }
 
-template<typename State, int cellsAcrossInterior, int basisOrder, typename RungeKutta, MultiDimensionalBasisType multiDimensionalBasisType =
-		MultiDimensionalBasisType::tensorProduct>
+template<typename State, int cellsAcrossInterior, int basisOrder, typename RungeKutta>
 class HyperGrid {
-	using enum MultiDimensionalBasisType;
 	static constexpr int dimensionCount = State::dimCount();
 	static constexpr int ghostWidth = 2;
 	static constexpr int fieldCount = State::fieldCount();
@@ -39,8 +33,8 @@ class HyperGrid {
 			repeat<dimensionCount>(cellsAcrossInterior) };
 	static constexpr Quadrature<typename State::value_type, basisOrder, dimensionCount> volumeQuadrature { };
 	static constexpr Basis<typename State::value_type, basisOrder, dimensionCount> orthogonalBasis { };
-	static constexpr auto inverseTransformMatrix = inverseFourierLegendreTransform<decltype(orthogonalBasis)>();
-	static constexpr auto transformMatrix = fourierLegendreTransform<decltype(orthogonalBasis)>();
+	static constexpr auto inverseTransformMatrix = fourierLegendreTransform<typename State::value_type, basisOrder, TransformDirection::backward>();
+	static constexpr auto transformMatrix = fourierLegendreTransform<typename State::value_type, basisOrder, TransformDirection::forward>();
 
 	using Type = State::value_type;
 	using BasisIndex = BasisIndexType<basisOrder, dimensionCount>;

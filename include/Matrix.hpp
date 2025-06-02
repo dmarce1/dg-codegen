@@ -159,7 +159,7 @@ struct Matrix {
 	}
 
 	constexpr Matrix operator/(Type const &a) const {
-		static constexpr Type one = Type(1);
+		constexpr Type one = Type(1);
 		Matrix B;
 		Type const aInv = one / a;
 		for (std::size_t k = 0; k < size(); k++) {
@@ -222,16 +222,16 @@ struct Matrix {
 		return B * a;
 	}
 
-	auto begin() {
+	constexpr auto begin() {
 		return values.begin();
 	}
-	auto end() {
+	constexpr auto end() {
 		return values.end();
 	}
-	auto begin() const {
+	constexpr auto begin() const {
 		return values.begin();
 	}
-	auto end() const {
+	constexpr auto end() const {
 		return values.end();
 	}
 
@@ -251,69 +251,69 @@ struct Matrix<Type, RowCount, 1> {
 		return 1;
 	}
 
-	Matrix() :
+	constexpr Matrix() :
 			values { } {
 	}
-	Matrix(Type const &init) :
+	constexpr Matrix(Type const &init) :
 			values { } {
 		std::fill(begin(), end(), init);
 	}
-	Matrix(std::initializer_list<Type> initList) :
+	constexpr Matrix(std::initializer_list<Type> initList) :
 			values { } {
 		std::copy(initList.begin(), initList.end(), begin());
 	}
-	Matrix(Matrix const &other) :
+	constexpr Matrix(Matrix const &other) :
 			values(other.values) {
 	}
-	Matrix(Matrix &&other) :
+	constexpr Matrix(Matrix &&other) :
 			values(std::move(other.values)) {
 	}
 
-	Matrix& operator=(Matrix const &other) {
+	constexpr Matrix& operator=(Matrix const &other) {
 		values = other.values;
 		return *this;
 	}
-	Matrix& operator=(Matrix &&other) {
+	constexpr Matrix& operator=(Matrix &&other) {
 		values = std::move(other.values);
 		return *this;
 	}
 
-	Type& operator()(int n, int m) {
+	constexpr Type& operator()(int n, int m) {
 		assert(m == 0);
 		return (*this)(n);
 	}
-	Type const& operator()(int n, int m) const {
+	constexpr Type const& operator()(int n, int m) const {
 		assert(m == 0);
 		return (*this)(n);
 	}
 
-	Type& operator()(int n) {
+	constexpr Type& operator()(int n) {
 		return values[n];
 	}
-	Type const& operator()(int n) const {
+	constexpr Type const& operator()(int n) const {
 		return values[n];
 	}
 
-	Matrix& operator+=(Matrix const &A) {
+	constexpr Matrix& operator+=(Matrix const &A) {
 		return *this = *this + A;
 	}
-	Matrix& operator-=(Matrix const &A) {
+	constexpr Matrix& operator-=(Matrix const &A) {
 		return *this = *this - A;
 	}
-	Matrix& operator*=(Type const &a) {
+	constexpr Matrix& operator*=(Type const &a) {
 		return *this = *this * a;
 	}
-	Matrix& operator/=(Type const &a) {
+	constexpr Matrix& operator/=(Type const &a) {
 		return *this = *this / a;
 	}
 
-	Matrix operator*(Type const &a) const {
+	constexpr Matrix operator*(Type const &a) const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++)
 			B.values[k] = a * values[k];
 		return B;
 	}
-	Matrix operator/(Type const &a) const {
+	constexpr Matrix operator/(Type const &a) const {
 		static constexpr Type one = Type(1);
 		Matrix B;
 		Type const aInv = one / a;
@@ -322,32 +322,32 @@ struct Matrix<Type, RowCount, 1> {
 		return B;
 	}
 
-	Matrix operator+() const {
+	constexpr Matrix operator+() const {
 		return *this;
 	}
-	Matrix operator-() const {
+	constexpr Matrix operator-() const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++)
 			B.values[k] = -values[k];
 		return B;
 	}
-	Matrix operator+(Matrix const &A) const {
+	constexpr Matrix operator+(Matrix const &A) const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++)
 			B.values[k] = values[k] + A.values[k];
 		return B;
 	}
-	Matrix operator-(Matrix const &A) const {
+	constexpr Matrix operator-(Matrix const &A) const {
 		Matrix B;
 		for (std::size_t k = 0; k < size(); k++)
 			B.values[k] = values[k] - A.values[k];
 		return B;
 	}
 
-	bool operator==(Matrix const &A) const {
+	constexpr bool operator==(Matrix const &A) const {
 		return values == A.values;
 	}
-	bool operator!=(Matrix const &A) const {
+	constexpr bool operator!=(Matrix const &A) const {
 		return !(*this == A);
 	}
 
@@ -357,27 +357,27 @@ struct Matrix<Type, RowCount, 1> {
 		return Z;
 	}
 
-	friend Matrix operator*(Type const &a, Matrix const &B) {
+	friend constexpr Matrix operator*(Type const &a, Matrix const &B) {
 		return B * a;
 	}
 
-	auto begin() {
+	constexpr auto begin() {
 		return values.begin();
 	}
-	auto end() {
+	constexpr auto end() {
 		return values.end();
 	}
-	auto begin() const {
+	constexpr auto begin() const {
 		return values.begin();
 	}
-	auto end() const {
+	constexpr auto end() const {
 		return values.end();
 	}
 
-	auto* data() {
+	constexpr auto* data() {
 		return values.data();
 	}
-	auto const* data() const {
+	constexpr auto const* data() const {
 		return values.data();
 	}
 
@@ -394,25 +394,25 @@ struct Matrix<Type, 1, 1> {
 		return 1;
 	}
 
-	Matrix() = default;
-	Matrix(std::initializer_list<Type> const &init) :
+	constexpr Matrix() = default;
+	constexpr Matrix(std::initializer_list<Type> const &init) :
 			value(*init.begin()) {
 	}
-	Matrix(Type const &v) :
+	constexpr Matrix(Type const &v) :
 			value(v) {
 	}
-	Matrix(Matrix const &o) :
+	constexpr Matrix(Matrix const &o) :
 			value(o.value) {
 	}
-	Matrix(Matrix &&o) :
+	constexpr Matrix(Matrix &&o) :
 			value(std::move(o.value)) {
 	}
 
-	Matrix& operator=(Matrix const &o) {
+	constexpr Matrix& operator=(Matrix const &o) {
 		value = o.value;
 		return *this;
 	}
-	Matrix& operator=(Matrix &&o) {
+	constexpr Matrix& operator=(Matrix &&o) {
 		value = std::move(o.value);
 		return *this;
 	}
@@ -421,74 +421,74 @@ struct Matrix<Type, 1, 1> {
 		return 1;
 	}
 
-	Type& operator()(int, int) {
+	constexpr Type& operator()(int, int) {
 		return value;
 	}
-	Type const& operator()(int, int) const {
-		return value;
-	}
-
-	Type& operator()(int) {
-		return value;
-	}
-	Type const& operator()(int) const {
+	constexpr Type const& operator()(int, int) const {
 		return value;
 	}
 
-	operator Type() const {
+	constexpr Type& operator()(int) {
 		return value;
 	}
-	operator Type&() {
+	constexpr Type const& operator()(int) const {
 		return value;
 	}
 
-	Matrix& operator+=(Matrix const &A) {
+	constexpr operator Type() const {
+		return value;
+	}
+	constexpr operator Type&() {
+		return value;
+	}
+
+	constexpr Matrix& operator+=(Matrix const &A) {
 		return *this = *this + A;
 	}
-	Matrix& operator-=(Matrix const &A) {
+	constexpr Matrix& operator-=(Matrix const &A) {
 		return *this = *this - A;
 	}
-	Matrix& operator*=(Type const &a) {
+	constexpr Matrix& operator*=(Type const &a) {
 		return *this = *this * a;
 	}
-	Matrix& operator/=(Type const &a) {
+	constexpr Matrix& operator/=(Type const &a) {
 		return *this = *this / a;
 	}
 
-	Matrix operator*(Type const &a) const {
+	constexpr Matrix operator*(Type const &a) const {
 		Matrix B;
 		B.value = a * value;
 		return B;
 	}
-	Matrix operator/(Type const &a) const {
+	constexpr Matrix operator/(Type const &a) const {
 		static constexpr Type one = Type(1);
 		Matrix B;
 		B.value = (one / a) * value;
 		return B;
 	}
 
-	Matrix operator+() const {
+	constexpr Matrix operator+() const {
 		return *this;
 	}
-	Matrix operator-() const {
+	constexpr Matrix operator-() const {
 		return Matrix(-value);
 	}
 
-	Matrix operator+(Matrix const &A) const {
+	constexpr Matrix operator+(Matrix const &A) const {
 		return Matrix(value + A.value);
 	}
-	Matrix operator-(Matrix const &A) const {
+	constexpr Matrix operator-(Matrix const &A) const {
 		return Matrix(value - A.value);
 	}
 
-	bool operator==(Matrix const &A) const {
+	constexpr bool operator==(Matrix const &A) const {
 		return value == A.value;
 	}
-	bool operator!=(Matrix const &A) const {
+	constexpr bool operator!=(Matrix const &A) const {
 		return !(*this == A);
 	}
 
-	friend Matrix operator*(Type const &a, Matrix const &B) {
+	friend constexpr Matrix operator*(Type const &a, Matrix const &B) {
 		return B * a;
 	}
 
@@ -740,7 +740,7 @@ Type matrixTrace(SquareMatrix<Type, Ndim> const &A) {
 }
 
 template<typename Type, int R, int C>
-Matrix<Type, C, R> matrixTranspose(Matrix<Type, R, C> const &B) {
+constexpr Matrix<Type, C, R> matrixTranspose(Matrix<Type, R, C> const &B) {
 	Matrix<Type, C, R> A;
 	for (int r = 0; r < R; r++) {
 		for (int c = 0; c < C; c++) {
@@ -751,7 +751,7 @@ Matrix<Type, C, R> matrixTranspose(Matrix<Type, R, C> const &B) {
 }
 
 template<typename Type, int Ndim>
-SquareMatrix<Type, Ndim - 1> subMatrix(SquareMatrix<Type, Ndim> const &A, int row, int col) {
+constexpr SquareMatrix<Type, Ndim - 1> subMatrix(SquareMatrix<Type, Ndim> const &A, int row, int col) {
 	SquareMatrix<Type, Ndim - 1> M;
 	for (int r = 0; r < row; r++) {
 		for (int c = 0; c < col; c++)
@@ -769,10 +769,10 @@ SquareMatrix<Type, Ndim - 1> subMatrix(SquareMatrix<Type, Ndim> const &A, int ro
 }
 
 template<typename T, int N>
-T matrixDeterminant(SquareMatrix<T, N> const &A);
+constexpr T matrixDeterminant(SquareMatrix<T, N> const &A);
 
 template<typename T, int N>
-T matrixCofactor(SquareMatrix<T, N> const &A, int r, int c) {
+constexpr T matrixCofactor(SquareMatrix<T, N> const &A, int r, int c) {
 	if constexpr (N > 1) {
 		T sgn = ((r + c) & 1) ? -T(1) : T(1);
 		return sgn * matrixDeterminant(subMatrix(A, r, c));
@@ -782,7 +782,7 @@ T matrixCofactor(SquareMatrix<T, N> const &A, int r, int c) {
 }
 
 template<typename T, int N>
-SquareMatrix<T, N> matrixCofactor(SquareMatrix<T, N> const &A) {
+constexpr SquareMatrix<T, N> matrixCofactor(SquareMatrix<T, N> const &A) {
 	SquareMatrix<T, N> C;
 	for (int r = 0; r < N; r++) {
 		for (int c = 0; c < N; c++) {
@@ -793,7 +793,7 @@ SquareMatrix<T, N> matrixCofactor(SquareMatrix<T, N> const &A) {
 }
 
 template<typename T, int N>
-T matrixDeterminant(SquareMatrix<T, N> const &A) {
+constexpr T matrixDeterminant(SquareMatrix<T, N> const &A) {
 	if constexpr (N > 1) {
 		T sum = T(0);
 		for (int c = 0; c < N; c++) {
@@ -806,12 +806,12 @@ T matrixDeterminant(SquareMatrix<T, N> const &A) {
 }
 
 template<typename T, int N>
-SquareMatrix<T, N> matrixAdjoint(SquareMatrix<T, N> const &A) {
+constexpr SquareMatrix<T, N> matrixAdjoint(SquareMatrix<T, N> const &A) {
 	return matrixTranspose(matrixCofactor(A));
 }
 
 template<typename T, int N>
-auto matrixInverse(SquareMatrix<T, N> const &A) {
+constexpr auto matrixInverse(SquareMatrix<T, N> const &A) {
 	return matrixAdjoint(A) / matrixDeterminant(A);
 }
 
@@ -947,7 +947,7 @@ void matrixQRDecomposition(SquareMatrix<T, N> const &A, SquareMatrix<T, N> &Q, S
 }
 
 template<typename T, int N>
-void matrixLUDecompose(SquareMatrix<T, N> &A) {
+constexpr auto matrixLUDecompose(SquareMatrix<T, N> A) {
 	for (int n = 0; n < N - 1; n++) {
 		T inv = T(1) / A(n, n);
 		for (int k = n + 1; k < N; k++) {
@@ -959,6 +959,7 @@ void matrixLUDecompose(SquareMatrix<T, N> &A) {
 			}
 		}
 	}
+	return A;
 }
 
 template<typename T, int N, int M>

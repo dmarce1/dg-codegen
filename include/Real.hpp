@@ -131,6 +131,11 @@ struct Real {
 		a.value = std::copysign(a.value, b.value);
 		return a;
 	}
+	friend inline constexpr Real legendre(int n, Real a) {
+		debug_check(a);
+		a.value = std::legendre(n, a.value);
+		return a;
+	}
 	friend inline constexpr Real expm1(Real a) {
 		debug_check(a);
 		a.value = std::expm1(a.value);
@@ -244,7 +249,7 @@ struct Real {
 			errorString += std::to_string(std::stacktrace::current());
 			std::cout << errorString;
 			assert(false);
-		throw std::invalid_argument(errorString);
+			throw std::invalid_argument(errorString);
 		}
 	}
 };

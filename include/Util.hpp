@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <string>
 
 namespace Math {
@@ -113,4 +114,7 @@ inline constexpr std::array<int, D> unit(int d) {
 }
 
 void installFpeHandler();
+
+void toFile(std::string const &content, std::filesystem::path const &filePath);
+
 

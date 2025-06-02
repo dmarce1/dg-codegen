@@ -54,6 +54,15 @@ struct MultiIndex {
 		}
 		return *this;
 	}
+	static constexpr std::array<int, dimensionCount> strides() {
+		std::array<int, dimensionCount> strides;
+		int stride = 1;
+		for( int dimensionIndex = 0; dimensionIndex < dimensionCount; dimensionIndex++) {
+			strides[dimensionIndex] = stride;
+			stride *= exteriorRange.end[dimensionIndex] - exteriorRange.begin[dimensionIndex];
+		}
+		return strides;
+	}
 	constexpr MultiIndex operator++(int) const {
 		auto const rc = *this;
 		const_cast<MultiIndex*>(this)->operator++();
@@ -103,7 +112,6 @@ struct MultiIndex {
 		os << ")";
 		return os;
 	}
-
 private:
 	std::array<int, dimensionCount> indexValues_;
 };
