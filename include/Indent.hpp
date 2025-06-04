@@ -1,51 +1,51 @@
 /******************************************************************************
  Copyright (C) 2024  Dominic C. Marcello
-*******************************************************************************/
+ *******************************************************************************/
 
 #ifndef INCLUDE_INDENT_HPP_
 #define INCLUDE_INDENT_HPP_
 
-
 #include <cassert>
 #include <string>
 
-
-
-struct Indention {
-	static constexpr char tab_[] = "   ";
-	Indention() :
-			count_(0) {
+struct Indent {
+	static constexpr int spacesPerIndention_ = 3;
+	Indent() {
 	}
-	Indention& operator++() {
-		assert(count_ >= 0);
-		count_++;
+	Indent& operator++() {
+		for (int n = 0; n < spacesPerIndention_; n++) {
+			tabString_ += " ";
+		}
 		return *this;
 	}
-	Indention& operator--() {
-		count_--;
-		assert(count_ >= 0);
+	Indent& operator--() {
+		assert(!tabString_.empty());
+		for (int n = 0; n < spacesPerIndention_; n++) {
+			tabString_.pop_back();
+		}
 		return *this;
 	}
-	Indention operator++(int) {
+	Indent operator++(int) {
 		auto rc = *this;
 		operator++();
 		return rc;
 	}
-	Indention operator--(int) {
+	Indent operator--(int) {
 		auto rc = *this;
 		operator--();
 		return rc;
 	}
 	operator std::string() const {
-		std::string tabs;
-		for (int i = 0; i < count_; i++) {
-			tabs += tab_;
-		}
-		return tabs;
+		return tabString_;
+	}
+	operator char const*() const {
+		return tabString_.c_str();
+	}
+	std::string operator+(std::string const &other) const {
+		return std::string(tabString_) + other;
 	}
 private:
-	int count_;
+	std::string tabString_;
 };
-
 
 #endif /* INCLUDE_INDENT_HPP_ */
