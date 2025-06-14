@@ -441,7 +441,7 @@ Matrix traceMatrix(int D, int modeCount, int traceFace, bool inverse = false) {
 			}
 		}
 	}
-	printf("%i %i\n", to.size(), smallSize);
+	//printf("%i %i\n", to.size(), smallSize);
 	assert(to.size() == smallSize);
 	assert(from.size() == bigSize);
 	Matrix P = createMatrix(smallSize, bigSize);
@@ -1004,28 +1004,8 @@ int main(int, char*[]) {
 			"}\n"
 			"";
 
-	toFile(hppCode, "./generated_source/transforms.hpp");
+	toFile(hppCode, "./generated_source/dgTransforms.hpp");
 	getConstant.reset();
 	return 0;
 }
 
-template<int D, int O>
-std::array<int, D> triangularToFlat(std::array<int, D> const &ti) {
-	std::array<int, D> num, den;
-	for (int d = D - 1; d > 0; d--) {
-		ti[d - 1] += ti[d];
-	}
-	num = ti;
-	den.fill(1);
-	for (int d1 = 1; d1 < D; d1++) {
-		for (int d2 = 0; d2 < D - d1; d2++) {
-			num[d2] *= ti[d2] + d1;
-			den[d2] *= d1 + 1;
-		}
-	}
-	int flat = 0;
-	for (int d = 0; d < D; d++) {
-		flat += num[d] / den[d];
-	}
-	return flat;
-}

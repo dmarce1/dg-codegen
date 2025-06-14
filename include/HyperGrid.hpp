@@ -4,6 +4,7 @@
 #include "Hdf5.hpp"
 #include "Matrix.hpp"
 #include "Quadrature.hpp"
+#include "dgTransforms.hpp"
 
 #include <numeric>
 
