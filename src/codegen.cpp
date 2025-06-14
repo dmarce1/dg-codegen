@@ -323,7 +323,7 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 	int const M = x.size();
 	int const N = A.size();
 //	if (v.size() != N) {
-	printf("---- %i %i %i %i\n", v.size(), A.size(), A[0].size(), x.size());
+//	printf("---- %i %i %i %i\n", v.size(), A.size(), A[0].size(), x.size());
 //	}
 	assert((int ) v.size() == N);
 	assert((int ) A[0].size() == M);
@@ -409,7 +409,7 @@ Matrix permutationMatrix(int N, int modeCount, int triIndexCount) {
 
 Matrix traceMatrix(int D, int modeCount, int traceFace, bool inverse = false) {
 	int const traceDim = traceFace >> 1;
-	int const traceSign = 1 - 2 * (traceFace & 1);
+	int const traceSign = 2 * (traceFace & 1) - 1;
 	std::vector<std::vector<int>> from, to;
 	int bigSize = binco(modeCount + D - 1, D);
 	int smallSize = binco(modeCount + D - 2, D - 1);
@@ -788,19 +788,19 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 	if (inverse) {
 		std::swap(size1, size2);
 	}
-	std::string arrayType = "std::array<T, triangleSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">>";
+	std::string arrayType2 = "std::array<T, triangleSize<" + std::to_string(dimensionCount - int(inverse)) + ", " + std::to_string(modeCount) + ">>";
+	std::string arrayType1 = "std::array<T, triangleSize<" + std::to_string(dimensionCount + int(inverse) - 1) + ", " + std::to_string(modeCount) + ">>";
 	code1 += "\ntemplate<typename T>\n";
 	auto inputs = generateVariableNames("input", size1);
 	auto outputs = generateVariableNames("output", size2);
-	code1 += indent + arrayType + " ";
+	code1 += indent + arrayType1 + " ";
 	code1 += "dgTrace" + std::string(inverse ? "Inverse" : "");
 	code1 += tag(dimensionCount, modeCount);
-	code1 += "(int face, " + arrayType + " const& input) {\n";
+	code1 += "(int face, " + arrayType2 + " const& input) {\n";
 	indent++;
-	code2 += indent + arrayType + " output;\n";
+	code2 += indent + arrayType1 + " output;\n";
 	code2 += std::string(indent);
 	for (int face = 0; face < 2 * dimensionCount; face++) {
-		int dim = face / 2;
 		if (face == 2 * dimensionCount - 1) {
 			code2 += "/*";
 		}
@@ -832,14 +832,15 @@ int main(int, char*[]) {
 	std::string hppCode;
 	hppCode += "#pragma once\n";
 	hppCode += "\n";
+	hppCode += "#include \"Util.hpp\"\n";
 	hppCode += "#include <array>\n";
 	hppCode += "#include <cmath>\n";
 	hppCode += "\n";
 	hppCode += indent + "template<int D, int O>\n";
-	hppCode += indent + "constexpr int triangleSize = (O + D - 1) * ((D == 0) ? 1 : (triangleSize<(D > 0) ? (D - 1) : 0, O> / D));\n";
+	hppCode += indent + "constexpr int triangleSize = binco(O + D - 1, D);\n";
 	hppCode += indent + "\n";
 	hppCode += indent + "template<int D, int O>\n";
-	hppCode += indent + "constexpr int squareSize = O * ((D == 0) ? 1 : squareSize<(D > 0) ? (D - 1) : 0, O>);\n";
+	hppCode += indent + "constexpr int squareSize = ipow(O, D);\n";
 	hppCode += indent + "\n";
 	for (int dim = 1; dim <= 3; dim++) {
 		for (int order = 1; order <= 4; order++) {
@@ -854,7 +855,7 @@ int main(int, char*[]) {
 		hppCode += indent + "\n";
 		hppCode += indent + "template<typename T, int D, int O>\n";
 		hppCode += std::string(indent);
-		std::string fname;
+		std::string fname, varname;
 		if (iter == 0) {
 			fname = "dgAnalyze";
 			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(std::array<T, squareSize<D, O>> const& input) {\n";
@@ -866,13 +867,16 @@ int main(int, char*[]) {
 			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 3) {
 			fname = "dgStiffness";
-			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
+			varname = "dimension, ";
+			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(int dimension, std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 4) {
+			varname = "face, ";
 			fname = "dgTrace";
-			hppCode += "std::array<T, triangleSize<D - 1, O>> " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
+			hppCode += "std::array<T, triangleSize<D - 1, O>> " + fname + "(int face, std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 5) {
+			varname = "face, ";
 			fname = "dgTraceInverse";
-			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(std::array<T, triangleSize<D - 1, O>> const& input) {\n";
+			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(int face, std::array<T, triangleSize<D - 1, O>> const& input) {\n";
 		}
 		indent++;
 		for (int dim = 1; dim <= 3; dim++) {
@@ -887,7 +891,7 @@ int main(int, char*[]) {
 				}
 				hppCode += "if constexpr(O == " + std::to_string(order) + ") {\n";
 				indent++;
-				hppCode += indent + "return " + fname + tag(dim, order) + "(input);\n";
+				hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
 				indent--;
 				hppCode += indent + "}";
 				if (order < 4) {
@@ -908,6 +912,83 @@ int main(int, char*[]) {
 		hppCode += indent + "}\n";
 	}
 	hppCode += "\n";
+	hppCode += indent + "template<typename T, int D, int O>\n";
+	hppCode += "std::array<T, D> getQuadraturePoint(int flatIndex) {\n";
+	indent++;
+	for (int dim = 1; dim <= 3; dim++) {
+		if (dim == 1) {
+			hppCode += std::string(indent);
+		}
+		hppCode += "if constexpr(D == " + std::to_string(dim) + ") {\n";
+		indent++;
+		for (int order = 1; order <= 4; order++) {
+			if (order == 1) {
+				hppCode += std::string(indent);
+			}
+			auto Q = gaussQuadrature(order, Quadrature::gaussLegendre);
+			hppCode += "if constexpr(O == " + std::to_string(order) + ") {\n";
+			indent++;
+			bool first = true;
+			hppCode += indent + "constexpr std::array<std::array<T, D>, squareSize<D, O>> map{{\n";
+			indent++;
+			hppCode += std::string(indent);
+			int cnt = 0;
+			for (int iii = 0; iii < ipow(order, dim); iii++) {
+				std::vector<int> I;
+				int k = iii;
+				for (int d = 0; d < dim; d++) {
+					I.push_back(k % order);
+					k /= order;
+				}
+				std::reverse(I.begin(), I.end());
+				if (first) {
+					first = false;
+				} else {
+					hppCode += ", ";
+				}
+				if (cnt == 1) {
+					hppCode += "\n" + std::string(indent);
+					cnt = 0;
+				}
+				hppCode += "{";
+				for (int d = 0; d < dim; d++) {
+					char* ptr;
+					if(std::abs(Q[I[d]].position) < 1e-14) {
+						Q[I[d]].position = 0.0;
+					}
+					asprintf(&ptr, "T(%24.17e)", double(Q[I[d]].position));
+					hppCode += ptr;
+					free(ptr);
+					if (d + 1 < dim) {
+						hppCode += ", ";
+					}
+				}
+				hppCode += "}";
+				cnt++;
+		}
+			indent--;
+			hppCode += "\n" + std::string(indent) + "}};\n";
+			hppCode += indent + "return map[flatIndex];\n";
+			indent--;
+			hppCode += indent + "}";
+			if (order < 4) {
+				hppCode += " else ";
+			} else {
+				hppCode += "\n";
+			}
+		}
+		indent--;
+		hppCode += indent + "}";
+		if (dim < 3) {
+			hppCode += " else ";
+		} else {
+			hppCode += "\n";
+		}
+	}
+	indent--;
+	hppCode += indent + "}\n";
+	hppCode += "\n";
+
 	hppCode += indent + "template<int D, int O>\n";
 	hppCode += "std::array<int, D> flatToTriangular(int flatIndex) {\n";
 	indent++;

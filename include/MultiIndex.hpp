@@ -122,7 +122,7 @@ struct CanDoArithmetic<MultiIndex<outerRange, innerRange>> {
 };
 
 template<auto outerRange, auto innerRange = outerRange>
-constexpr auto createMultiIndexMap() {
+auto createMultiIndexMap() {
 	constexpr int N = rangeVolume(innerRange);
 	using index_type = MultiIndex<outerRange, innerRange>;
 	std::array<index_type, N> map;
@@ -135,12 +135,12 @@ constexpr auto createMultiIndexMap() {
 }
 
 template<auto outerRange, typename InputIt, typename OutputIt>
-constexpr void reverseMultiIndexData(InputIt srcBegin, InputIt srcEnd, OutputIt dstBegin) {
+void reverseMultiIndexData(InputIt srcBegin, InputIt srcEnd, OutputIt dstBegin) {
 	using index_type = MultiIndex<outerRange>;
 	static constexpr int D = index_type::dimensionCount;
 	static constexpr int N = index_type::count();
 	assert(std::distance(srcBegin, srcEnd) == N);
-	constexpr auto indexMap = createMultiIndexMap<outerRange>();
+	auto const indexMap = createMultiIndexMap<outerRange>();
 	for (int linear = 0; linear < N; ++linear) {
 		auto const &value = *(srcBegin + linear);
 		index_type idx = indexMap[linear];
