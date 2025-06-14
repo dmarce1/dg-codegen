@@ -2,6 +2,8 @@
 
 #include "Util.hpp"
 
+#include <numeric>
+
 template<int O, int D>
 struct TriIndex {
 	constexpr TriIndex() = default;

@@ -168,12 +168,6 @@ target_include_directories(astrotiger
       ${GENERATED_SOURCE_DIR}
 )
 
-add_compile_definitions(
-   DIMENSION_COUNT=${DIMENSION_COUNT}
-   MODE_COUNT=${MODE_COUNT}
-   SIMD_WIDTH=${SIMD_WIDTH}
-)
-
 set_property(TARGET astrotiger PROPERTY CUDA_ARCHITECTURES native)
 set_property(TARGET astrotiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
