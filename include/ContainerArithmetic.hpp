@@ -1,6 +1,7 @@
 #pragma once
 
 #include <type_traits>
+#include <array>
 #include <utility>
 
 template<typename T>

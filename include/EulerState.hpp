@@ -1,7 +1,13 @@
 #pragma once
 
+#include "ContainerArithmetic.hpp"
+#include "Matrix.hpp"
+#include "Util.hpp"
+
 #include <array>
 #include <cmath>
+#include <vector>
+#include <string>
 
 #define EULERS_CONSTRUCTION : \
 	rho(*std::launder(reinterpret_cast<T*>(base_type::data() + 0))), \

@@ -13,11 +13,13 @@ set(astrotiger_src
   src/main.cpp
   src/Options.cpp
   src/Util.cpp
+  src/Radiation.cpp
 )
 
 set(astrotiger_header
   include/Array.hpp
   include/Basis.hpp
+  include/Constants.hpp
   include/ContainerArithmetic.hpp
   include/Definitions.hpp
   include/EulerState.hpp

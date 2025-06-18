@@ -4,11 +4,11 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <string>
 #include <stacktrace>
 #include <type_traits>
-
 #include "ContainerArithmetic.hpp"
 
 template<typename Type, int RowCount, int ColumnCount>
