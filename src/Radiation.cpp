@@ -5,11 +5,11 @@
 using T = double;
 constexpr int NDIM = 3;
 
-auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0, std::array<T, NDIM> Beta0, T rho, T mu, T kappa, T chi, T gamma, T dt) {
+auto computeG(T dEr, std::array<T, NDIM> dF, T Er0, std::array<T, NDIM> F0, T Eg0, std::array<T, NDIM> Beta0, T rho, T mu, T kappa, T chi, T gamma, T dt) {
 	constexpr T tiny = 1e-50;
 	std::array<T, NDIM> Beta;
 	for (int n = 0; n < NDIM; n++) {
-		Beta[n] = Beta0[n] + (F0[n] - F[n]) / (rho * cgs::c * cgs::c);
+		Beta[n] = Beta0[n] - dF[n] / (rho * cgs::c * cgs::c);
 	}
 	T Ek = 0;
 	std::array<T, NDIM> dEk_dF;
@@ -17,12 +17,12 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 		Ek += 0.5 * rho * sqr(cgs::c * Beta[n]);
 		dEk_dF[n] = -Beta[n];
 	}
-	T const Eg = Eg0 + Er0 - Er;
+	T const Eg = Eg0 - dEr;
 	T const eps = Eg - Ek;
 	std::array<T, NDIM> const deps_dF = -dEk_dF;
 	T F2 = 0;
 	for (int n = 0; n < NDIM; n++) {
-		F2 += sqr(F[n]);
+		F2 += sqr(F0[n] + dF[n]);
 	}
 	T const absF = sqrt(F2);
 	T const iCv = (mu * cgs::amu) * (gamma - 1.0) / (cgs::kB * rho);
@@ -39,7 +39,7 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 	}
 	std::array<T, NDIM> N;
 	for (int n = 0; n < NDIM; n++) {
-		N[n] = F[n] / (absF + tiny);
+		N[n] = (F0[n] + dF[n]) / (absF + tiny);
 	}
 	T const temp3 = temp * temp2;
 	std::array<std::array<T, NDIM>, NDIM> dN_dF;
@@ -49,10 +49,10 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 		}
 	}
 	std::array<T, NDIM> df_dF;
-	T const f = absF / Er;
-	T const df_dEr = -f / Er;
+	T const f = absF / (Er0 + dEr);
+	T const df_dEr = -f / (Er0 + dEr);
 	for (int n = 0; n < NDIM; n++) {
-		df_dF[n] = N[n] / Er;
+		df_dF[n] = N[n] / (Er0 + dEr);
 	}
 	T const Xi = (5 - 2 * sqrt(4 - 3 * sqr(f))) / 3;
 	T const dXi_df = 2 * f / sqrt(4 - 3 * sqr(f));
@@ -87,40 +87,40 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 	std::array<std::array<T, NDIM>, NDIM> P;
 	for (int n = 0; n < NDIM; n++) {
 		for (int m = 0; m < NDIM; m++) {
-			P[n][m] = Er * D[n][m];
+			P[n][m] = (Er0 + dEr) * D[n][m];
 		}
 	}
 	std::array<std::array<T, NDIM>, NDIM> dP_dEr;
 	for (int n = 0; n < NDIM; n++) {
 		for (int m = 0; m < NDIM; m++) {
-			dP_dEr[n][m] = Er * dD_dEr[n][m] + D[n][m];
+			dP_dEr[n][m] = (Er0 + dEr) * dD_dEr[n][m] + D[n][m];
 		}
 	}
 	std::array<std::array<std::array<T, NDIM>, NDIM>, NDIM> dP_dF;
 	for (int n = 0; n < NDIM; n++) {
 		for (int m = 0; m < NDIM; m++) {
 			for (int l = 0; l < NDIM; l++) {
-				dP_dF[l][n][m] = Er * dD_dF[l][n][m];
+				dP_dF[l][n][m] = (Er0 + dEr) * dD_dF[l][n][m];
 			}
 		}
 	}
-	T gk = kappa * (Er - cgs::a * temp4);
+	T gk = kappa * (Er0 + dEr - cgs::a * temp4);
 	for (int k = 0; k < NDIM; k++) {
-		gk -= 2 * kappa * Beta[k] * F[k];
+		gk -= 2 * kappa * Beta[k] * (F0[k] + dF[k]);
 	}
 	T const dgk_dEr = kappa * (1 - 4 * cgs::a * temp3 * dtemp_dEr);
 	std::array<T, NDIM> dgk_dF;
 	for (int n = 0; n < NDIM; n++) {
 		dgk_dF[n] = -kappa * (2 * Beta[n] + 4 * cgs::a * temp3 * dtemp_dF[n]);
 		for (int k = 0; k < NDIM; k++) {
-			dgk_dF[n] -= 2 * kappa * F[k] * dBeta_dF[k][n];
+			dgk_dF[n] -= 2 * kappa * (F0[k] + dF[k]) * dBeta_dF[k][n];
 		}
 	}
 	std::array<T, NDIM> Gx { };
 	std::array<T, NDIM> dGx_dEr { };
 	std::array<std::array<T, NDIM>, NDIM> dGx_dF { };
 	for (int n = 0; n < NDIM; n++) {
-		Gx[n] = chi * (F[n] - Beta[n] * Er);
+		Gx[n] = chi * (F0[n] + dF[n] - Beta[n] * (Er0 + dEr));
 		for (int k = 0; k < NDIM; k++) {
 			Gx[n] -= chi * P[k][n] * Beta[k];
 		}
@@ -133,7 +133,7 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 	}
 	for (int n = 0; n < NDIM; n++) {
 		for (int m = 0; m < NDIM; m++) {
-			dGx_dF[n][m] = chi * (T(n == m) - dBeta_dF[n][m] * Er);
+			dGx_dF[n][m] = chi * (T(n == m) - dBeta_dF[n][m] * (Er0 + dEr));
 			for (int k = 0; k < NDIM; k++) {
 				dGx_dF[n][m] -= chi * dP_dF[k][n][m] * Beta[k];
 				dGx_dF[n][m] -= chi * P[k][n] * dBeta_dF[k][m];
@@ -169,7 +169,7 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 			dGk_dF[n][m] = Beta[n] * dgk_dF[m] + gk * dBeta_dF[n][m];
 		}
 	}
-	T const hr = Er - Er0 + dt * cgs::c * (gk + gx);
+	T const hr = dEr + dt * cgs::c * (gk + gx);
 	T const dhr_dEr = 1 + dt * cgs::c * (dgk_dEr + dgx_dEr);
 	std::array<T, NDIM> dhr_dF;
 	for (int n = 0; n < NDIM; n++) {
@@ -177,7 +177,7 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 	}
 	std::array<T, NDIM> Hr;
 	for (int n = 0; n < NDIM; n++) {
-		Hr[n] = F[n] - F0[n] + dt * cgs::c * (Gk[n] + Gx[n]);
+		Hr[n] = dF[n] + dt * cgs::c * (Gk[n] + Gx[n]);
 	}
 	std::array<T, NDIM> dHr_dEr;
 	for (int n = 0; n < NDIM; n++) {
@@ -259,7 +259,7 @@ void testRadiation() {
 	for (int trialNum = 0; trialNum < ntrial; trialNum++) {
 
 		T Tr = randomLog(10, 1000000);
-		T Tg = Tr * randomLogNormal(1.0, 1);
+		T Tg = Tr * randomLogNormal(1.0, .1);
 		T Er = cgs::a * sqr(sqr(Tr));
 		T const f = rand1();
 		std::array<T, NDIM> const Nr = randomUnitVector3D();
@@ -286,30 +286,31 @@ void testRadiation() {
 		T dEr = eps * Er;
 		T dF = eps * Er;
 
-		std::array<std::array<T, NDIM + 1>, NDIM + 1> dF2;
-		auto dF1 = computeG(Er, F, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).second;
+		std::array<std::array<T, NDIM + 1>, NDIM + 1> dJ2;
+		auto dJ1 = computeG(Er, F, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).second;
 		for (int l = 0; l <= NDIM; l++) {
-			T Erp = Er, Erm = Er;
-			std::array<T, NDIM> Fp = F, Fm = F;
+			T dErp = 0.0, dErm = 0.0;
+			std::array<T, NDIM> dFm{};
+			std::array<T, NDIM> dFp{};
 			if (l == NDIM) {
-				Erp = Er + 0.5 * dEr;
-				Erm = Er - 0.5 * dEr;
+				dErp = 0.5 * dEr;
+				dErm = -0.5 * dEr;
 			} else {
-				Fp[l] += 0.5 * dEr;
-				Fm[l] -= 0.5 * dEr;
+				dFp[l] += 0.5 * dEr;
+				dFm[l] -= 0.5 * dEr;
 			}
-			auto dFp = computeG(Erp, Fp, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
-			auto dFm = computeG(Erm, Fm, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
+			auto dJp = computeG(dErp, dFp, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
+			auto dJm = computeG(dErm, dFm, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
 			for (int m = 0; m <= NDIM; m++) {
-				dF2[m][l] = (dFp[m] - dFm[m]) / (eps * Er);
+				dJ2[m][l] = (dJp[m] - dJm[m]) / (eps * Er);
 			}
 		}
 		double err = 0.0;
 		double norm = 0.0;
 		for (int l = 0; l < NDIM + 1; l++) {
 			for (int m = 0; m < NDIM + 1; m++) {
-				err += sqr(dF1[l][m] - dF2[l][m]);
-				norm += 0.5 * (std::abs(dF1[l][m]) + std::abs(dF2[l][m]));
+				err += sqr(dJ1[l][m] - dJ2[l][m]);
+				norm += 0.5 * (std::abs(dJ1[l][m]) + std::abs(dJ2[l][m]));
 //				printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dF1[l][m], dF2[l][m], dF1[l][m] - dF2[l][m],
 //						(dF1[l][m] - dF2[l][m]) / (dF1[l][m] + 1e-20));
 			}
@@ -332,8 +333,8 @@ void testRadiation() {
 			printf("\n");
 			for (int l = 0; l < NDIM + 1; l++) {
 				for (int m = 0; m < NDIM + 1; m++) {
-					printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dF1[l][m], dF2[l][m], dF1[l][m] - dF2[l][m],
-							(dF1[l][m] - dF2[l][m]) / (dF1[l][m] + 1e-20));
+					printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dJ1[l][m], dJ2[l][m], dJ1[l][m] - dJ2[l][m],
+							(dJ1[l][m] - dJ2[l][m]) / (dJ1[l][m] + 1e-20));
 				}
 			}
 			abort();
