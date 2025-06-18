@@ -3,9 +3,11 @@
 #include "ContainerArithmetic.hpp"
 #include "Hdf5.hpp"
 #include "Matrix.hpp"
+#include "MultiIndex.hpp"
 #include "Quadrature.hpp"
 #include "dgTransforms.hpp"
 
+#include <functional>
 #include <numeric>
 
 template<typename Type>

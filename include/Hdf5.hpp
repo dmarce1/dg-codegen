@@ -71,7 +71,7 @@ void writeHdf5(std::string filename, T const &h, std::vector<std::array<std::arr
 			dataspace_id = H5Screate_simple(D, dims.data(), NULL);
 			dataset_id = H5Dcreate(file_id, name.c_str(), H5T_data_type, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 			auto const &field = fieldData[fi][Q];
-			reverseMultiIndexData<Box>(field.begin(), field.end(), buffer.begin());
+			reverseMultiIndexData<Box>(field.begin(), field.end(), buffer.data());
 			H5Dwrite(dataset_id, H5T_data_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer.data());
 			H5Dclose(dataset_id);
 			H5Sclose(dataspace_id);

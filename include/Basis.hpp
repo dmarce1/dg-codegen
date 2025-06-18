@@ -164,68 +164,7 @@ enum class TransformDirection : int {
 //}
 
 #include <array>
-template<int indexEnd, int squareDimensionCount, int triangleDimensionCount>
-struct HybridIndex {
-	static constexpr int dimensionCount = squareDimensionCount + triangleDimensionCount;
-	constexpr HybridIndex() = default;
-	constexpr HybridIndex(HybridIndex const&) = default;
-	constexpr HybridIndex(HybridIndex&&) = default;
-	constexpr HybridIndex& operator=(HybridIndex const&) = default;
-	constexpr HybridIndex& operator=(HybridIndex&&) = default;
-	constexpr HybridIndex(std::array<int, dimensionCount> const &I) :
-			triIndex_(std::array<int, triangleDimensionCount>(I.begin() + squareDimensionCount, I.end())), multiIndex_(
-					std::array<int, squareDimensionCount>(I.begin(), I.begin() + squareDimensionCount)) {
-	}
-	using TriIndexType = TriIndex<indexEnd, triangleDimensionCount>;
-	using MultiIndexType = MultiIndex<indexEnd, squareDimensionCount>;
-	constexpr HybridIndex& operator++() {
-		triIndex_++;
-		if (triIndex_ == TriIndexType::end()) {
-			triIndex_ = TriIndexType::begin();
-			multiIndex_++;
-		}
-		if (multiIndex_ == MultiIndexType::end()) {
-			triIndex_ = TriIndexType::end;
-		}
-		return *this;
-	}
-	constexpr HybridIndex operator++(int) const {
-		auto const rc = *this;
-		const_cast<HybridIndex*>(this)->operator++();
-		return rc;
-	}
-	constexpr operator int() const {
-		return int(multiIndex_) * TriIndexType::count() + int(triIndex_);
-	}
-	constexpr bool operator==(HybridIndex const &other) const {
-		return (multiIndex_ == other.multiIndex_) && (triIndex_ == other.triIndex_);
-	}
-	constexpr int& operator[](int i) {
-		return (i < squareDimensionCount) ? multiIndex_[i] : triIndex_[i - squareDimensionCount];
-	}
-	constexpr int operator[](int i) const {
-		return (i < squareDimensionCount) ? multiIndex_[i] : triIndex_[i - squareDimensionCount];
-	}
-	static constexpr auto begin() {
-		HybridIndex index;
-		index.multiIndex_ = MultiIndexType::begin();
-		index.triIndex_ = TriIndexType::begin();
-	}
-	static constexpr auto end() {
-		HybridIndex index;
-		index.multiIndex_ = MultiIndexType::end();
-		index.triIndex_ = TriIndexType::end();
-	}
-	static constexpr int count() {
-		return MultiIndexType::count() * TriIndexType::count();
-	}
-	static constexpr auto size() {
-		return dimensionCount;
-	}
-private:
-	TriIndexType triIndex_;
-	MultiIndexType multiIndex_;
-};
+
 
 //// --- truncated transform ---------------------------------------------------
 //template<typename T, int O, int D, TransformDirection dir = TransformDirection::forward>

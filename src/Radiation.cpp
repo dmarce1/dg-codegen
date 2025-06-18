@@ -1,20 +1,213 @@
 #include "Constants.hpp"
 #include "EulerState.hpp"
+#include "HyperGrid.hpp"
+#include "Real.hpp"
+#include "RungeKutta.hpp"
 #include <array>
+#include <iostream>
+
+static const PhysicalUnits physicalUnits(1.0e9);
+static const auto cons = physicalUnits.getPhysicalConstants();
 
 using T = double;
 constexpr int NDIM = 3;
+
+template<typename T, int D = 3>
+struct RadiationState: public std::array<T, 1 + D> {
+	static constexpr int fx_i = 0;
+	static constexpr int fy_i = 1;
+	static constexpr int fz_i = 2;
+	static constexpr int er_i = 3;
+	static constexpr int NF = 1 + D;
+	using base_type = std::array<T, NF>;
+	using value_type = T;
+	using eigensys_type = std::pair<std::array<T, NF>, SquareMatrix<T, NF>>;
+	static constexpr int dimCount() noexcept {
+		return D;
+	}
+	static constexpr int fieldCount() noexcept {
+		return NF;
+	}
+	RadiationState() {
+	}
+	RadiationState(base_type const &other) {
+		((base_type&) (*this)).operator=(other);
+	}
+	RadiationState(RadiationState const &other) {
+		*this = other;
+	}
+	RadiationState(T const &other) {
+		for (auto &u : *this) {
+			u = other;
+		}
+	}
+	RadiationState(RadiationState &&other) {
+		*this = std::move(other);
+	}
+	RadiationState& operator=(RadiationState const &other) {
+		static_cast<base_type&>(*this) = static_cast<base_type const&>(other);
+		return *this;
+	}
+	RadiationState& operator=(RadiationState &&other) {
+		static_cast<base_type&>(*this) = std::move(static_cast<base_type&&>(other));
+		return *this;
+	}
+	std::array<T, NF> eigenvalues(int dim) const {
+		std::array<T, NF> lambda { };
+		using std::sqrt;
+		auto const &U = *this;
+		T const F = sqrt(sqr(U[fx_i]) + sqr(U[fy_i]) + sqr(U[fz_i]));
+		T const f = F / U[er_i];
+		if ((1 > f) && (f > 0)) {
+			T const Finv = T(1) / F;
+			T const mu = U[dim] * Finv;
+			T const sqrt4m3f2 = sqrt(T(4.0) - T(3.0) * sqr(f));
+			T const lambda1 = T(cons.c) * f * mu / sqrt4m3f2;
+			T const lambda2 =
+					T(cons.c) * sqrt((T(2.0) / T(3.0) * (T(4.0) - T(3.0) * sqr(f) - sqrt4m3f2)) + T(2.0) * (T(2.0) - sqr(f) - sqrt4m3f2) * sqr(mu)) / sqrt4m3f2;
+			lambda.front() = lambda1 + lambda2;
+			lambda.back() = lambda1 - lambda2;
+			for (int i = 1; i < NF - 1; i++) {
+				lambda[i] = T(cons.c) * (T(2.0) - sqrt4m3f2) * mu / f;
+			}
+		} else if (f == 1) {
+			T const Finv = T(1) / F;
+			T const mu = U[dim] * Finv;
+			lambda.front() = T(cons.c) * mu;
+			lambda.back() = T(cons.c) * mu;
+			for (int i = 1; i < NF - 1; i++) {
+				lambda[i] = T(cons.c) * mu;
+			}
+		} else if (f == 0) {
+			lambda.front() = T(cons.c) * sqrt(T(1.0 / 3.0));
+			lambda.back() = -T(cons.c) * sqrt(T(1.0 / 3.0));
+			for (int i = 1; i < NF - 1; i++) {
+				lambda[i] = T(0.0);
+			}
+		} else {
+			printf("\n%e\n", f);
+			assert(false);
+		}
+		return lambda;
+
+	}
+	eigensys_type eigenSystem(int d) const {
+		eigensys_type rc;
+		auto &lambda = rc.first;
+		auto &R = rc.second;
+		std::fill(R.begin(), R.end(), T(0));
+		lambda = eigenvalues(d);
+		R(0, 0) = lambda.front();
+		R(D, 0) = T(1);
+		R(0, D) = lambda.back();
+		R(D, D) = T(1);
+		R(1, 1) = T(1);
+		R(2, 2) = T(1);
+		for (int n = 0; n <= NDIM; n++) {
+			std::swap(R(n, d), R(n, 0));
+		}
+		for (int n = 0; n <= NDIM; n++) {
+			std::swap(R(d, n), R(0, n));
+		}
+		return rc;
+	}
+	RadiationState flux(int d1) const noexcept {
+		auto const &U = *this;
+		RadiationState flux;
+		T const F2 = sqr(U[fx_i]) + sqr(U[fy_i]) + sqr(U[fz_i]);
+		T const F = sqrt(F2);
+		if (F) {
+			T const F2inv = T(1) / F2;
+			T const f = F / U[er_i];
+			T const Xi = (T(5.0) - T(2.0) * sqrt(T(4.0) - T(3.0) * sqr(f))) / T(3.0);
+			T const cd = (T(1.0) - Xi) / T(2.0);
+			T const cs = (T(3.0) * Xi - T(1.0)) / T(2.0);
+			flux[er_i] = U[fx_i + d1];
+			for (int d2 = 0; d2 < D; d2++) {
+				flux[fx_i + d2] = cs * U[fx_i + d1] * U[fx_i + d2] * F2inv * U[er_i];
+			}
+			flux[fx_i + d1] += cd * U[er_i];
+		} else {
+			flux.fill(T(0));
+			flux[fx_i + d1] = T(1.0 / 3.0) * U[er_i];
+		}
+		return flux;
+	}
+	friend RadiationState solveRiemannProblem(const RadiationState &uL, const RadiationState &uR, int dim) noexcept {
+		RadiationState fR, fL;
+		fL = uL.flux(dim);
+		fR = uR.flux(dim);
+		auto lambdaL = uL.eigenvalues(dim);
+		auto lambdaR = uR.eigenvalues(dim);
+		T sR = T(0);
+		T sL = T(0);
+		for (int l = 0; l < NF; l++) {
+			sR = std::max(sR, lambdaR[l]);
+			sR = std::max(sR, lambdaL[l]);
+			sL = std::min(sL, lambdaR[l]);
+			sL = std::min(sL, lambdaL[l]);
+		}
+		return (sR * fL - sL * fR + sR * sL * (uR - uL)) / (sR - sL);
+	}
+	constexpr T const& getEnergy() const {
+		return (*this)[NDIM];
+	}
+	constexpr T const& getFlux(int d) const {
+		return (*this)[d];
+	}
+	constexpr void setEnergy(T const &value) {
+		(*this)[NDIM] = value;
+	}
+	constexpr void setFlux(int d, T const &value) {
+		(*this)[d] = value;
+	}
+	static std::vector<std::string> getFieldNames() {
+		static std::vector<std::string> const fieldNames = []() {
+			std::vector<std::string> names;
+			for (int d = 0; d < D; d++) {
+				std::string const name = std::string("F") + std::string(1, 'x' + d);
+				names.push_back(name);
+			}
+			names.push_back("E");
+			return names;
+		}();
+		return fieldNames;
+	}
+};
+
+template<typename T, int D>
+struct CanDoArithmetic<RadiationState<T, D>> {
+	static constexpr bool value = true;
+};
+
+template<typename T, int D>
+RadiationState<T, D> initRadiationFront(std::array<T, D> x) {
+	/*********************************************************/
+	RadiationState<T, D> u;
+	T Tr = T(5000.0);
+	T Er = T(cons.a) * sqr(sqr(Tr));
+	u.setFlux(0, T(0));
+	u.setFlux(1, T(0));
+	u.setFlux(2, T(0));
+	u.setEnergy(Er);
+	if (T(0.75) > x[0] && x[0] > T(0.25)) {
+		u.setFlux(0, Er * T(0.9));
+	} else {
+		u.setEnergy(Er / T(1000));
+	}
+	return u;
+}
 
 auto computeG(T dEr, std::array<T, NDIM> dF, T Er0, std::array<T, NDIM> F0, T Eg0, std::array<T, NDIM> Beta0, T rho, T mu, T kappa, T chi, T gamma, T dt) {
 	constexpr T tiny = 1e-50;
 	std::array<T, NDIM> Beta;
 	for (int n = 0; n < NDIM; n++) {
-		Beta[n] = Beta0[n] - dF[n] / (rho * cgs::c * cgs::c);
+		Beta[n] = Beta0[n] - dF[n] / (rho * cons.c * cons.c);
 	}
 	T Ek = 0;
 	std::array<T, NDIM> dEk_dF;
 	for (int n = 0; n < NDIM; n++) {
-		Ek += 0.5 * rho * sqr(cgs::c * Beta[n]);
+		Ek += 0.5 * rho * sqr(cons.c * Beta[n]);
 		dEk_dF[n] = -Beta[n];
 	}
 	T const Eg = Eg0 - dEr;
@@ -25,7 +218,7 @@ auto computeG(T dEr, std::array<T, NDIM> dF, T Er0, std::array<T, NDIM> F0, T Eg
 		F2 += sqr(F0[n] + dF[n]);
 	}
 	T const absF = sqrt(F2);
-	T const iCv = (mu * cgs::amu) * (gamma - 1.0) / (cgs::kB * rho);
+	T const iCv = (mu * cons.amu) * (gamma - 1.0) / (cons.kB * rho);
 	T const temp = eps * iCv;
 	T const dtemp_dEr = -iCv;
 	std::array<T, NDIM> const dtemp_dF = deps_dF * iCv;
@@ -34,7 +227,7 @@ auto computeG(T dEr, std::array<T, NDIM> dF, T Er0, std::array<T, NDIM> F0, T Eg
 	std::array<std::array<T, NDIM>, NDIM> dBeta_dF;
 	for (int n = 0; n < NDIM; n++) {
 		for (int m = 0; m < NDIM; m++) {
-			dBeta_dF[n][m] = -T(n == m) / (rho * cgs::c * cgs::c);
+			dBeta_dF[n][m] = -T(n == m) / (rho * cons.c * cons.c);
 		}
 	}
 	std::array<T, NDIM> N;
@@ -104,14 +297,14 @@ auto computeG(T dEr, std::array<T, NDIM> dF, T Er0, std::array<T, NDIM> F0, T Eg
 			}
 		}
 	}
-	T gk = kappa * (Er0 + dEr - cgs::a * temp4);
+	T gk = kappa * (Er0 + dEr - cons.a * temp4);
 	for (int k = 0; k < NDIM; k++) {
 		gk -= 2 * kappa * Beta[k] * (F0[k] + dF[k]);
 	}
-	T const dgk_dEr = kappa * (1 - 4 * cgs::a * temp3 * dtemp_dEr);
+	T const dgk_dEr = kappa * (1 - 4 * cons.a * temp3 * dtemp_dEr);
 	std::array<T, NDIM> dgk_dF;
 	for (int n = 0; n < NDIM; n++) {
-		dgk_dF[n] = -kappa * (2 * Beta[n] + 4 * cgs::a * temp3 * dtemp_dF[n]);
+		dgk_dF[n] = -kappa * (2 * Beta[n] + 4 * cons.a * temp3 * dtemp_dF[n]);
 		for (int k = 0; k < NDIM; k++) {
 			dgk_dF[n] -= 2 * kappa * (F0[k] + dF[k]) * dBeta_dF[k][n];
 		}
@@ -169,24 +362,24 @@ auto computeG(T dEr, std::array<T, NDIM> dF, T Er0, std::array<T, NDIM> F0, T Eg
 			dGk_dF[n][m] = Beta[n] * dgk_dF[m] + gk * dBeta_dF[n][m];
 		}
 	}
-	T const hr = dEr + dt * cgs::c * (gk + gx);
-	T const dhr_dEr = 1 + dt * cgs::c * (dgk_dEr + dgx_dEr);
+	T const hr = dEr + dt * cons.c * (gk + gx);
+	T const dhr_dEr = 1 + dt * cons.c * (dgk_dEr + dgx_dEr);
 	std::array<T, NDIM> dhr_dF;
 	for (int n = 0; n < NDIM; n++) {
-		dhr_dF[n] = dt * cgs::c * (dgk_dF[n] + dgx_dF[n]);
+		dhr_dF[n] = dt * cons.c * (dgk_dF[n] + dgx_dF[n]);
 	}
 	std::array<T, NDIM> Hr;
 	for (int n = 0; n < NDIM; n++) {
-		Hr[n] = dF[n] + dt * cgs::c * (Gk[n] + Gx[n]);
+		Hr[n] = dF[n] + dt * cons.c * (Gk[n] + Gx[n]);
 	}
 	std::array<T, NDIM> dHr_dEr;
 	for (int n = 0; n < NDIM; n++) {
-		dHr_dEr[n] = dt * cgs::c * (dGk_dEr[n] + dGx_dEr[n]);
+		dHr_dEr[n] = dt * cons.c * (dGk_dEr[n] + dGx_dEr[n]);
 	}
 	std::array<std::array<T, NDIM>, NDIM> dHr_dF;
 	for (int n = 0; n < NDIM; n++) {
 		for (int m = 0; m < NDIM; m++) {
-			dHr_dF[n][m] = T(n == m) + dt * cgs::c * (dGk_dF[n][m] + dGx_dF[n][m]);
+			dHr_dF[n][m] = T(n == m) + dt * cons.c * (dGk_dF[n][m] + dGx_dF[n][m]);
 		}
 	}
 
@@ -254,93 +447,124 @@ std::array<double, 3> randomUnitVector3D() {
 	return {2 * x1 * factor, 2 * x2 * factor, 1 - 2 * s};
 }
 void testRadiation() {
-	int ntrial = 100000;
-	double err_max = 0.0;
-	for (int trialNum = 0; trialNum < ntrial; trialNum++) {
-
-		T Tr = randomLog(10, 1000000);
-		T Tg = Tr * randomLogNormal(1.0, .1);
-		T Er = cgs::a * sqr(sqr(Tr));
-		T const f = rand1();
-		std::array<T, NDIM> const Nr = randomUnitVector3D();
-		std::array<T, NDIM> const Ng = randomUnitVector3D();
-		std::array<T, NDIM> F0 { };
-		std::array<T, NDIM> Beta0 = Ng;
-		for (int i = 0; i < NDIM; i++) {
-			F0[i] = Nr[i] * f * Er;
+	constexpr int P = 2;
+	constexpr int D = 3;
+	constexpr int N = 32;
+	using T = Real;
+	using RK = typename RungeKutta<T, P>::type;
+	using S = RadiationState<T>;
+	HyperGrid<S, N, P, RK> grid;
+	std::cout << cons;
+	std::cout << physicalUnits;
+	grid.initialize(initRadiationFront<T, D>);
+	grid.enforceBoundaryConditions();
+	T t = T(0);
+	T tmax = T(.15);
+	T dt;
+	RK const rk;
+	int iter = 0;
+	while (t < tmax) {
+		grid.output("X", iter, t);
+		std::cout << "i = " << std::to_string(iter);
+		std::cout << "  t = " << std::to_string(t);
+		dt = grid.beginStep();
+		std::cout << "  dt = " << dt << std::endl;
+		for (int s = 0; s < rk.stageCount(); s++) {
+			grid.subStep(dt, s);
+			grid.enforceBoundaryConditions();
 		}
-		T rho = 1.0;
-		T mu = 4.0 / 3.0;
-		T chi = 1.0;
-		T kappa = 1.0;
-		T dt = 1.0;
-		T Er0 = Er;
-		std::array<T, NDIM> F = F0;
-		constexpr T gamma = 5.0 / 3.0;
-		T Eg0 = cgs::kB * rho * Tg / ((gamma - 1.0) * mu * cgs::amu);
-		for (int l = 0; l < NDIM; l++) {
-			Eg0 += 0.5 * rho * sqr(cgs::c * Beta0[l]);
-		}
-		auto const eps = sqrt(std::numeric_limits<double>::epsilon());
-	//	auto const eps = 1e-4;
-		T dEr = eps * Er;
-		T dF = eps * Er;
-
-		std::array<std::array<T, NDIM + 1>, NDIM + 1> dJ2;
-		auto dJ1 = computeG(Er, F, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).second;
-		for (int l = 0; l <= NDIM; l++) {
-			T dErp = 0.0, dErm = 0.0;
-			std::array<T, NDIM> dFm{};
-			std::array<T, NDIM> dFp{};
-			if (l == NDIM) {
-				dErp = 0.5 * dEr;
-				dErm = -0.5 * dEr;
-			} else {
-				dFp[l] += 0.5 * dEr;
-				dFm[l] -= 0.5 * dEr;
-			}
-			auto dJp = computeG(dErp, dFp, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
-			auto dJm = computeG(dErm, dFm, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
-			for (int m = 0; m <= NDIM; m++) {
-				dJ2[m][l] = (dJp[m] - dJm[m]) / (eps * Er);
-			}
-		}
-		double err = 0.0;
-		double norm = 0.0;
-		for (int l = 0; l < NDIM + 1; l++) {
-			for (int m = 0; m < NDIM + 1; m++) {
-				err += sqr(dJ1[l][m] - dJ2[l][m]);
-				norm += 0.5 * (std::abs(dJ1[l][m]) + std::abs(dJ2[l][m]));
-//				printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dF1[l][m], dF2[l][m], dF1[l][m] - dF2[l][m],
-//						(dF1[l][m] - dF2[l][m]) / (dF1[l][m] + 1e-20));
-			}
-		}
-		err = sqrt(err);
-		err /= norm;
-		printf("%e\n", err);
-		if (err > 0.5) {
-			printf("Tr = %e\n", Tr);
-			printf("Tg = %e\n", Tg);
-			printf("f = (%e) ", f);
-			for (int i = 0; i < NDIM; i++) {
-				F0[i] = Nr[i] * f * Er;
-				printf("%e ", Nr[i] * f);
-			}
-			printf("\nBeta = ");
-			for (int i = 0; i < NDIM; i++) {
-				printf("%e ", Ng[i]);
-			}
-			printf("\n");
-			for (int l = 0; l < NDIM + 1; l++) {
-				for (int m = 0; m < NDIM + 1; m++) {
-					printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dJ1[l][m], dJ2[l][m], dJ1[l][m] - dJ2[l][m],
-							(dJ1[l][m] - dJ2[l][m]) / (dJ1[l][m] + 1e-20));
-				}
-			}
-			abort();
-		}
-
-		err_max = std::max(err, err_max);
+		grid.endStep();
+		grid.enforceBoundaryConditions();
+		iter++;
+		t += dt;
 	}
-	printf("-->> %e\n", err_max);
+//	int ntrial = 100000;
+//	double err_max = 0.0;
+//	for (int trialNum = 0; trialNum < ntrial; trialNum++) {
+//
+//		T Tr = randomLog(10, 1000000);
+//		T Tg = Tr * randomLogNormal(1.0, .1);
+//		T Er = cons.a * sqr(sqr(Tr));
+//		T const f = rand1();
+//		std::array<T, NDIM> const Nr = randomUnitVector3D();
+//		std::array<T, NDIM> const Ng = randomUnitVector3D();
+//		std::array<T, NDIM> F0 { };
+//		std::array<T, NDIM> Beta0 = Ng;
+//		for (int i = 0; i < NDIM; i++) {
+//			F0[i] = Nr[i] * f * Er;
+//		}
+//		T rho = 1.0;
+//		T mu = 4.0 / 3.0;
+//		T chi = 1.0;
+//		T kappa = 1.0;
+//		T dt = 1.0;
+//		T Er0 = Er;
+//		std::array<T, NDIM> F = F0;
+//		constexpr T gamma = 5.0 / 3.0;
+//		T Eg0 = cons.kB * rho * Tg / ((gamma - 1.0) * mu * cons.amu);
+//		for (int l = 0; l < NDIM; l++) {
+//			Eg0 += 0.5 * rho * sqr(cons.c * Beta0[l]);
+//		}
+//		auto const eps = sqrt(std::numeric_limits<double>::epsilon());
+//		//	auto const eps = 1e-4;
+//		T dEr = eps * Er;
+//		T dF = eps * Er;
+//
+//		std::array<std::array<T, NDIM + 1>, NDIM + 1> dJ2;
+//		auto dJ1 = computeG(0, { }, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).second;
+//		for (int l = 0; l <= NDIM; l++) {
+//			T dErp = 0.0, dErm = 0.0;
+//			std::array<T, NDIM> dFm { };
+//			std::array<T, NDIM> dFp { };
+//			if (l == NDIM) {
+//				dErp = 0.5 * dEr;
+//				dErm = -0.5 * dEr;
+//			} else {
+//				dFp[l] += 0.5 * dEr;
+//				dFm[l] -= 0.5 * dEr;
+//			}
+//			auto dJp = computeG(dErp, dFp, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
+//			auto dJm = computeG(dErm, dFm, Er0, F0, Eg0, Beta0, rho, mu, kappa, chi, gamma, dt).first;
+//			for (int m = 0; m <= NDIM; m++) {
+//				dJ2[m][l] = (dJp[m] - dJm[m]) / (eps * Er);
+//			}
+//		}
+//		double err = 0.0;
+//		double norm = 0.0;
+//		for (int l = 0; l < NDIM + 1; l++) {
+//			for (int m = 0; m < NDIM + 1; m++) {
+//				err += sqr(dJ1[l][m] - dJ2[l][m]);
+//				norm += 0.5 * (std::abs(dJ1[l][m]) + std::abs(dJ2[l][m]));
+////				printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dF1[l][m], dF2[l][m], dF1[l][m] - dF2[l][m],
+////						(dF1[l][m] - dF2[l][m]) / (dF1[l][m] + 1e-20));
+//			}
+//		}
+//		err = sqrt(err);
+//		err /= norm;
+//		printf("%e\n", err);
+//		if (err > 0.5) {
+//			printf("Tr = %e\n", Tr);
+//			printf("Tg = %e\n", Tg);
+//			printf("f = (%e) ", f);
+//			for (int i = 0; i < NDIM; i++) {
+//				F0[i] = Nr[i] * f * Er;
+//				printf("%e ", Nr[i] * f);
+//			}
+//			printf("\nBeta = ");
+//			for (int i = 0; i < NDIM; i++) {
+//				printf("%e ", Ng[i]);
+//			}
+//			printf("\n");
+//			for (int l = 0; l < NDIM + 1; l++) {
+//				for (int m = 0; m < NDIM + 1; m++) {
+//					printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dJ1[l][m], dJ2[l][m], dJ1[l][m] - dJ2[l][m],
+//							(dJ1[l][m] - dJ2[l][m]) / (dJ1[l][m] + 1e-20));
+//				}
+//			}
+//			abort();
+//		}
+//
+//		err_max = std::max(err, err_max);
+//	}
+//	printf("-->> %e\n", err_max);
 }
