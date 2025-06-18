@@ -205,6 +205,7 @@ auto computeG(T Er, std::array<T, NDIM> F, T Er0, std::array<T, NDIM> F0, T Eg0,
 	dF4[NDIM][NDIM] = dhr_dEr;
 	return rc;
 }
+
 #include <random>
 
 double randomLogNormal(double mean = 1.0, double stddev = 1.0) {
@@ -257,30 +258,21 @@ void testRadiation() {
 	double err_max = 0.0;
 	for (int trialNum = 0; trialNum < ntrial; trialNum++) {
 
-		T Tr = randomLog(10, 100000);
-		T Tg = Tr * randomLogNormal(1.0, 1.0e-1);
+		T Tr = randomLog(10, 1000000);
+		T Tg = Tr * randomLogNormal(1.0, 1);
 		T Er = cgs::a * sqr(sqr(Tr));
 		T const f = rand1();
 		std::array<T, NDIM> const Nr = randomUnitVector3D();
 		std::array<T, NDIM> const Ng = randomUnitVector3D();
 		std::array<T, NDIM> F0 { };
 		std::array<T, NDIM> Beta0 = Ng;
-//		printf("Tr = %e\n", Tr);
-//		printf("Tg = %e\n", Tg);
-//		printf("f = ");
 		for (int i = 0; i < NDIM; i++) {
 			F0[i] = Nr[i] * f * Er;
-//			printf("%e ", Nr[i] * f);
 		}
-//		printf("\nBeta = ");
-//		for (int i = 0; i < NDIM; i++) {
-//			printf("%e ", Ng[i]);
-//		}
-//		printf("\n");
 		T rho = 1.0;
-		T mu = 4.0/3.0;
-		T chi = 1.0e-6;
-		T kappa = 1.0e6;
+		T mu = 4.0 / 3.0;
+		T chi = 1.0;
+		T kappa = 1.0;
 		T dt = 1.0;
 		T Er0 = Er;
 		std::array<T, NDIM> F = F0;
@@ -290,6 +282,7 @@ void testRadiation() {
 			Eg0 += 0.5 * rho * sqr(cgs::c * Beta0[l]);
 		}
 		auto const eps = sqrt(std::numeric_limits<double>::epsilon());
+	//	auto const eps = 1e-4;
 		T dEr = eps * Er;
 		T dF = eps * Er;
 
@@ -324,6 +317,28 @@ void testRadiation() {
 		err = sqrt(err);
 		err /= norm;
 		printf("%e\n", err);
+		if (err > 0.5) {
+			printf("Tr = %e\n", Tr);
+			printf("Tg = %e\n", Tg);
+			printf("f = (%e) ", f);
+			for (int i = 0; i < NDIM; i++) {
+				F0[i] = Nr[i] * f * Er;
+				printf("%e ", Nr[i] * f);
+			}
+			printf("\nBeta = ");
+			for (int i = 0; i < NDIM; i++) {
+				printf("%e ", Ng[i]);
+			}
+			printf("\n");
+			for (int l = 0; l < NDIM + 1; l++) {
+				for (int m = 0; m < NDIM + 1; m++) {
+					printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dF1[l][m], dF2[l][m], dF1[l][m] - dF2[l][m],
+							(dF1[l][m] - dF2[l][m]) / (dF1[l][m] + 1e-20));
+				}
+			}
+			abort();
+		}
+
 		err_max = std::max(err, err_max);
 	}
 	printf("-->> %e\n", err_max);
