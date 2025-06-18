@@ -87,6 +87,7 @@ struct RadiationState: public std::array<T, 1 + D> {
 		} else {
 			printf("\n%e\n", f);
 			assert(false);
+			abort();
 		}
 		return lambda;
 
