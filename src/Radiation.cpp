@@ -495,7 +495,47 @@ std::array<double, 3> randomUnitVector3D() {
 	return {2 * x1 * factor, 2 * x2 * factor, 1 - 2 * s};
 }
 
+template<int D>
+SquareMatrix<T, D> rotateToPlane(std::array<T, D> const &a, std::array<T, D> const &b) {
+	T cx = a[1] * b[2] - a[2] * b[1];
+	T cy = a[2] * b[0] - a[0] * b[2];
+	T cz = a[0] * b[1] - a[1] * b[0];
+	T const cinv = T(1.0) / sqrt(sqr(cx) + sqr(cy) + sqr(cz));
+	cx *= cinv;
+	cy *= cinv;
+	cz *= cinv;
+	printf( "%e %e %e\n", cx, cy, cz);
+	T const s = sqrt(sqr(cx) + sqr(cy));
+	T const c = cz;
+	T const c0 = (1 - c) / (s * s);
+	SquareMatrix<T, D> R;
+	R(0, 0) = 1.0 + cx * cx * c0;
+	R(1, 1) = 1.0 + cy * cy * c0;
+	R(2, 2) = cz;
+	R(0, 1) = -cx * cy * c0;
+	R(1, 0) = R(0, 1);
+	R(0, 2) = cx;
+	R(1, 2) = cy;
+	R(2, 0) = -cx;
+	R(2, 1) = -cy;
+	return R;
+}
+
 auto computeG2D(T dEr, T dF_x, T dF_y, T Er0, T F0_x, T F0_y, T Eg0, T Beta0_x, T Beta0_y, T rho, T mu, T kappa, T chi, T gamma, T dt) {
+//	Vec3 a, b;
+//	Vec3 u = normalize(cross(a, b));
+//	Vec3 n = {0, 0, 1};
+//
+//	Vec3 v = cross(u, n);
+//	double s = norm(v);
+//	double c = dot(u, n);
+//
+//	Mat3 vx = crossProductMatrix(v);
+//	Mat3 R = identity + vx + (vx * vx) * ((1 - c) / (s * s));
+//
+//	Vec3 aRot = R * a;
+//	Vec3 bRot = R * b;
+
 	T const iCv = mu * cons.amu * (gamma - 1.0) / (cons.kB * rho);
 	T const Beta_x = Beta0_x - dF_x / (rho * cons.c * cons.c);
 	T const Beta_y = Beta0_y - dF_y / (rho * cons.c * cons.c);
@@ -623,6 +663,11 @@ auto computeG2D(T dEr, T dF_x, T dF_y, T Er0, T F0_x, T F0_y, T Eg0, T Beta0_x, 
 }
 
 void testRadiation() {
+	std::array<double, 3> const A{{1.0,0.0,0.0}};
+	std::array<double, 3> const B{{0.0,0.0,1.0}};
+	auto R = rotateToPlane<3>(A, B);
+	std::cout << toString(R) << "\n";
+	return;
 //	constexpr int P = 3;
 //	constexpr int D = 3;
 //	constexpr int N = 32;
