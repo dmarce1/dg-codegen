@@ -300,7 +300,6 @@ Matrix transformMatrix1D(TransformDirection transformDirection, int modeCount, i
 			for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
 				Real const position = quadratureRules[nodeIndex].position;
 				Real const weight = quadratureRules[nodeIndex].weight;
-				Real const inverseMass = Real(2 * modeIndex + 1) / Real(2);
 				transform[modeIndex][nodeIndex] = weight /* * inverseMass*/* legendreP(modeIndex, position, dOrder);
 			}
 		}
@@ -322,9 +321,10 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 	std::string code;
 	int const M = x.size();
 	int const N = A.size();
-//	if (v.size() != N) {
-//	printf("---- %i %i %i %i\n", v.size(), A.size(), A[0].size(), x.size());
-//	}
+	if (v.size() != N) {
+		std::cout << matrixToString(A) << "\n";
+		printf("---- %i %i %i %i\n", v.size(), A.size(), A[0].size(), x.size());
+	}
 	assert((int ) v.size() == N);
 	assert((int ) A[0].size() == M);
 
@@ -508,18 +508,19 @@ Matrix permutationToMatrix(std::vector<int> const &permutation) {
 	return P;
 }
 
+template<Quadrature quadratureType = Quadrature::gaussLegendre>
 Matrix transformMatrix(int dimensionCount, int modeCount, TransformDirection transformDirection, int transformDimension, int derivDimension = -1) {
 	auto A = identityMatrix(1);
 	Matrix B;
 	std::vector<int> sizes;
 	for (int thisDimension = dimensionCount - 1; thisDimension >= 0; thisDimension--) {
-		int const nodeCount = modeCount;
+		int const nodeCount = modeCount + int(quadratureType == Quadrature::gaussLobatto);
 		if (thisDimension < transformDimension) {
 			A = kroneckerProduct(identityMatrix(nodeCount), A);
 		} else if (thisDimension > transformDimension) {
 			A = kroneckerProduct(identityMatrix(modeCount), A);
 		} else/*if( thisDimension == transformDimension*/{
-			auto const transform = transformMatrix1D(transformDirection, modeCount, nodeCount, Quadrature::gaussLegendre, derivDimension == transformDimension);
+			auto const transform = transformMatrix1D(transformDirection, modeCount, nodeCount, quadratureType, derivDimension == transformDimension);
 			A = kroneckerProduct(transform, A);
 		}
 	}
@@ -709,6 +710,80 @@ SYNTHESIZE:
 	return hppCode;
 }
 
+std::string generateGaussLobattoSynthesize(int dimensionCount, int modeCount) {
+	std::string hppCode;
+	int nodeCount = modeCount + 1;
+	int const nodeCount3d = ipow(nodeCount, dimensionCount);
+	int const modeCount3d = binco(modeCount + dimensionCount - 1, dimensionCount);
+	std::vector<Matrix> factors;
+	std::vector<std::string> inputs, outputs;
+	auto const genArray = [](std::string typeName, int count) {
+		return std::string("std::array<") + typeName + ", " + std::to_string(count) + ">";
+	};
+	hppCode += "\n";
+	inputs = decltype(inputs)();
+	outputs = decltype(outputs)();
+	std::string functionTag = tag(dimensionCount, modeCount);
+	std::string functionName = "dgAnalyze" + functionTag;
+	int inCount = modeCount3d;
+	int outCount = nodeCount3d;
+	factors.clear();
+	functionName = "dgSynthesizeGaussLobatto" + functionTag;
+	hppCode += "template<typename T>\n";
+	outputs = generateVariableNames("input", inCount);
+	hppCode += "std::array<T, squareSize<" + std::to_string(dimensionCount) + ", " + std::to_string(nodeCount) + ">> ";
+	hppCode += functionName;
+	hppCode += "(std::array<T, triangleSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">> const& input) {\n";
+	std::string deferredCode;
+	indent++;
+	std::vector<int> arraySizes;
+	arraySizes = std::vector<int>(1, inCount);
+	factors.clear();
+	for (int transformDimension = 0; transformDimension < dimensionCount; transformDimension++) {
+		factors.push_back(transformMatrix<Quadrature::gaussLobatto>(dimensionCount, modeCount, TransformDirection::backward, transformDimension));
+	}
+	for (int transformDimension = 0; transformDimension < dimensionCount; transformDimension++) {
+		auto const sz = factors[transformDimension].size();
+		arraySizes.push_back(sz);
+	}
+	int bufferSize, currentSize;
+	bufferSize = *(std::max_element(arraySizes.begin() + 1, arraySizes.end() - 1));
+	currentSize = arraySizes[0] + arraySizes[1];
+	for (int i = 0; i < dimensionCount - 2; i++) {
+		currentSize -= arraySizes[i];
+		currentSize += arraySizes[i + 2];
+		bufferSize = std::max(bufferSize, currentSize);
+	}
+	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
+	int bufferOffset;
+	bufferOffset = 0;
+	for (int transformDimension = 0; transformDimension < dimensionCount; transformDimension++) {
+		auto const &A = factors[transformDimension];
+		inputs = std::move(outputs);
+		if (transformDimension != (dimensionCount - 1)) {
+			outputs = generateVariableNames("buffer", A.size(), bufferOffset);
+			if (bufferOffset == 0) {
+				bufferOffset = A.size();
+			} else {
+				bufferOffset = 0;
+			}
+		} else {
+			outputs = generateVariableNames("output", outCount);
+			hppCode += indent + genArray("T", A.size()) + " output;\n";
+		}
+//		std::cout << functionTag << "\n";
+		deferredCode += matrixVectorProduct(outputs, A, inputs);
+	}
+	hppCode += std::string(getConstant.getCode());
+	getConstant.reset();
+	hppCode += deferredCode;
+	deferredCode.clear();
+	hppCode += indent + "return output;\n";
+	indent--;
+	hppCode += indent + "}\n\n";
+	return hppCode;
+}
+
 std::string genMassMatrix(int dimensionCount, int modeCount) {
 	std::string hppCode, code1, code2;
 	int const size = binco(modeCount + dimensionCount - 1, dimensionCount);
@@ -836,6 +911,10 @@ int main(int, char*[]) {
 	hppCode += "#include <array>\n";
 	hppCode += "#include <cmath>\n";
 	hppCode += "\n";
+	hppCode += "enum class Quadrature : int {\n";
+	hppCode += "	gaussLegendre, gaussLobatto\n";
+	hppCode += "};\n";
+	hppCode += "\n";
 	hppCode += indent + "template<int D, int O>\n";
 	hppCode += indent + "constexpr int triangleSize = binco(O + D - 1, D);\n";
 	hppCode += indent + "\n";
@@ -849,34 +928,39 @@ int main(int, char*[]) {
 			hppCode += genStiffnessMatrix(dim, order);
 			hppCode += genTrace(dim, order, false);
 			hppCode += genTrace(dim, order, true);
+			hppCode += generateGaussLobattoSynthesize(dim, order);
 		}
 	}
 	for (int iter = 0; iter <= 5; iter++) {
 		hppCode += indent + "\n";
-		hppCode += indent + "template<typename T, int D, int O>\n";
+		if (iter == 1) {
+			hppCode += indent + "template<typename T, int D, int O, Quadrature Q = Quadrature::gaussLegendre>\n";
+		} else {
+			hppCode += indent + "template<typename T, int D, int O>\n";
+		}
 		hppCode += std::string(indent);
 		std::string fname, varname;
 		if (iter == 0) {
 			fname = "dgAnalyze";
-			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(std::array<T, squareSize<D, O>> const& input) {\n";
+			hppCode += "auto " + fname + "(std::array<T, squareSize<D, O>> const& input) {\n";
 		} else if (iter == 1) {
 			fname = "dgSynthesize";
-			hppCode += "std::array<T, squareSize<D, O>> " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
+			hppCode += "auto " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 2) {
 			fname = "dgMassInverse";
-			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
+			hppCode += "auto " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 3) {
 			fname = "dgStiffness";
 			varname = "dimension, ";
-			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(int dimension, std::array<T, triangleSize<D, O>> const& input) {\n";
+			hppCode += "auto " + fname + "(int dimension, std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 4) {
 			varname = "face, ";
 			fname = "dgTrace";
-			hppCode += "std::array<T, triangleSize<D - 1, O>> " + fname + "(int face, std::array<T, triangleSize<D, O>> const& input) {\n";
+			hppCode += "auto " + fname + "(int face, std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 5) {
 			varname = "face, ";
 			fname = "dgTraceInverse";
-			hppCode += "std::array<T, triangleSize<D, O>> " + fname + "(int face, std::array<T, triangleSize<D - 1, O>> const& input) {\n";
+			hppCode += "auto " + fname + "(int face, std::array<T, triangleSize<D - 1, O>> const& input) {\n";
 		}
 		indent++;
 		for (int dim = 1; dim <= 3; dim++) {
@@ -891,7 +975,19 @@ int main(int, char*[]) {
 				}
 				hppCode += "if constexpr(O == " + std::to_string(order) + ") {\n";
 				indent++;
-				hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
+				if(fname == "dgSynthesize") {
+					hppCode += indent + "if constexpr(Q == Quadrature::gaussLobatto) {\n";
+					indent++;
+					hppCode += indent + "return " + fname + "GaussLobatto" + tag(dim, order) + "(" + varname + "input);\n";
+					indent--;
+					hppCode += indent + "} else /*if constexpr(Q == Quadrature::gaussLegendre)*/ {\n";
+					indent++;
+					hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
+					indent--;
+					hppCode += indent + "}\n";
+			} else {
+					hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
+				}
 				indent--;
 				hppCode += indent + "}";
 				if (order < 4) {
@@ -952,8 +1048,8 @@ int main(int, char*[]) {
 				}
 				hppCode += "{";
 				for (int d = 0; d < dim; d++) {
-					char* ptr;
-					if(std::abs(Q[I[d]].position) < 1e-14) {
+					char *ptr;
+					if (std::abs(Q[I[d]].position) < 1e-14) {
 						Q[I[d]].position = 0.0;
 					}
 					asprintf(&ptr, "T(%24.17e)", double(Q[I[d]].position));
@@ -965,7 +1061,7 @@ int main(int, char*[]) {
 				}
 				hppCode += "}";
 				cnt++;
-		}
+			}
 			indent--;
 			hppCode += "\n" + std::string(indent) + "}};\n";
 			hppCode += indent + "return map[flatIndex];\n";

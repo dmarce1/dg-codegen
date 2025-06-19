@@ -190,6 +190,12 @@ struct EulerState: public std::array<T, 2 + D> {
 			return f[i] + s[i] * (u[STAR] - u[i]);
 		}
 	}
+	bool sanityCheck() const {
+		return true;
+	}
+	friend T findPositivityPreservingTheta(const EulerState &uBar, const EulerState &uNode) noexcept {
+		return T(1.0);
+	}
 	constexpr T const& getDensity() const {
 		return rho;
 	}
@@ -237,8 +243,6 @@ template<typename T, int D>
 struct CanDoArithmetic<EulerState<T, D>> {
 	static constexpr bool value = true;
 };
-
-
 
 template<typename T, int D>
 EulerState<T, D> initSodShockTube(std::array<T, D> x) {

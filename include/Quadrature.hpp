@@ -1,5 +1,5 @@
 #pragma once
-
+#ifdef ABCD
 #include <cmath>
 #include <numbers>
 
@@ -115,4 +115,4 @@ constexpr auto inverseFourierLegendreTransform() {
 	}
 	return inverseTransformMatrix;
 }
-
+#endif

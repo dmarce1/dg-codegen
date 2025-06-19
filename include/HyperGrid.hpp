@@ -48,14 +48,12 @@ class HyperGrid {
 	static constexpr RungeKutta butcherTable { };
 	static constexpr Range<int, dimensionCount> exteriorBox { repeat<dimensionCount>(-ghostWidth), repeat<dimensionCount>(cellsAcrossInterior + ghostWidth) };
 	static constexpr Range<int, dimensionCount> interiorBox { repeat<dimensionCount>(0), repeat<dimensionCount>(cellsAcrossInterior) };
-	static constexpr Quadrature<typename State::value_type, basisOrder, dimensionCount> volumeQuadrature { };
 	static constexpr Basis<typename State::value_type, basisOrder, dimensionCount> orthogonalBasis { };
 	static constexpr auto inverseTransformMatrix = fourierLegendreTransform<typename State::value_type, basisOrder, TransformDirection::backward>();
 	static constexpr auto transformMatrix = fourierLegendreTransform<typename State::value_type, basisOrder, TransformDirection::forward>();
 
 	using Type = State::value_type;
 	using BasisIndex = BasisIndexType<basisOrder, dimensionCount>;
-	using QuadratureType = Quadrature<Type, basisOrder, State::dimCount()>;
 	using InteriorIndex = MultiIndex<exteriorBox, interiorBox>;
 
 	std::vector<std::array<std::array<std::array<Type, exteriorVolume>, modeVolume>, fieldCount>> stageDerivatives_;
@@ -140,8 +138,8 @@ public:
 			int const cellFlatIndex = cellMultiIndex;
 			std::array<Type, modeVolume> modalState;
 			std::array<std::array<Type, nodeVolume>, fieldCount> nodalState;
-			for(int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-				for(int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
 					modalState[modeIndex] = nextState[fieldIndex][modeIndex][cellFlatIndex];
 				}
 				nodalState[fieldIndex] = dgSynthesize<Type, dimensionCount, basisOrder>(modalState);
@@ -202,6 +200,7 @@ public:
 		currentState = { };
 	}
 	void applyLimiter() {
+		using std::min;
 		constexpr auto limiterCoefficients = []() {
 			std::array<Type, basisOrder> limiterCoefficients;
 			for (int orderIndex = 0; orderIndex < basisOrder; orderIndex++) {
@@ -211,9 +210,8 @@ public:
 		}();
 
 		constexpr Range<int, dimensionCount> limiterBox { repeat<dimensionCount>(-1), repeat<dimensionCount>(cellsAcrossInterior + 1) };
-
+//		bool sanityFlag = true;
 		using LimiterIndex = MultiIndex<exteriorBox, limiterBox>;
-
 		for (int polynomialDegree = basisOrder - 1; polynomialDegree > 0; polynomialDegree--) {
 			for (auto targetModeIndex = BasisIndex::begin(); targetModeIndex != BasisIndex::end(); targetModeIndex++) {
 				for (int dimension = 0; dimension < dimensionCount; dimension++) {
@@ -262,7 +260,37 @@ public:
 						for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
 							nextState[fieldIndex][targetModeFlatIndex][cellFlatIndex] = highOrderMode[fieldIndex];
 						}
-
+					}
+				}
+			}
+		}
+		constexpr int thisNodeVolume = ipow(basisOrder + 1, dimensionCount);
+		for (auto cellMultiIndex = LimiterIndex::begin(); cellMultiIndex != LimiterIndex::end(); cellMultiIndex++) {
+			int const flatIndex = cellMultiIndex;
+			std::array<std::array<Type, triangleSize<dimensionCount, basisOrder>>, fieldCount> volumeModes;
+			std::array<std::array<Type, thisNodeVolume>, fieldCount> volumeNodes;
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+					volumeModes[fieldIndex][modeIndex] = nextState[fieldIndex][modeIndex][flatIndex];
+				}
+				volumeNodes[fieldIndex] = dgSynthesize<Type, dimensionCount, basisOrder, Quadrature::gaussLobatto>(volumeModes[fieldIndex]);
+			}
+			State stateMean;
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				stateMean[fieldIndex] = volumeModes[fieldIndex][0];
+			}
+			Type theta = Type(1);
+			for (int nodeIndex = 0; nodeIndex < thisNodeVolume; nodeIndex++) {
+				State stateAtNode;
+				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+					stateAtNode[fieldIndex] = volumeNodes[fieldIndex][nodeIndex];
+				}
+				theta = min(theta, findPositivityPreservingTheta(stateMean, stateAtNode));
+			}
+			if (theta < Type(1)) {
+				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+					for (int modeIndex = 1; modeIndex < modeVolume; modeIndex++) {
+						nextState[fieldIndex][modeIndex][flatIndex] *= theta;
 					}
 				}
 			}

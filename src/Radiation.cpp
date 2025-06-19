@@ -85,7 +85,7 @@ struct RadiationState: public std::array<T, 1 + D> {
 				lambda[i] = T(0.0);
 			}
 		} else {
-			printf("\n%e\n", f);
+			printf("\n%e\n", f - 1.0);
 			assert(false);
 			abort();
 		}
@@ -133,6 +133,52 @@ struct RadiationState: public std::array<T, 1 + D> {
 			flux[fx_i + d1] = T(1.0 / 3.0) * U[er_i];
 		}
 		return flux;
+	}
+	bool sanityCheck() const {
+		auto const &U = *this;
+		T const F = sqrt(sqr(U[fx_i]) + sqr(U[fy_i]) + sqr(U[fz_i]));
+		T const f = F / U[er_i];
+		if (f > T(1)) {
+			printf("f = %e is gt 1 (%e, %e)\n", f, F, U[er_i]);
+			return false;
+		}
+		return true;
+	}
+	friend T findPositivityPreservingTheta(const RadiationState &uBar, const RadiationState &uNode) {
+		using std::max;
+		T constexpr almostOne = T(1.0 - cbrt(std::numeric_limits<double>::epsilon()));
+		T const fx0 = uBar[fx_i];
+		T const fy0 = uBar[fy_i];
+		T const fz0 = uBar[fz_i];
+		T const er0 = uBar[er_i];
+		T const fx = uNode[fx_i];
+		T const fy = uNode[fy_i];
+		T const fz = uNode[fz_i];
+		T const er = uNode[er_i];
+		T theta = T(1);
+		if (sqrt(sqr(fx) + sqr(fy) + sqr(fz)) > er) {
+			T const num1 = fx0 * (-fx + fx0) + fy0 * (-fy + fy0) - fz * fz0 + sqr(fz0) + (er - er0) * er0;
+			T const num2 =
+					sqrt(-sqr(fy0) * sqr(fz) + T(2.0) * fy * fy0 * fz * fz0 - sqr(fy) * sqr(fz0) + sqr(fy0) * sqr(er) + sqr(fz0) * sqr(er) - sqr(fx0) * (sqr(fy) + sqr(fz) - sqr(
+							er)) - T(2.0) * (fy * fy0 + fz * fz0) * er * er0 + (sqr(fy) + sqr(fz)) * sqr(er0) + T(2.0) * fx * fx0 * (fy * fy0 + fz * fz0 - er * er0) - sqr(fx) * (sqr(
+							fy0) + sqr(fz0) - sqr(er0)));
+			T const den_inv = T(1) / (sqr(fx - fx0) + sqr(fy - fy0) + (fz - fz0 + er - er0) * (fz - fz0 - er + er0));
+			T const thetaP = (num1 + num2) * den_inv;
+			T const thetaM = (num1 - num2) * den_inv;
+			bool const validP = (T(1) > thetaP) && (thetaP >= T(0));
+			bool const validM = (T(1) > thetaM) && (thetaM >= T(0));
+			if(validP) {
+				if(validM) {
+					theta = (thetaP > thetaM) ? thetaP : thetaM;
+				} else {
+					theta = thetaP;
+				}
+			} else {
+				theta = thetaM;
+			}
+			theta *= almostOne;
+		}
+		return theta;
 	}
 	friend RadiationState solveRiemannProblem(const RadiationState &uL, const RadiationState &uR, int dim) noexcept {
 		RadiationState fR, fL;
@@ -448,7 +494,7 @@ std::array<double, 3> randomUnitVector3D() {
 	return {2 * x1 * factor, 2 * x2 * factor, 1 - 2 * s};
 }
 void testRadiation() {
-	constexpr int P = 2;
+	constexpr int P = 3;
 	constexpr int D = 3;
 	constexpr int N = 32;
 	using T = Real;
