@@ -5,6 +5,11 @@
 #include <filesystem>
 #include <string>
 
+#define THROW(msg)                                                                                      \
+    throw std::runtime_error(static_cast<std::ostringstream&&>(                                         \
+   		 std::ostringstream() << msg << " [File: " << __FILE__ << ", Line: " << __LINE__ << "]").str() \
+	 )
+
 namespace Math {
 using std::abs;
 using std::copysign;

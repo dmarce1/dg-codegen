@@ -5,11 +5,11 @@
 #include "RungeKutta.hpp"
 #include <array>
 #include <iostream>
+using T = double;
 
-static const PhysicalUnits physicalUnits(1.0e9);
+static const PhysicalUnits<T> physicalUnits(T(1), T(1), T(1));
 static const auto cons = physicalUnits.getPhysicalConstants();
 
-using T = double;
 constexpr int NDIM = 3;
 
 template<typename T, int D = 3>
@@ -495,180 +495,363 @@ std::array<double, 3> randomUnitVector3D() {
 	return {2 * x1 * factor, 2 * x2 * factor, 1 - 2 * s};
 }
 
-template<int D>
-SquareMatrix<T, D> rotateToPlane(std::array<T, D> const &a, std::array<T, D> const &b) {
-	T cx = a[1] * b[2] - a[2] * b[1];
-	T cy = a[2] * b[0] - a[0] * b[2];
-	T cz = a[0] * b[1] - a[1] * b[0];
-	T const cinv = T(1.0) / sqrt(sqr(cx) + sqr(cy) + sqr(cz));
-	cx *= cinv;
-	cy *= cinv;
-	cz *= cinv;
-	printf( "%e %e %e\n", cx, cy, cz);
-	T const s = sqrt(sqr(cx) + sqr(cy));
-	T const c = cz;
-	T const c0 = (1 - c) / (s * s);
-	SquareMatrix<T, D> R;
-	R(0, 0) = 1.0 + cx * cx * c0;
-	R(1, 1) = 1.0 + cy * cy * c0;
-	R(2, 2) = cz;
-	R(0, 1) = -cx * cy * c0;
-	R(1, 0) = R(0, 1);
-	R(0, 2) = cx;
-	R(1, 2) = cy;
-	R(2, 0) = -cx;
-	R(2, 1) = -cy;
+template<typename T>
+std::array<T, 3> crossProduct(std::array<T, 3> const &a, std::array<T, 3> const &b) {
+	std::array<T, 3> c;
+	c[0] = a[1] * b[2] - a[2] * b[1];
+	c[1] = a[2] * b[0] - a[0] * b[2];
+	c[2] = a[0] * b[1] - a[1] * b[0];
+	return c;
+}
+
+template<typename T, auto D>
+T dot(std::array<T, D> const &a, std::array<T, D> const &b) {
+	T sum = T(0);
+	for (int i = 0; i < int(D); i++) {
+		sum += a[i] * b[i];
+	}
+	return sum;
+}
+
+template<typename T, auto D>
+T norm(std::array<T, D> const &a) {
+	return sqrt(dot(a, a));
+}
+
+template<typename T, auto D>
+std::array<T, D> normalize(std::array<T, D> const &a) {
+	std::array<T, D> n = a;
+	n *= T(1) / norm(a);
+	return n;
+}
+
+template<typename T>
+SquareMatrix<T, 3> crossProductMatrix(std::array<T, 3> const &a) {
+	SquareMatrix<T, 3> R;
+	R(0, 0) = R(1, 1) = R(2, 2) = T(0);
+	R(0, 1) = -a[2];
+	R(0, 2) = +a[1];
+	R(1, 2) = -a[0];
+	R(1, 0) = -R(0, 1);
+	R(2, 0) = -R(0, 2);
+	R(2, 1) = -R(1, 2);
 	return R;
 }
 
-auto computeG2D(T dEr, T dF_x, T dF_y, T Er0, T F0_x, T F0_y, T Eg0, T Beta0_x, T Beta0_y, T rho, T mu, T kappa, T chi, T gamma, T dt) {
-//	Vec3 a, b;
-//	Vec3 u = normalize(cross(a, b));
-//	Vec3 n = {0, 0, 1};
-//
-//	Vec3 v = cross(u, n);
-//	double s = norm(v);
-//	double c = dot(u, n);
-//
-//	Mat3 vx = crossProductMatrix(v);
-//	Mat3 R = identity + vx + (vx * vx) * ((1 - c) / (s * s));
-//
-//	Vec3 aRot = R * a;
-//	Vec3 bRot = R * b;
+template<int D>
+SquareMatrix<T, D> rotateToPlane(std::array<T, D> const &a, std::array<T, D> const &b) {
+	auto const u = normalize(crossProduct(a, b));
+	std::array n = { T(0), T(0), T(1) };
+	auto const v = crossProduct(u, n);
+	T const s = norm(v);
+	T const c = dot(u, n);
+	auto const vx = crossProductMatrix(v);
+	auto const R = SquareMatrix<T, D>::identity() + vx + (vx * vx) * ((1 - c) / (s * s));
+	return R;
+}
 
-	T const iCv = mu * cons.amu * (gamma - 1.0) / (cons.kB * rho);
-	T const Beta_x = Beta0_x - dF_x / (rho * cons.c * cons.c);
-	T const Beta_y = Beta0_y - dF_y / (rho * cons.c * cons.c);
-	T const dBeta_dF = -T(1.0) / (rho * cons.c * cons.c);
-	T const Ek = T(0.5) * rho * (sqr(cons.c * Beta_x) + sqr(cons.c * Beta_y));
-	T const Eg = Eg0 - dEr;
-	T const eps = Eg - Ek;
-	T const temp = eps * iCv;
-	T const dtemp_dF_x = Beta_x * iCv;
-	T const dtemp_dF_y = Beta_y * iCv;
-	T const temp2 = sqr(temp);
-	T const temp3 = temp * temp2;
-	T const temp4 = sqr(temp2);
-	T const F_x = F0_x + dF_x;
-	T const F_y = F0_y + dF_y;
-	T const F2 = sqr(F_x) + sqr(F_y);
-	T const F = sqrt(F2);
-	T const Finv = (F ? T(1) : T(0)) / (F ? F : T(1));
-	T const N_x = F_x * Finv;
-	T const N_y = F_y * Finv;
-	T const dNx_dx = +N_y * N_y * Finv;
-	T const dNy_dy = +N_x * N_x * Finv;
-	T const dNx_dy = -N_x * N_y * Finv;
-	T const Er = Er0 + dEr;
-	T const Er_inv = T(1) / Er;
-	T const f = F * Er_inv;
-	T const df_dEr = -f * Er_inv;
-	T const df_dF_x = N_x * Er_inv;
-	T const df_dF_y = N_y * Er_inv;
-	T const sqrt4m3f2 = sqrt(4 - 3 * sqr(f));
-	T const Xi = (T(5.0 / 3.0) - T(2.0 / 3.0) * sqrt4m3f2);
-	T const dXi_df = T(2.0) * f / sqrt4m3f2;
-	T const dXi_dEr = dXi_df * df_dEr;
-	T const dXi_dF_x = dXi_df * df_dF_x;
-	T const dXi_dF_y = dXi_df * df_dF_y;
-	T const strCo = (T(1.5) * Xi - T(0.5));
-	T const difCo = (T(0.5) - T(0.5) * Xi);
-	T const D_xx = strCo * N_x * N_x + difCo;
-	T const D_yy = strCo * N_y * N_y + difCo;
-	T const D_xy = strCo * N_x * N_y;
-	T const dD_xx_dEr = T(1.5) * dXi_dEr * N_x * N_x - T(0.5) * dXi_dEr;
-	T const dD_yy_dEr = T(1.5) * dXi_dEr * N_y * N_y - T(0.5) * dXi_dEr;
-	T const dD_xy_dEr = T(1.5) * dXi_dEr * N_x * N_y;
-	T const dD_xx_dF_x = T(1.5) * dXi_dF_x * N_x * N_x + strCo * T(2.0) * (dNx_dx * N_x) - T(0.5) * dXi_dF_x;
-	T const dD_xx_dF_y = T(1.5) * dXi_dF_y * N_x * N_x + strCo * T(2.0) * (dNx_dy * N_x) - T(0.5) * dXi_dF_y;
-	T const dD_yy_dF_x = T(1.5) * dXi_dF_x * N_y * N_y + strCo * T(2.0) * (dNx_dy * N_y) - T(0.5) * dXi_dF_x;
-	T const dD_yy_dF_y = T(1.5) * dXi_dF_y * N_y * N_y + strCo * T(2.0) * (dNy_dy * N_y) - T(0.5) * dXi_dF_y;
-	T const dD_xy_dF_x = T(1.5) * dXi_dF_x * N_x * N_y + strCo * (dNx_dx * N_y + dNx_dy * N_x);
-	T const dD_xy_dF_y = T(1.5) * dXi_dF_y * N_x * N_y + strCo * (dNx_dy * N_y + dNy_dy * N_x);
-	T const P_xx = Er * D_xx;
-	T const P_xy = Er * D_xy;
-	T const P_yy = Er * D_yy;
-	T const dP_xx_dEr = Er * dD_xx_dEr + D_xx;
-	T const dP_xy_dEr = Er * dD_xy_dEr + D_xy;
-	T const dP_yy_dEr = Er * dD_yy_dEr + D_yy;
-	T const dP_xx_dF_x = Er * dD_xx_dF_x;
-	T const dP_xx_dF_y = Er * dD_xx_dF_y;
-	T const dP_xy_dF_x = Er * dD_xy_dF_x;
-	T const dP_xy_dF_y = Er * dD_xy_dF_y;
-	T const dP_yy_dF_x = Er * dD_yy_dF_x;
-	T const dP_yy_dF_y = Er * dD_yy_dF_y;
-	T const aT3 = cons.a * temp3;
-	T const gk = kappa * (Er0 + dEr - cons.a * temp4 - T(2.0) * (Beta_x * F_x + Beta_y * F_y));
-	T const dgk_dEr = kappa * (T(1.0) + T(4.0) * aT3 * iCv);
-	T const dgk_dF_x = -kappa * T(2.0) * (T(2.0) * aT3 * dtemp_dF_x + F_x * dBeta_dF + Beta_x);
-	T const dgk_dF_y = -kappa * T(2.0) * (T(2.0) * aT3 * dtemp_dF_y + F_y * dBeta_dF + Beta_y);
-	T const dGx_dEr_x = -chi * (Beta_x + dP_xx_dEr * Beta_x + dP_xy_dEr * Beta_y);
-	T const dGx_dEr_y = -chi * (Beta_y + dP_xy_dEr * Beta_x + dP_yy_dEr * Beta_y);
-	T const Gx_x = chi * (F_x - Beta_x * Er - P_xx * Beta_x - P_xy * Beta_y);
-	T const Gx_y = chi * (F_y - Beta_y * Er - P_xy * Beta_x - P_yy * Beta_y);
-	T const dG_dF = dBeta_dF * Er - T(1.0);
-	T const dGx_x_dF_x = -chi * (dP_xx_dF_x * Beta_x + P_xx * dBeta_dF + dP_xy_dF_x * Beta_y + dG_dF);
-	T const dGx_y_dF_y = -chi * (dP_xy_dF_y * Beta_x + P_yy * dBeta_dF + dP_yy_dF_y * Beta_y + dG_dF);
-	T const dGx_x_dF_y = -chi * (dP_xx_dF_y * Beta_x + P_xy * dBeta_dF + dP_xy_dF_y * Beta_y);
-	T const dGx_y_dF_x = -chi * (dP_xy_dF_x * Beta_x + P_xy * dBeta_dF + dP_yy_dF_x * Beta_y);
-	T const gx = Gx_x * Beta_x + Gx_y * Beta_y;
-	T const dgx_dEr = dGx_dEr_x * Beta_x + dGx_dEr_y * Beta_y;
-	T const dgx_dF_x = dGx_x_dF_x * Beta_x + dGx_y_dF_x * Beta_y + Gx_x * dBeta_dF;
-	T const dgx_dF_y = dGx_x_dF_y * Beta_x + dGx_y_dF_y * Beta_y + Gx_y * dBeta_dF;
-	T const Gk_x = gk * Beta_x;
-	T const Gk_y = gk * Beta_y;
-	T const dGk_x_dEr = dgk_dEr * Beta_x;
-	T const dGk_y_dEr = dgk_dEr * Beta_y;
-	T const dGk_x_dF_y = dgk_dF_y * Beta_x;
-	T const dGk_y_dF_x = dgk_dF_x * Beta_y;
-	T const dGk_x_dF_x = dgk_dF_x * Beta_x + gk * dBeta_dF;
-	T const dGk_y_dF_y = dgk_dF_y * Beta_y + gk * dBeta_dF;
-	T const cdt = cons.c * dt;
-	T const hr = dEr + cdt * (gk + gx);
-	T const dhr_dEr = 1 + cdt * (dgk_dEr + dgx_dEr);
-	T const dhr_dF_x = cdt * (dgk_dF_x + dgx_dF_x);
-	T const dhr_dF_y = cdt * (dgk_dF_y + dgx_dF_y);
-	T const Hr_x = dF_x + cdt * (Gk_x + Gx_x);
-	T const Hr_y = dF_y + cdt * (Gk_y + Gx_y);
-	T const dHr_x_dEr = cdt * (dGk_x_dEr + dGx_dEr_x);
-	T const dHr_y_dEr = cdt * (dGk_y_dEr + dGx_dEr_y);
-	T const dHr_x_dF_x = cdt * (dGk_x_dF_x + dGx_x_dF_x) + 1;
-	T const dHr_y_dF_y = cdt * (dGk_y_dF_y + dGx_y_dF_y) + 1;
-	T const dHr_x_dF_y = cdt * (dGk_x_dF_y + dGx_x_dF_y);
-	T const dHr_y_dF_x = cdt * (dGk_y_dF_x + dGx_y_dF_x);
-	std::pair<std::array<T, NDIM + 1>, std::array<std::array<T, NDIM + 1>, NDIM + 1>> rc;
-	std::array<T, NDIM + 1> &F4 = rc.first;
-	std::array<std::array<T, NDIM + 1>, NDIM + 1> &dF4 = rc.second;
-	F4[0] = Hr_x;
-	F4[1] = Hr_y;
-	F4[NDIM] = hr;
-	dF4[0][0] = dHr_x_dF_x;
-	dF4[0][1] = dHr_x_dF_y;
-	dF4[1][0] = dHr_y_dF_x;
-	dF4[1][1] = dHr_y_dF_y;
-	dF4[0][NDIM] = dHr_x_dEr;
-	dF4[1][NDIM] = dHr_y_dEr;
-	dF4[NDIM][0] = dhr_dF_x;
-	dF4[NDIM][1] = dhr_dF_y;
-	dF4[NDIM][NDIM] = dhr_dEr;
-	dF4[0][2] = T(0);
-	dF4[1][2] = T(0);
-	F4[2] = T(0);
-	dF4[2][0] = T(0);
-	dF4[2][1] = T(0);
-	dF4[2][2] = T(0);
-	dF4[NDIM][2] = T(0);
-	dF4[2][NDIM] = T(0);
-	return rc;
+struct ImplicitEqs {
+	ImplicitEqs(T Er0_, T F0_x_, T F0_y_, T Eg0_, T Beta0_x_, T Beta0_y_, T rho_, T mu_, T kappa_, T chi_, T gamma_, T dt_) {
+		Er0 = Er0_;
+		F0_x = F0_x_;
+		F0_y = F0_y_;
+		Eg0 = Eg0_;
+		Beta0_x = Beta0_x_;
+		Beta0_y = Beta0_y_;
+		rho = rho_;
+		mu = mu_;
+		kappa = kappa_;
+		chi = chi_;
+		gamma = gamma_;
+		dt = dt_;
+
+	}
+	auto jacobian(std::array<T, 3> const &X) const {
+		T const dEr = X[2];
+		T const dF_x = X[0];
+		T const dF_y = X[1];
+		T const Beta_x = Beta0_x - dF_x / (rho * cons.c * cons.c);
+		T const Beta_y = Beta0_y - dF_y / (rho * cons.c * cons.c);
+		T const dBeta_dF = -T(1.0) / (rho * cons.c * cons.c);
+		T const Ek = rho * (sqr(cons.c * Beta_x) + sqr(cons.c * Beta_y)) / T(2);
+		T const Eg = Eg0 - dEr;
+		T const eps = Eg - Ek;
+		T const iCv = (eps > T(0)) ? (mu * cons.amu * (gamma - T(1)) / (cons.kB * rho)) : T(0);
+		T const temp = eps * iCv;
+		if (temp < T(0)) {
+			THROW("Invalid temperature");
+		}
+		T const dtemp_dF_x = Beta_x * iCv;
+		T const dtemp_dF_y = Beta_y * iCv;
+		T const temp2 = sqr(temp);
+		T const temp3 = temp * temp2;
+		T const temp4 = sqr(temp2);
+		T const F_x = F0_x + dF_x;
+		T const F_y = F0_y + dF_y;
+		T const F2 = sqr(F_x) + sqr(F_y);
+		T const F = sqrt(F2);
+		T const Finv = (F ? T(1) : T(0)) / (F ? F : T(1));
+		T const N_x = F_x * Finv;
+		T const N_y = F_y * Finv;
+		T const dNx_dx = +N_y * N_y * Finv;
+		T const dNy_dy = +N_x * N_x * Finv;
+		T const dNx_dy = -N_x * N_y * Finv;
+		T const Er = Er0 + dEr;
+		T const Er_inv = T(1) / Er;
+		T const f = F * Er_inv;
+		T const df_dEr = -f * Er_inv;
+		T const df_dF_x = N_x * Er_inv;
+		T const df_dF_y = N_y * Er_inv;
+		if ((f > T(1)) || (f < T(0))) {
+			THROW(std::string("Unphysical flux in implicit solver: f = " + std::to_string(f)));
+		}
+		T const sqrt4m3f2 = sqrt(T(4) - T(3) * sqr(f));
+		T const Xi = (T(5) / T(3) - T(2) / T(3) * sqrt4m3f2);
+		T const dXi_df = T(2) * f / sqrt4m3f2;
+		T const dXi_dEr = dXi_df * df_dEr;
+		T const dXi_dF_x = dXi_df * df_dF_x;
+		T const dXi_dF_y = dXi_df * df_dF_y;
+		T const strCo = (T(3) / T(2) * Xi - T(1) / T(2));
+		T const difCo = (T(1) / T(2) - T(1) / T(2) * Xi);
+		T const D_xx = strCo * N_x * N_x + difCo;
+		T const D_yy = strCo * N_y * N_y + difCo;
+		T const D_xy = strCo * N_x * N_y;
+		T const dD_xx_dEr = T(3) / T(2) * dXi_dEr * N_x * N_x - T(1) / T(2) * dXi_dEr;
+		T const dD_yy_dEr = T(3) / T(2) * dXi_dEr * N_y * N_y - T(1) / T(2) * dXi_dEr;
+		T const dD_xy_dEr = T(3) / T(2) * dXi_dEr * N_x * N_y;
+		T const dD_xx_dF_x = T(3) / T(2) * dXi_dF_x * N_x * N_x + strCo * T(2) * (dNx_dx * N_x) - T(1) / T(2) * dXi_dF_x;
+		T const dD_xx_dF_y = T(3) / T(2) * dXi_dF_y * N_x * N_x + strCo * T(2) * (dNx_dy * N_x) - T(1) / T(2) * dXi_dF_y;
+		T const dD_yy_dF_x = T(3) / T(2) * dXi_dF_x * N_y * N_y + strCo * T(2) * (dNx_dy * N_y) - T(1) / T(2) * dXi_dF_x;
+		T const dD_yy_dF_y = T(3) / T(2) * dXi_dF_y * N_y * N_y + strCo * T(2) * (dNy_dy * N_y) - T(1) / T(2) * dXi_dF_y;
+		T const dD_xy_dF_x = T(3) / T(2) * dXi_dF_x * N_x * N_y + strCo * (dNx_dx * N_y + dNx_dy * N_x);
+		T const dD_xy_dF_y = T(3) / T(2) * dXi_dF_y * N_x * N_y + strCo * (dNx_dy * N_y + dNy_dy * N_x);
+		T const P_xx = Er * D_xx;
+		T const P_xy = Er * D_xy;
+		T const P_yy = Er * D_yy;
+		T const dP_xx_dEr = Er * dD_xx_dEr + D_xx;
+		T const dP_xy_dEr = Er * dD_xy_dEr + D_xy;
+		T const dP_yy_dEr = Er * dD_yy_dEr + D_yy;
+		T const dP_xx_dF_x = Er * dD_xx_dF_x;
+		T const dP_xx_dF_y = Er * dD_xx_dF_y;
+		T const dP_xy_dF_x = Er * dD_xy_dF_x;
+		T const dP_xy_dF_y = Er * dD_xy_dF_y;
+		T const dP_yy_dF_x = Er * dD_yy_dF_x;
+		T const dP_yy_dF_y = Er * dD_yy_dF_y;
+		T const aT3 = cons.a * temp3;
+		T const gk = kappa * (Er0 + dEr - cons.a * temp4 - T(2) * (Beta_x * F_x + Beta_y * F_y));
+		T const dgk_dEr = kappa * (T(1) + T(4) * aT3 * iCv);
+		T const dgk_dF_x = -kappa * T(2) * (T(2) * aT3 * dtemp_dF_x + F_x * dBeta_dF + Beta_x);
+		T const dgk_dF_y = -kappa * T(2) * (T(2) * aT3 * dtemp_dF_y + F_y * dBeta_dF + Beta_y);
+		T const dGx_dEr_x = -chi * (Beta_x + dP_xx_dEr * Beta_x + dP_xy_dEr * Beta_y);
+		T const dGx_dEr_y = -chi * (Beta_y + dP_xy_dEr * Beta_x + dP_yy_dEr * Beta_y);
+		T const Gx_x = chi * (F_x - Beta_x * Er - P_xx * Beta_x - P_xy * Beta_y);
+		T const Gx_y = chi * (F_y - Beta_y * Er - P_xy * Beta_x - P_yy * Beta_y);
+		T const dG_dF = dBeta_dF * Er - T(1);
+		T const dGx_x_dF_x = -chi * (dP_xx_dF_x * Beta_x + P_xx * dBeta_dF + dP_xy_dF_x * Beta_y + dG_dF);
+		T const dGx_y_dF_y = -chi * (dP_xy_dF_y * Beta_x + P_yy * dBeta_dF + dP_yy_dF_y * Beta_y + dG_dF);
+		T const dGx_x_dF_y = -chi * (dP_xx_dF_y * Beta_x + P_xy * dBeta_dF + dP_xy_dF_y * Beta_y);
+		T const dGx_y_dF_x = -chi * (dP_xy_dF_x * Beta_x + P_xy * dBeta_dF + dP_yy_dF_x * Beta_y);
+		T const dgx_dEr = dGx_dEr_x * Beta_x + dGx_dEr_y * Beta_y;
+		T const dgx_dF_x = dGx_x_dF_x * Beta_x + dGx_y_dF_x * Beta_y + Gx_x * dBeta_dF;
+		T const dgx_dF_y = dGx_x_dF_y * Beta_x + dGx_y_dF_y * Beta_y + Gx_y * dBeta_dF;
+		T const dGk_x_dEr = dgk_dEr * Beta_x;
+		T const dGk_y_dEr = dgk_dEr * Beta_y;
+		T const dGk_x_dF_y = dgk_dF_y * Beta_x;
+		T const dGk_y_dF_x = dgk_dF_x * Beta_y;
+		T const dGk_x_dF_x = dgk_dF_x * Beta_x + gk * dBeta_dF;
+		T const dGk_y_dF_y = dgk_dF_y * Beta_y + gk * dBeta_dF;
+		T const cdt = cons.c * dt;
+		T const dhr_dEr = T(1) + cdt * (dgk_dEr + dgx_dEr);
+		T const dhr_dF_x = cdt * (dgk_dF_x + dgx_dF_x);
+		T const dhr_dF_y = cdt * (dgk_dF_y + dgx_dF_y);
+		T const dHr_x_dEr = cdt * (dGk_x_dEr + dGx_dEr_x);
+		T const dHr_y_dEr = cdt * (dGk_y_dEr + dGx_dEr_y);
+		T const dHr_x_dF_x = cdt * (dGk_x_dF_x + dGx_x_dF_x) + T(1);
+		T const dHr_y_dF_y = cdt * (dGk_y_dF_y + dGx_y_dF_y) + T(1);
+		T const dHr_x_dF_y = cdt * (dGk_x_dF_y + dGx_x_dF_y);
+		T const dHr_y_dF_x = cdt * (dGk_y_dF_x + dGx_y_dF_x);
+		SquareMatrix<T, NDIM> J;
+		J(0, 0) = dHr_x_dF_x;
+		J(0, 1) = dHr_x_dF_y;
+		J(1, 0) = dHr_y_dF_x;
+		J(1, 1) = dHr_y_dF_y;
+		J(0, 2) = dHr_x_dEr;
+		J(1, 2) = dHr_y_dEr;
+		J(2, 0) = dhr_dF_x;
+		J(2, 1) = dhr_dF_y;
+		J(2, 2) = dhr_dEr;
+		return J;
+	}
+	auto residual(std::array<T, 3> const &X) const {
+		T const dEr = X[2];
+		T const dF_x = X[0];
+		T const dF_y = X[1];
+		T const Beta_x = Beta0_x - dF_x / (rho * cons.c * cons.c);
+		T const Beta_y = Beta0_y - dF_y / (rho * cons.c * cons.c);
+		T const Ek = T(1) / T(2) * rho * (sqr(cons.c * Beta_x) + sqr(cons.c * Beta_y));
+		T const Eg = Eg0 - dEr;
+		T const eps = Eg - Ek;
+		T const iCv = (eps > T(0)) ? (mu * cons.amu * (gamma - T(1)) / (cons.kB * rho)) : T(0);
+		T const temp = eps * iCv;
+		if (temp < 0) {
+			THROW("Invalid temperature");
+		}
+		T const temp2 = sqr(temp);
+		T const temp4 = sqr(temp2);
+		T const F_x = F0_x + dF_x;
+		T const F_y = F0_y + dF_y;
+		T const F2 = sqr(F_x) + sqr(F_y);
+		T const F = sqrt(F2);
+		T const Finv = (F ? T(1) : T(0)) / (F ? F : T(1));
+		T const N_x = F_x * Finv;
+		T const N_y = F_y * Finv;
+		T const Er = Er0 + dEr;
+		T const Er_inv = T(1) / Er;
+		T const f = F * Er_inv;
+		if ((f > T(1)) || (f < T(0))) {
+			THROW(std::string("Unphysical flux in implicit solver: f = " + std::to_string(f)));
+		}
+		T const sqrt4m3f2 = sqrt(T(4) - T(3) * sqr(f));
+		T const Xi = (T(5) / T(3) - T(2) / T(3) * sqrt4m3f2);
+		T const strCo = (T(3) / T(2) * Xi - T(1) / T(2));
+		T const difCo = (T(1) / T(2) - T(1) / T(2) * Xi);
+		T const D_xx = strCo * N_x * N_x + difCo;
+		T const D_yy = strCo * N_y * N_y + difCo;
+		T const D_xy = strCo * N_x * N_y;
+		T const P_xx = Er * D_xx;
+		T const P_xy = Er * D_xy;
+		T const P_yy = Er * D_yy;
+		T const gk = kappa * (Er0 + dEr - cons.a * temp4 - T(2) * (Beta_x * F_x + Beta_y * F_y));
+		T const Gx_x = chi * (F_x - Beta_x * Er - P_xx * Beta_x - P_xy * Beta_y);
+		T const Gx_y = chi * (F_y - Beta_y * Er - P_xy * Beta_x - P_yy * Beta_y);
+		T const gx = Gx_x * Beta_x + Gx_y * Beta_y;
+		T const Gk_x = gk * Beta_x;
+		T const Gk_y = gk * Beta_y;
+		T const cdt = cons.c * dt;
+		T const hr = dEr + cdt * (gk + gx);
+		T const Hr_x = dF_x + cdt * (Gk_x + Gx_x);
+		T const Hr_y = dF_y + cdt * (Gk_y + Gx_y);
+		std::array<T, NDIM> dH;
+		dH[0] = Hr_x;
+		dH[1] = Hr_y;
+		dH[2] = hr;
+		return dH;
+	}
+	T Er0;
+	T F0_x;
+	T F0_y;
+	T Eg0;
+	T Beta0_x;
+	T Beta0_y;
+	T rho;
+	T mu;
+	T kappa;
+	T chi;
+	T gamma;
+	T dt;
+};
+
+int solveImplicitRadiation(std::array<T, NDIM + 1> &uR, std::array<T, NDIM + 1> &uG, T rho, T mu, T kappa, T chi, T gamma, T dt) {
+	std::array<T, NDIM> X;
+	std::array<T, NDIM> Fr;
+	std::array<T, NDIM> Beta;
+	T betaNorm = T(1) / (rho * cons.c);
+	T Ek1 = T(0);
+	for (int d = 0; d < NDIM; d++) {
+		X[d] = T(0);
+		Fr[d] = uR[d];
+		Beta[d] = uG[d] * betaNorm;
+		Ek1 += sqr(uG[d]) / rho / T(2);
+	}
+	X[NDIM] = T(0);
+	T Er = uR[NDIM];
+	T Eg = uG[NDIM];
+	T Ei = Eg - Ek1;
+	auto const Rot = rotateToPlane<NDIM>(Fr, Beta);
+	Fr = Rot * Fr;
+	Beta = Rot * Beta;
+	T Ek = T(0);
+	for (int d = 0; d < NDIM; d++) {
+		X[d] = T(0);
+		Fr[d] = uR[d];
+		Beta[d] = uG[d] * betaNorm;
+		Ek += sqr(Beta[d] / betaNorm) * T(0.5) / rho;
+	}
+	Eg = Ei + Ek;
+	T err = 1;
+	int n = 0;
+	ImplicitEqs const eqs(Er, Fr[0], Fr[1], Eg, Beta[0], Beta[1], rho, mu, kappa, chi, gamma, dt);
+	auto dH = eqs.residual(X);
+	auto J = eqs.jacobian(X);
+	auto Jinv = matrixInverse(J);
+	auto RR = dot(dH, dH);
+	auto R0 = dot(dH, dH);
+	T R, f;
+	do {
+		T alpha = T(1);
+		auto const X0 = X;
+		while (1) {
+			bool flag = false;
+			X = X0 - alpha * Jinv * dH;
+			if ((Er + X[2]) > T(0)) {
+				f = sqrt(sqr(Fr[0] + X[0]) + sqr(Fr[1] + X[1])) / (Er + X[2]);
+				if (f < T(1)) {
+					auto const dH1 = eqs.residual(X);
+					R = dot(dH1, dH1);
+					err = sqrt(R / RR);
+					if (R < (T(1) - (1e-3) * alpha) * R0) {
+						printf("%i    %e %e %e %e\n", n, err, alpha, R, R0);
+						R0 = R;
+						flag = true;
+					}
+				}
+			}
+			alpha *= T(1) / T(2);
+			if (flag) {
+				J = eqs.jacobian(X);
+				Jinv = matrixInverse(J);
+				dH = eqs.residual(X);
+				break;
+			}
+		}
+		++n;
+		if (n > 100) {
+			T Ek = (Beta[0] * Beta[0] + Beta[1] * Beta[1]) * (0.5 * rho * cons.c * cons.c);
+			T Ek1 = (0.5 * rho * cons.c * cons.c) * (sqr(Beta[0] - X[0] / (rho * cons.c * cons.c)) + sqr(Beta[1] - X[1] / (rho * cons.c * cons.c)));
+			Jinv = matrixInverse(eqs.jacobian(X));
+			dH = eqs.residual(X);
+			auto dX = Jinv * dH;
+			printf("X  = %e %e %e\n", X[0], X[1], X[2]);
+			printf("dX = %e %e %e\n", dX[0], dX[1], dX[2]);
+			printf("Er    = %e -> %e\n", Er, Er + X[2]);
+			printf("Fx    = %e -> %e\n", Fr[0], Fr[0] + X[0]);
+			printf("Fy    = %e -> %e\n", Fr[1], Fr[1] + X[0]);
+			printf("Eg    = %e -> %e\n", Eg, Eg - X[2]);
+			printf("Ek    = %e -> %e\n", Ek, Ek1);
+			printf("Betax = %e -> %e\n", Beta[0], Beta[0] - X[0] / (rho * cons.c * cons.c));
+			printf("Betay = %e -> %e\n", Beta[1], Beta[1] - X[1] / (rho * cons.c * cons.c));
+			THROW("Solver failed to converge.");
+		}
+	} while (err > 1e-2);
+	auto const RotInv = matrixInverse(Rot);
+	Fr[0] += X[0];
+	Fr[1] += X[1];
+	Fr[2] = T(0);
+	Beta[0] -= X[0] / (rho * cons.c * cons.c);
+	Beta[1] -= X[1] / (rho * cons.c * cons.c);
+	Beta[2] = T(0);
+	Fr = RotInv * Fr;
+	Beta = RotInv * Beta;
+	for (int d = 0; d < NDIM; d++) {
+		uR[d] = Fr[d];
+		uG[d] = Beta[d] * rho * cons.c;
+	}
+	uR[NDIM] = Er + X[2];
+	uG[NDIM] = Eg - X[2];
+	return n;
 }
 
 void testRadiation() {
-	std::array<double, 3> const A{{1.0,0.0,0.0}};
-	std::array<double, 3> const B{{0.0,0.0,1.0}};
-	auto R = rotateToPlane<3>(A, B);
-	std::cout << toString(R) << "\n";
-	return;
-//	constexpr int P = 3;
 //	constexpr int D = 3;
 //	constexpr int N = 32;
 //	using T = Real;
@@ -699,113 +882,120 @@ void testRadiation() {
 //		iter++;
 //		t += dt;
 //	}
+	std::cout << physicalUnits << "\n";
 	int ntrial = 100000;
 	double err_max = 0.0;
 	for (int trialNum = 0; trialNum < ntrial; trialNum++) {
-
+		printf("%i\n", trialNum);
+		std::array<T, NDIM + 1> uR;
+		std::array<T, NDIM + 1> uG;
 		T Tr = randomLog(10, 1000000);
 		T Tg = Tr * randomLogNormal(1.0, .1);
-		T Er = cons.a * sqr(sqr(Tr));
-		T const f = rand1();
-		T F0x, F0y, Beta0x, Beta0y;
-		do {
-			Beta0x = T(2) * rand1() - T(1);
-			Beta0y = T(2) * rand1() - T(1);
-		} while (sqr(Beta0x) + sqr(Beta0y) > T(1));
-		do {
-			F0x = T(2) * rand1() - T(1);
-			F0y = T(2) * rand1() - T(1);
-		} while (sqr(F0x) + sqr(F0y) > T(1));
-		F0y *= Er;
-		F0x *= Er;
-		T rho = 1.0;
+		auto const v1 = randomUnitVector3D() * rand1();
+		auto const v2 = randomUnitVector3D() * rand1();
+		uR[NDIM] = cons.a * sqr(sqr(Tr));
+		T rho = 1.0e-3;
 		T mu = 4.0 / 3.0;
 		T chi = 1.0;
 		T kappa = 1.0;
 		T dt = 1.0;
-		T Er0 = Er;
+		for (int d = 0; d < NDIM; d++) {
+			uR[d] = v1[d] * uR[NDIM];
+			uG[d] = v2[d] * cons.c * rho;
+		}
 		constexpr T gamma = 5.0 / 3.0;
-		T Eg0 = cons.kB * rho * Tg / ((gamma - 1.0) * mu * cons.amu);
-		Eg0 += 0.5 * rho * sqr(cons.c * Beta0x);
-		Eg0 += 0.5 * rho * sqr(cons.c * Beta0y);
+		T const eint = cons.kB * rho * Tg / ((gamma - 1.0) * mu * cons.amu);
+		uG[NDIM] = eint;
+		uG[NDIM] += 0.5 * sqr(uG[0]) / rho;
+		uG[NDIM] += 0.5 * sqr(uG[1]) / rho;
+		uG[NDIM] += 0.5 * sqr(uG[2]) / rho;
+		T f = sqrt(sqr(uR[0]) + sqr(uR[1]) + sqr(uR[2])) / uR[NDIM];
+		printf("Er = %e ", uR[NDIM]);
+		printf("Eg = %e ", uG[NDIM]);
+		printf("Ei = %e ", eint);
+		printf("Tr = %e ", Tr);
+		printf("Tg = %e ", Tg);
+		printf("f = %e\n", f);
+		printf("Fr = %e %e %e ", uR[0], uR[1], uR[2]);
+		printf("Beta = %e %e %e \n", uG[0] / (rho * cons.c), uG[1] / (rho * cons.c), uG[2] / (rho * cons.c));
 		auto const eps = sqrt(std::numeric_limits<double>::epsilon());
-		T dEr = eps * Er;
-		std::array<std::array<T, NDIM + 1>, NDIM + 1> dJ2;
-		auto dJ1 = computeG2D(0, 0, 0, Er0, F0x, F0y, Eg0, Beta0x, Beta0y, rho, mu, kappa, chi, gamma, dt).second;
-		for (int l = 0; l <= NDIM; l++) {
-			if (l == 2) {
-				continue;
-			}
-			T dErp = T(0), dErm = T(0);
-			T dFmx = T(0);
-			T dFmy = T(0);
-			T dFpx = T(0);
-			T dFpy = T(0);
-			if (l == NDIM) {
-				dErp = 0.5 * dEr;
-				dErm = -0.5 * dEr;
-			} else {
-				if (l == 0) {
-					dFpx += 0.5 * dEr;
-					dFmx -= 0.5 * dEr;
-				} else {
-					dFpy += 0.5 * dEr;
-					dFmy -= 0.5 * dEr;
-				}
-			}
-			//	(T dEr, T dF_x, T dF_y, T Er0, T F0_x, T F0_y, T Eg0, T Beta0_x, T Beta0_y, T rho, T mu, T kappa, T chi, T gamma, T dt)
-			auto dJp = computeG2D(dErp, dFpx, dFpy, Er0, F0x, F0y, Eg0, Beta0x, Beta0y, rho, mu, kappa, chi, gamma, dt).first;
-			auto dJm = computeG2D(dErm, dFmx, dFmy, Er0, F0x, F0y, Eg0, Beta0x, Beta0y, rho, mu, kappa, chi, gamma, dt).first;
-			for (int m = 0; m <= NDIM; m++) {
-				if (m == 2) {
-					continue;
-				}
-				dJ2[m][l] = (dJp[m] - dJm[m]) / (eps * Er);
-			}
-		}
-		double err = 0.0;
-		double norm = 0.0;
-		for (int l = 0; l < NDIM + 1; l++) {
-			if (l == 2) {
-				continue;
-			}
-			for (int m = 0; m < NDIM + 1; m++) {
-				if (m == 2) {
-					continue;
-				}
-				err += sqr(dJ1[l][m] - dJ2[l][m]);
-				norm += 0.5 * (std::abs(dJ1[l][m]) + std::abs(dJ2[l][m]));
-//				printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dF1[l][m], dF2[l][m], dF1[l][m] - dF2[l][m],
-//						(dF1[l][m] - dF2[l][m]) / (dF1[l][m] + 1e-20));
-			}
-		}
-		err = sqrt(err);
-		err /= norm;
-		printf("%e\n", err);
-		if (err > 0.1) {
-			printf("Tr = %e\n", Tr);
-			printf("Tg = %e\n", Tg);
-			printf("f = %e\n", f);
-			printf("F0x = %e\n", F0x);
-			printf("F0y = %e\n", F0y);
-			printf("Beta0x = %e\n", Beta0x);
-			printf("Beta0y = %e\n", Beta0y);
-			for (int l = 0; l < NDIM + 1; l++) {
-				if (l == 2) {
-					continue;
-				}
-				for (int m = 0; m < NDIM + 1; m++) {
-					if (m == 2) {
-						continue;
-					}
-					printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dJ1[l][m], dJ2[l][m], dJ1[l][m] - dJ2[l][m],
-							(dJ1[l][m] - dJ2[l][m]) / (dJ1[l][m] + 1e-20));
-				}
-			}
-			abort();
-		}
+		auto sol = solveImplicitRadiation(uR, uG, rho, mu, kappa, chi, gamma, dt);
 
-		err_max = std::max(err, err_max);
+		//		std::array<std::array<T, NDIM + 1>, NDIM + 1> dJ2;
+//		auto dJ1 = computeG2D(0, 0, 0, Er0, F0x, F0y, Eg0, Beta0x, Beta0y, rho, mu, kappa, chi, gamma, dt).second;
+//		for (int l = 0; l <= NDIM; l++) {
+//			if (l == 2) {
+//				continue;
+//			}
+//			T dErp = T(0), dErm = T(0);
+//			T dFmx = T(0);
+//			T dFmy = T(0);
+//			T dFpx = T(0);
+//			T dFpy = T(0);
+//			if (l == NDIM) {
+//				dErp = 0.5 * dEr;
+//				dErm = -0.5 * dEr;
+//			} else {
+//				if (l == 0) {
+//					dFpx += 0.5 * dEr;
+//					dFmx -= 0.5 * dEr;
+//				} else {
+//					dFpy += 0.5 * dEr;
+//					dFmy -= 0.5 * dEr;
+//				}
+//			}
+//			//	(T dEr, T dF_x, T dF_y, T Er0, T F0_x, T F0_y, T Eg0, T Beta0_x, T Beta0_y, T rho, T mu, T kappa, T chi, T gamma, T dt)
+//			auto dJp = computeG2D(dErp, dFpx, dFpy, Er0, F0x, F0y, Eg0, Beta0x, Beta0y, rho, mu, kappa, chi, gamma, dt).first;
+//			auto dJm = computeG2D(dErm, dFmx, dFmy, Er0, F0x, F0y, Eg0, Beta0x, Beta0y, rho, mu, kappa, chi, gamma, dt).first;
+//			for (int m = 0; m <= NDIM; m++) {
+//				if (m == 2) {
+//					continue;
+//				}
+//				dJ2[m][l] = (dJp[m] - dJm[m]) / (eps * Er);
+//			}
+//		}
+//		double err = 0.0;
+//		double norm = 0.0;
+//		for (int l = 0; l < NDIM + 1; l++) {
+//			if (l == 2) {
+//				continue;
+//			}
+//			for (int m = 0; m < NDIM + 1; m++) {
+//				if (m == 2) {
+//					continue;
+//				}
+//				err += sqr(dJ1[l][m] - dJ2[l][m]);
+//				norm += 0.5 * (std::abs(dJ1[l][m]) + std::abs(dJ2[l][m]));
+////				printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dF1[l][m], dF2[l][m], dF1[l][m] - dF2[l][m],
+////						(dF1[l][m] - dF2[l][m]) / (dF1[l][m] + 1e-20));
+//			}
+//		}
+//		err = sqrt(err);
+//		err /= norm;
+//		printf("%e\n", err);
+//		if (err > 0.1) {
+//			printf("Tr = %e\n", Tr);
+//			printf("Tg = %e\n", Tg);
+//			printf("f = %e\n", f);
+//			printf("F0x = %e\n", F0x);
+//			printf("F0y = %e\n", F0y);
+//			printf("Beta0x = %e\n", Beta0x);
+//			printf("Beta0y = %e\n", Beta0y);
+//			for (int l = 0; l < NDIM + 1; l++) {
+//				if (l == 2) {
+//					continue;
+//				}
+//				for (int m = 0; m < NDIM + 1; m++) {
+//					if (m == 2) {
+//						continue;
+//					}
+//					printf("n = %i m = %i analytic %16.8e numerical %16.8e abs error %16.8e rel error %16.8e\n", l, m, dJ1[l][m], dJ2[l][m], dJ1[l][m] - dJ2[l][m],
+//							(dJ1[l][m] - dJ2[l][m]) / (dJ1[l][m] + 1e-20));
+//				}
+//			}
+//			abort();
+//		}
+//
+//		err_max = std::max(err, err_max);
 	}
-	printf("-->> %e\n", err_max);
 }
