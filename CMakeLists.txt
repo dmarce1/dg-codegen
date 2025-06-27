@@ -11,6 +11,7 @@ find_package(HPX  REQUIRED)
 
 set(astrotiger_src
   src/main.cpp
+  src/Constants.cpp
   src/Options.cpp
   src/Util.cpp
   src/Radiation.cpp
@@ -19,22 +20,27 @@ set(astrotiger_src
 set(astrotiger_header
   include/Array.hpp
   include/Basis.hpp
+  include/Complex.hpp
   include/Constants.hpp
   include/ContainerArithmetic.hpp
   include/Definitions.hpp
   include/EulerState.hpp
   include/Hdf5.hpp
   include/HyperGrid.hpp
-  include/HydroGrid.hpp
+  include/Indent.hpp
   include/Legendre.hpp
   include/Matrix.hpp
   include/MultiIndex.hpp
   include/Octant.hpp
   include/Options.hpp
+  include/Polynomial.hpp
   include/Quadrature.hpp
+  include/RadiationState.hpp
   include/Range.hpp
   include/Real.hpp
   include/RungeKutta.hpp
+  include/SparseMatrix.hpp
+  include/TriIndex.hpp
   include/Util.hpp
   include/Zobrist.hpp
 )
