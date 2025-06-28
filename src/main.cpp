@@ -6,6 +6,7 @@
 #include "EulerState.hpp"
 #include "Real.hpp"
 #include "RungeKutta.hpp"
+#include "Valarray.hpp"
 
 
 void testRadiation();
