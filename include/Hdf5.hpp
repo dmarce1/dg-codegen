@@ -17,9 +17,10 @@
 
 #include "Matrix.hpp"
 #include "Util.hpp"
+#include "ValArray.hpp"
 
 template<typename T, int D, int N, int P, int BW>
-void writeHdf5(std::string filename, T const &h, std::vector<std::array<std::array<T, ipow(N + 2 * BW, D)>, BasisIndexType<P, D>::count()>> const &fieldData,
+void writeHdf5(std::string filename, T const &h, ValArray<ValArray<ValArray<T>>> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
 	constexpr Range<int, D> Box { repeat<D>(-BW), repeat<D>(N + BW) };
 	using hindex_t = MultiIndex<Box>;

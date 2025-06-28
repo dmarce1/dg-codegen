@@ -1,5 +1,5 @@
 #include <hpx/hpx_init.hpp>
-#include <include/ValArray.hpp>
+#include "ValArray.hpp"
 #include "dgTransforms.hpp"
 #include "Options.hpp"
 #include "MultiIndex.hpp"
