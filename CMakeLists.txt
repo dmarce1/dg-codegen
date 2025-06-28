@@ -42,7 +42,7 @@ set(astrotiger_header
   include/SparseMatrix.hpp
   include/TriIndex.hpp
   include/Util.hpp
-  include/Valarray.hpp
+  include/ValArray.hpp
   include/Zobrist.hpp
 )
 

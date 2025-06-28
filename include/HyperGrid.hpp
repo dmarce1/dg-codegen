@@ -6,6 +6,7 @@
 #include "MultiIndex.hpp"
 #include "Quadrature.hpp"
 #include "dgTransforms.hpp"
+#include "ValArray.hpp"
 
 #include <functional>
 #include <numeric>

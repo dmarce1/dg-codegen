@@ -1,4 +1,5 @@
 #include <hpx/hpx_init.hpp>
+#include <include/ValArray.hpp>
 #include "dgTransforms.hpp"
 #include "Options.hpp"
 #include "MultiIndex.hpp"
@@ -6,7 +7,6 @@
 #include "EulerState.hpp"
 #include "Real.hpp"
 #include "RungeKutta.hpp"
-#include "Valarray.hpp"
 
 
 void testRadiation();
