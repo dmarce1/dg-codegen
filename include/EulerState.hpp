@@ -77,14 +77,14 @@ struct EulerState: public std::array<T, 2 + D> {
 		auto& eigenvalues = rc.first;
 		auto& rightEigenvectors = rc.second;
 		int column = 0;
-		std::fill(rightEigenvectors.begin(), rightEigenvectors.end(), T(0));
+		std::fill(rightEigenvectors.begin(), rightEigenvectors.end(), T{0.0});
 		T const invρ = T(1) / rho;
 		auto const v = S * invρ;
-		T ke = T(0);
+		T ke = T{0.0};
 		for(int d = 0; d < D; d++) {
 			ke += T(0.5) * v[d] * S[d];
 		}
-		T const ei = max(T(0), eg - ke);
+		T const ei = max(T{0.0}, eg - ke);
 		T const p = gamm1 * ei;
 		T const c = sqrt(gamma * p * invρ);
 		T const h = (eg + p)*invρ;
@@ -104,16 +104,16 @@ struct EulerState: public std::array<T, 2 + D> {
 			if (thisDimension == dim) {
 				continue;
 			}
-			rightEigenvectors(0, column) = T(0);
+			rightEigenvectors(0, column) = T{0.0};
 			rightEigenvectors(1 + thisDimension, column) = T(1);
-			rightEigenvectors(D + 1, column) = T(0);
+			rightEigenvectors(D + 1, column) = T{0.0};
 			column++;
 		}
-		rightEigenvectors(0, column) = T(1);
+		rightEigenvectors(0, column) = T{1.0};
 		for(int thisDimension = 0; thisDimension < D; thisDimension++) {
 			rightEigenvectors(1 + thisDimension, column) = v[thisDimension];
 		}
-		rightEigenvectors(D + 1, column) = T(0);
+		rightEigenvectors(D + 1, column) = T{0.0};
 		column++;
 		rightEigenvectors(0, column) = T(1);
 		for(int thisDimension = 0; thisDimension < D; thisDimension++) {
@@ -126,8 +126,8 @@ struct EulerState: public std::array<T, 2 + D> {
 		EulerState F;
 		T const irho = T(1) / rho;
 		auto const v = S * irho;
-		T const ek = T(0.5) * dot(v, S);
-		T const ei = max(T(0), eg - ek);
+		T const ek = T{0.5} * dot(v, S);
+		T const ei = max(T{0.0}, eg - ek);
 		T const p = (gamma - T(1)) * ei;
 		T const u = v[d1];
 		F.rho = S[d1];
@@ -152,11 +152,11 @@ struct EulerState: public std::array<T, 2 + D> {
 			for(int i = 0; i < N2; i++) {
 				irho[i] = T(1) / u[i].rho;
 				v[i] = irho[i] * u[i].S[dim];
-				ek[i] = T(0);
+				ek[i] = T{0.0};
 				for(int d = 0; d < D; d++) {
-					ek[i] += T(0.5) * irho[i] * sqr(u[i].S[d]);
+					ek[i] += T{0.5} * irho[i] * sqr(u[i].S[d]);
 				}
-				ei[i] = max(T(0), u[i].eg - ek[i]);
+				ei[i] = max(T{0.0}, u[i].eg - ek[i]);
 				p[i] = (gamma - T(1)) * ei[i];
 				a[i] = sqrt(gamma * p[i] * irho[i]);
 			}

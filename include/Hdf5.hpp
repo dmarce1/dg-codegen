@@ -20,7 +20,7 @@
 #include "ValArray.hpp"
 
 template<typename T, int D, int N, int P, int BW, template<typename, int> typename S>
-void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T>, binco(D + P - 1, D)>, D> const &fieldData,
+void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T, ipow(N + 2 * BW, D)>, binco(D + P - 1, D)>, D> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
 	constexpr Range<int, D> Box { repeat<D>(-BW), repeat<D>(N + BW) };
 	using hindex_t = MultiIndex<Box>;

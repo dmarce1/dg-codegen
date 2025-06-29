@@ -406,7 +406,7 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 			}
 			code += ";\n";
 		} else {
-			code += "T(0);\n";
+			code += "T{0.0};\n";
 		}
 		std::cerr << "\n";
 		std::string const str = "+ -";

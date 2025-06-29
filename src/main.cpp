@@ -12,40 +12,40 @@
 void testRadiation();
 
 int hpx_main(int argc, char *argv[]) {
+	printf("Starting\n");
 	enableFPE();
-//	testRadiation();
-//	return hpx::local::finalize();
-	printf("Reading options...\n");
 	processOptions(argc, argv);
+	printf("Prologue complete\n");
 	constexpr int P = 3;
 	constexpr int D = 3;
-	constexpr int N = 128;
+	constexpr int N = 64;
 	using T = double;
 	using RK = typename RungeKutta<T, P>::type;
 	HyperGrid<T, D, N, P, RK, EulerState> grid;
 	grid.initialize(initSodShockTube<T, D>);
-	grid.enforceBoundaryConditions();
-	grid.applyLimiter();
-	T t = T(0);
-	T tmax = T(.15);
-	T dt;
-	RK const rk;
-	int iter = 0;
-	while (t < tmax) {
-		grid.output("X", iter, t);
-		std::cout << "i = " << std::to_string(iter);
-		std::cout << "  t = " << std::to_string(t);
-		dt = grid.beginStep();
-		std::cout << "  dt = " << dt << std::endl;
-		for (int s = 0; s < rk.stageCount(); s++) {
-			grid.subStep(dt, s);
-			grid.enforceBoundaryConditions();
-		}
-		grid.endStep();
-		grid.enforceBoundaryConditions();
-		iter++;
-		t += dt;
-	}
+//	grid.enforceBoundaryConditions();
+//	grid.applyLimiter();
+//	T t = T(0);
+//	T tmax = T(.15);
+//	T dt;
+//	RK const rk;
+//	int iter = 0;
+//	while (t < tmax) {
+//		grid.output("X", iter, t);
+//		std::cout << "i = " << std::to_string(iter);
+//		std::cout << "  t = " << std::to_string(t);
+//		dt = grid.beginStep();
+//		std::cout << "  dt = " << dt << std::endl;
+//		for (int s = 0; s < rk.stageCount(); s++) {
+//			grid.subStep(dt, s);
+//			grid.enforceBoundaryConditions();
+//		}
+//		grid.endStep();
+//		grid.enforceBoundaryConditions();
+//		iter++;
+//		t += dt;
+//	}
+	printf("Stopping\n");
 	return hpx::local::finalize();
 }
 

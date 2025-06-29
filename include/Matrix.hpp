@@ -793,8 +793,8 @@ constexpr SquareMatrix<T, N> matrixCofactor(SquareMatrix<T, N> const &A) {
 template<typename T, int N>
 constexpr T matrixDeterminant(SquareMatrix<T, N> const &A) {
 	if constexpr (N > 1) {
-		T sum = T(0);
-		for (int c = 0; c < N; c++) {
+		T sum = A(0, 0) * matrixCofactor(A, 0, 0);
+		for (int c = 1; c < N; c++) {
 			sum += A(0, c) * matrixCofactor(A, 0, c);
 		}
 		return sum;

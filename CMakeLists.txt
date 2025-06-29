@@ -60,7 +60,7 @@ target_include_directories(codegen PRIVATE
 )
 
 target_link_libraries(codegen PUBLIC
-   stdc++_libbacktrace
+     stdc++_libbacktrace
 )
 
 target_compile_options(codegen PUBLIC
@@ -105,10 +105,8 @@ add_hpx_executable(
    astrotiger
    DEPENDENCIES
       HDF5::HDF5
-      siloh5
-      asan
       stdc++_libbacktrace
-   SOURCES
+    SOURCES
       ${astrotiger_src}
       ${GENERATED_SOURCES}
    HEADERS
