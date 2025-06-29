@@ -13,8 +13,8 @@ void testRadiation();
 
 int hpx_main(int argc, char *argv[]) {
 	enableFPE();
-	testRadiation();
-	return hpx::local::finalize();
+//	testRadiation();
+//	return hpx::local::finalize();
 	printf("Reading options...\n");
 	processOptions(argc, argv);
 	constexpr int P = 3;

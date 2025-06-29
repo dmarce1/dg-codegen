@@ -102,6 +102,9 @@ public:
 			for (int dimension = 0; dimension < dimensionCount; dimension++) {
 				thisPosition[dimension] += quadraturePoint[dimension] * halfCellWidth;
 			}
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				nodalValues[fieldIndex][nodeIndex].resize(exteriorVolume);
+			}
 			for (int i = 0; i < exteriorVolume; i++) {
 				std::array<Type, dimensionCount> x;
 				for (int dimension = 0; dimension < dimensionCount; dimension++) {
@@ -114,12 +117,14 @@ public:
 			}
 		}
 		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-			currentState[fieldIndex] = vMassInverse<ValArray<Type>>(vAnalyze<ValArray<Type>>(nodalValues[fieldIndex]));
+			auto const tmp = vAnalyze<ValArray<Type>>(nodalValues[fieldIndex]);
+			currentState[fieldIndex] = vMassInverse<ValArray<Type>>(tmp);
 		}
 	}
 	void output(const char *filenameBase, int timeStepNumber, Type const &time) {
 		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
-		writeHdf5<Type, dimensionCount, cellsAcrossInterior, modeCount, ghostWidth>(filename, cellWidth, currentState, State<Type, dimensionCount>::getFieldNames());
+		writeHdf5<Type, dimensionCount, cellsAcrossInterior, modeCount, ghostWidth>(filename, cellWidth, currentState,
+				State<Type, dimensionCount>::getFieldNames());
 		writeList("X.visit", "!NBLOCKS 1\n", filename + ".xmf");
 	}
 	void enforceBoundaryConditions() {

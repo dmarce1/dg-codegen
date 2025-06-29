@@ -106,6 +106,7 @@ add_hpx_executable(
    DEPENDENCIES
       HDF5::HDF5
       siloh5
+      asan
       stdc++_libbacktrace
    SOURCES
       ${astrotiger_src}
