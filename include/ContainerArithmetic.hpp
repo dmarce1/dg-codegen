@@ -148,7 +148,7 @@ inline constexpr T operator/(T const &A, typename T::value_type const &b) {
 
 template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
 inline constexpr auto dot(T const& a, T const& b) {
-	auto sum = a[0] * b[0];
+	typename T::value_type sum = a[0] * b[0];
 	for (int d = 1; d < (int) a.size(); d++) {
 		sum += a[d] * b[d];
 	}

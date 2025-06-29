@@ -1,6 +1,8 @@
 #ifndef INCLUDE_VAL_ARRAY_HPP_
 #define INCLUDE_VAL_ARRAY_HPP_
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <initializer_list>
 #include <functional>
@@ -30,7 +32,7 @@
 		return UNIQUE_NAME(Expression)(this->getHandle());                                           \
 	}
 
-#define VAL_ARRAY_BINARY_OPERATOR(op)                                                              \
+#define VAL_ARRAY_BINARY_OPERATOR1(op)                                                              \
 	auto operator op(auto const& other) const {                                                     \
 		using HandleA = decltype(this->getHandle());                                                 \
 		using HandleB = decltype(other.getHandle());                                                 \
@@ -45,96 +47,131 @@
 			HandleA handleA_;                                                                         \
 			HandleB handleB_;                                                                         \
 		};                                                                                           \
-		return UNIQUE_NAME(Expression)(this->getHandle(), other.getHandle());                       \
-	}
+		return UNIQUE_NAME(Expression)(this->getHandle(), other.getHandle());                        \
+	}                                                                                               \
+	auto operator op(Type const& value) const {                                                     \
+		using Handle = decltype(this->getHandle());                                                  \
+		struct UNIQUE_NAME(Expression) : public Expression<Type, Integer, UNIQUE_NAME(Expression)> { \
+		UNIQUE_NAME(Expression)(Handle const &handle, Type const &value) :                           \
+			handle_(handle), value_(value) {                                                          \
+		}                                                                                            \
+		Type operator[](Integer index) const {                                                       \
+			return handle_[index] op value_;                                                          \
+		}                                                                                            \
+		private:                                                                                     \
+			Handle handle_;                                                                           \
+			Type value_;                                                                              \
+		};                                                                                           \
+		return UNIQUE_NAME(Expression)(this->getHandle(), value);                                    \
+	}                                                                                               \
+
+#define VAL_ARRAY_BINARY_OPERATOR2(op)                                                             \
+	friend auto operator op(Type const& value, auto const& other) {                                 \
+		using Handle = decltype(other.getHandle());                                                  \
+		struct UNIQUE_NAME(Expression) : public Expression<Type, Integer, UNIQUE_NAME(Expression)> { \
+		UNIQUE_NAME(Expression)(Type const& value, Handle const &handle) :                           \
+			handle_(handle), value_(value) {                                                          \
+		}                                                                                            \
+		Type operator[](Integer index) const {                                                       \
+			return value_ op handle_[index];                                                          \
+		}                                                                                            \
+		private:                                                                                     \
+			Handle handle_;                                                                           \
+			Type value_;                                                                              \
+		};                                                                                           \
+		return UNIQUE_NAME(Expression)(value, other.getHandle());                                    \
+	}                                                                                               \
 
 #define VAL_ARRAY_COMPARE_OPERATOR(op)                                                             \
 	auto operator op(auto const& other) const {                                                     \
 		using HandleA = decltype(this->getHandle());                                                 \
 		using HandleB = decltype(other.getHandle());                                                 \
 		struct UNIQUE_NAME(Expression) : public Expression<bool, Integer, UNIQUE_NAME(Expression)> { \
-		UNIQUE_NAME(Expression)(HandleA const &handleA, HandleB const &handleB) :                    \
-			handleA_(handleA), handleB_(handleB) {                                                    \
-		}                                                                                            \
-		bool operator[](Integer index) const {                                                       \
-			return handleA_[index] op handleB_[index];                                                \
-		}                                                                                            \
+			UNIQUE_NAME(Expression)(HandleA const &handleA, HandleB const &handleB) :                 \
+				handleA_(handleA), handleB_(handleB) {                                                 \
+			}                                                                                         \
+			bool operator[](Integer index) {                                                          \
+				return handleA_[index] op handleB_[index];                                             \
+			}                                                                                         \
 		private:                                                                                     \
 			HandleA handleA_;                                                                         \
 			HandleB handleB_;                                                                         \
 		};                                                                                           \
-		return UNIQUE_NAME(Expression)(this->getHandle(), other->getHandle());                       \
+		return UNIQUE_NAME(Expression)(this->getHandle(), other.getHandle());                        \
 	}
 
-#define VAL_ARRAY_UNARY_FUNCTION(class_, name)                                       \
-	friend auto name(class_ const& object) {                                          \
-		using Handle = decltype(object.getHandle());                                   \
-		struct Expression##name : public Expression<Type, Integer, Expression##name> { \
-		Expression##name(Handle const &handle) :                                       \
-			handle_(handle) {                                                           \
-		}                                                                              \
-		Type operator[](Integer index) const {                                         \
-			using namespace std;                                                        \
-			return name(handle_[index]);                                                \
-		}                                                                              \
-		private:                                                                       \
-			Handle handle_;                                                             \
-		};                                                                             \
-		return Expression##name(object.getHandle());                                   \
+#define VAL_ARRAY_UNARY_FUNCTION(class_, name)                                        \
+	friend auto name(class_ const& object) {                                           \
+		using Handle = decltype(object.getHandle());                                    \
+		struct Expression_ : public Expression<Type, Integer, Expression_> {\
+			Expression_(Handle const &handle) :                                    \
+				handle_(handle) {                                                         \
+			}                                                                            \
+			Type operator[](Integer index) const {                                       \
+				return name(handle_[index]);                                              \
+			} 	                                                                          \
+		private:                                                                        \
+			Handle handle_;                                                              \
+		};                                                                              \
+		return Expression_(object.getHandle());                                   \
 	}
 
-#define VAL_ARRAY_BINARY_FUNCTION(class_, name)                                        \
+#define VAL_ARRAY_BINARY_FUNCTION(class_, name, func)                                        \
 	friend auto name(class_ const& objectA, auto const& objectB) {                      \
 		using HandleA = decltype(objectA.getHandle());                                   \
 		using HandleB = decltype(objectB.getHandle());                                   \
-		struct Expression##name : public Expression<Type, Integer, Expression##name> {   \
-		Expression##name(HandleA const &handleA, HandleB const &handleB) :               \
-			handleA_(handleA), handleB_(handleB) {                                        \
-		}                                                                                \
-		Type operator[](Integer index) const {                                           \
-			using namespace std;                                                          \
-			return name(handleA_[index], handleB_[index]);                                \
-		}                                                                                \
+		struct Expression_ : public Expression<Type, Integer, Expression_> {   \
+			Expression_(HandleA const &handleA, HandleB const &handleB) :            \
+				handleA_(handleA), handleB_(handleB) {                                     \
+			}                                                                             \
+			Type operator[](Integer index) const {                                        \
+				return func(handleA_[index], handleB_[index]);                             \
+			}                                                                             \
 		private:                                                                         \
 			HandleA handleA_;                                                             \
 			HandleB handleB_;                                                             \
 		};                                                                               \
-		return Expression##name(objectA.getHandle(), objectB.getHandle());               \
+		return Expression_(objectA.getHandle(), objectB.getHandle());               \
 	}                                                                                   \
 	friend auto name(class_ const& object, Type const& value) {                         \
 		using Handle = decltype(object.getHandle());                                     \
-		struct Expression##name : public Expression<Type, Integer, Expression##name> {   \
-		Expression##name(Handle const &handle,  Type const &value) :                     \
+		struct Expression_ : public Expression<Type, Integer, Expression_> {   \
+		Expression_(Handle const &handle,  Type const &value) :                     \
 			handle_(handle), value_(value) {                                              \
 		}                                                                                \
 		Type operator[](Integer index) const {                                           \
-			using namespace std;                                                          \
-			return name(handle_[index], value_);                                          \
+			return func(handle_[index], value_);                                          \
 		}                                                                                \
 		private:                                                                         \
 			Handle handle_;                                                               \
 			Type value_;                                                                  \
 		};                                                                               \
-		return Expression##name(object.getHandle(), value);                              \
+		return Expression_(object.getHandle(), value);                                   \
 	}                                                                                   \
 	friend auto name(Type const& value, class_ const& object) {                         \
 		using Handle = decltype(object.getHandle());                                     \
-		struct Expression##name : public Expression<Type, Integer, Expression##name> {   \
-		Expression##name(Handle const &handle,  Type const &value) :                     \
+		struct Expression_ : public Expression<Type, Integer, Expression_> {             \
+		Expression_(Handle const &handle, Type const &value) :                           \
 			handle_(handle), value_(value) {                                              \
 		}                                                                                \
 		Type operator[](Integer index) const {                                           \
-			using namespace std;                                                          \
-			return name(value_, handle_[index]);                                          \
+			return func(value_, handle_[index]);                                          \
 		}                                                                                \
 		private:                                                                         \
 			Handle handle_;                                                               \
 			Type value_;                                                                  \
 		};                                                                               \
-		return Expression##name(object.getHandle(), value);                              \
+		return Expression_(object.getHandle(), value);                              \
 	}                                                                                   \
 
+
 #define VAL_ARRAY_COMPOUND_ASSIGNMENT_OPERATOR(OP)                                   \
+	ValArray& operator OP##= (ValArray<Type, Integer> const &array) {                 \
+		for (Integer i = 0; i < Integer(data_.size()); i++) {                          \
+			data_[i] OP##= array[i];                                                    \
+		}                                                                              \
+		return *this;                                                                  \
+	}                                                                                 \
 	template<typename Derived>                                                        \
 	ValArray& operator OP##= (Expression<Type, Integer, Derived> const &expression) { \
 		for (Integer i = 0; i < Integer(data_.size()); i++) {                          \
@@ -174,11 +211,11 @@
 		Integer i = start;                                                                               \
 		(*pointer_)[start] OP##= other[0];                                                               \
 		for (Integer j = 1; j < totalSize; j++) {                                                        \
-			Integer dimension = sizes.size();                                                             \
-			while (++indices[--dimension] == sizes[dimension]) {                                          \
-				i += strides[dimension];                                                                   \
+			Integer dimension = sizes.size() - 1;                                                         \
+			while (++indices[dimension] == sizes[dimension]) {                                            \
+				dimension--;                                                                               \
 				indices[dimension] = 0;                                                                    \
-				i -= sizes[dimension] * strides[dimension];                                                \
+				i -= (sizes[dimension] - 1) * strides[dimension];                                          \
 			}                                                                                             \
 			i += strides[dimension];                                                                      \
 			(*pointer_)[i] OP##= other[j];                                                                \
@@ -195,11 +232,11 @@
 		Integer i = start;                                                                               \
 		(*pointer_)[start] OP##= value;                                                                  \
 		for (Integer j = 1; j < totalSize; j++) {                                                        \
-			Integer dimension = sizes.size();                                                             \
-			while (++indices[--dimension] == sizes[dimension]) {                                          \
-				i += strides[dimension];                                                                   \
+			Integer dimension = sizes.size() - 1;                                                         \
+			while (++indices[dimension] == sizes[dimension]) {                                            \
+				dimension--;                                                                               \
 				indices[dimension] = 0;                                                                    \
-				i -= sizes[dimension] * strides[dimension];                                                \
+				i -= (sizes[dimension] - 1) * strides[dimension];                                          \
 			}                                                                                             \
 			i += strides[dimension];                                                                      \
 			(*pointer_)[i] OP##= value;                                                                   \
@@ -439,12 +476,19 @@ class MaskArray {
 			pointer_(pointer), mask_(mask) {
 	}
 public:
+	Integer sum() const {
+		Integer result = 0;
+		for (Integer j = 0; j < mask_.size(); j++) {
+			result = mask_[j] ? (result + 1) : result;
+		}
+		return result;
+	}
 	MaskArray(MaskArray const &other) :
 			pointer_(other.pointer_), mask_(other.mask_) {
 	}
 	MaskArray& operator=(auto const &other) {
 		Integer i = 0;
-		for (Integer j = 0; j < mask_->size(); j++) {
+		for (Integer j = 0; j < mask_.size(); j++) {
 			if (mask_[j]) {
 				(*pointer_)[i++] = other[j];
 			}
@@ -603,7 +647,7 @@ struct ValArray {
 		Integer k = 0;
 		auto const &other = *(maskArray.pointer_);
 		data_.resize(maskArray.sum());
-		for (Integer i = 0; i < maskArray.mask_->size(); i++) {
+		for (Integer i = 0; i < maskArray.mask_.size(); i++) {
 			if (maskArray.mask_[i]) {
 				data_[i] = other[k++];
 			}
@@ -612,7 +656,7 @@ struct ValArray {
 	}
 	ValArray& operator=(IndirectArray<Type, Integer> const &indirectArray) {
 		auto const &other = *(indirectArray.pointer_);
-		auto const& indices = indirectArray.indices_;
+		auto const &indices = indirectArray.indices_;
 		data_.resize(indices.size());
 		for (Integer i = 0; i < indices.size(); i++) {
 			data_[indices[i]] = other[i];
@@ -627,10 +671,10 @@ struct ValArray {
 		}
 		return *this;
 	}
-	Type& operator[](Integer index) {
+	std::vector<Type>::reference operator[](Integer index) {
 		return data_[index];
 	}
-	const Type& operator[](Integer index) const {
+	std::vector<Type>::const_reference operator[](Integer index) const {
 		return data_[index];
 	}
 	SliceArray<Type, Integer> operator[](Slice<Integer> slice) {
@@ -668,14 +712,14 @@ struct ValArray {
 	}
 	Type sum() const {
 		Type result = data_[0];
-		for (Integer i = 1; i < data_.size(); i++) {
+		for (Integer i = 1; i < Integer(data_.size()); i++) {
 			result += data_[i];
 		}
 		return result;
 	}
 	Type min() const {
 		Type result = data_[0];
-		for (Integer i = 1; i < data_.size(); i++) {
+		for (Integer i = 1; i < Integer(data_.size()); i++) {
 			Type const &thisElement = data_[i];
 			if (thisElement < result) {
 				result = thisElement;
@@ -685,7 +729,7 @@ struct ValArray {
 	}
 	Type max() const {
 		Type result = data_[0];
-		for (Integer i = 1; i < data_.size(); i++) {
+		for (Integer i = 1; i < Integer(data_.size()); i++) {
 			Type const &thisElement = data_[i];
 			if (result < thisElement) {
 				result = thisElement;
@@ -731,18 +775,30 @@ struct ValArray {
 	VAL_ARRAY_UNARY_OPERATOR(-)
 	VAL_ARRAY_UNARY_OPERATOR(!)
 	VAL_ARRAY_UNARY_OPERATOR(~)
-	VAL_ARRAY_BINARY_OPERATOR(+)
-	VAL_ARRAY_BINARY_OPERATOR(-)
-	VAL_ARRAY_BINARY_OPERATOR(*)
-	VAL_ARRAY_BINARY_OPERATOR(/)
-	VAL_ARRAY_BINARY_OPERATOR(%)
-	VAL_ARRAY_BINARY_OPERATOR(&&)
-	VAL_ARRAY_BINARY_OPERATOR(||)
-	VAL_ARRAY_BINARY_OPERATOR(&)
-	VAL_ARRAY_BINARY_OPERATOR(|)
-	VAL_ARRAY_BINARY_OPERATOR(^)
-	VAL_ARRAY_BINARY_OPERATOR(>>)
-	VAL_ARRAY_BINARY_OPERATOR(<<)
+	VAL_ARRAY_BINARY_OPERATOR1(+)
+	VAL_ARRAY_BINARY_OPERATOR1(-)
+	VAL_ARRAY_BINARY_OPERATOR1(*)
+	VAL_ARRAY_BINARY_OPERATOR1(/)
+	VAL_ARRAY_BINARY_OPERATOR1(%)
+	VAL_ARRAY_BINARY_OPERATOR1(&&)
+	VAL_ARRAY_BINARY_OPERATOR1(||)
+	VAL_ARRAY_BINARY_OPERATOR1(&)
+	VAL_ARRAY_BINARY_OPERATOR1(|)
+	VAL_ARRAY_BINARY_OPERATOR1(^)
+	VAL_ARRAY_BINARY_OPERATOR1(>>)
+	VAL_ARRAY_BINARY_OPERATOR1(<<)
+	VAL_ARRAY_BINARY_OPERATOR2(+)
+	VAL_ARRAY_BINARY_OPERATOR2(-)
+	VAL_ARRAY_BINARY_OPERATOR2(*)
+	VAL_ARRAY_BINARY_OPERATOR2(/)
+	VAL_ARRAY_BINARY_OPERATOR2(%)
+	VAL_ARRAY_BINARY_OPERATOR2(&&)
+	VAL_ARRAY_BINARY_OPERATOR2(||)
+	VAL_ARRAY_BINARY_OPERATOR2(&)
+	VAL_ARRAY_BINARY_OPERATOR2(|)
+	VAL_ARRAY_BINARY_OPERATOR2(^)
+	VAL_ARRAY_BINARY_OPERATOR2(>>)
+	VAL_ARRAY_BINARY_OPERATOR2(<<)
 	VAL_ARRAY_COMPARE_OPERATOR(<)
 	VAL_ARRAY_COMPARE_OPERATOR(>)
 	VAL_ARRAY_COMPARE_OPERATOR(<=)
@@ -763,10 +819,11 @@ struct ValArray {
 	VAL_ARRAY_UNARY_FUNCTION(ValArray, sinh)
 	VAL_ARRAY_UNARY_FUNCTION(ValArray, cosh)
 	VAL_ARRAY_UNARY_FUNCTION(ValArray, tanh)
-	VAL_ARRAY_BINARY_FUNCTION(ValArray, pow)
-	VAL_ARRAY_BINARY_FUNCTION(ValArray, min)
-	VAL_ARRAY_BINARY_FUNCTION(ValArray, max)
-	VAL_ARRAY_BINARY_FUNCTION(ValArray, copysign)
+	VAL_ARRAY_BINARY_FUNCTION(ValArray, atan2, atan2)
+	VAL_ARRAY_BINARY_FUNCTION(ValArray, pow, pow)
+	VAL_ARRAY_BINARY_FUNCTION(ValArray, copysign, copysign)
+	VAL_ARRAY_BINARY_FUNCTION(ValArray, min, std::min)
+	VAL_ARRAY_BINARY_FUNCTION(ValArray, max, std::max)
 	VAL_ARRAY_COMPOUND_ASSIGNMENT_OPERATOR(+)
 	VAL_ARRAY_COMPOUND_ASSIGNMENT_OPERATOR(-)
 	VAL_ARRAY_COMPOUND_ASSIGNMENT_OPERATOR(*)
@@ -793,8 +850,11 @@ struct ValArray {
 	auto end() const {
 		return data_.end();
 	}
-	auto const& getHandle() const {
-		return data_;
+	std::vector<Type>::iterator getHandle() {
+		return data_.begin();
+	}
+	std::vector<Type>::const_iterator getHandle() const {
+		return data_.begin();
 	}
 private:
 	template<typename Derived>
@@ -830,7 +890,6 @@ auto end(ValArray<Type> const &valarray) {
 	return valarray.end();
 }
 
-
 template<typename Type, typename Integer, typename Derived>
 struct Handle {
 	Handle(Expression<Type, Integer, Derived> const &reference) :
@@ -849,45 +908,48 @@ struct Expression {
 	VAL_ARRAY_UNARY_OPERATOR(-)
 	VAL_ARRAY_UNARY_OPERATOR(!)
 	VAL_ARRAY_UNARY_OPERATOR(~)
-	VAL_ARRAY_BINARY_OPERATOR(+)
-	VAL_ARRAY_BINARY_OPERATOR(-)
-	VAL_ARRAY_BINARY_OPERATOR(*)
-	VAL_ARRAY_BINARY_OPERATOR(/)
-	VAL_ARRAY_BINARY_OPERATOR(%)
-	VAL_ARRAY_BINARY_OPERATOR(&&)
-	VAL_ARRAY_BINARY_OPERATOR(||)
-	VAL_ARRAY_BINARY_OPERATOR(&)
-	VAL_ARRAY_BINARY_OPERATOR(|)
-	VAL_ARRAY_BINARY_OPERATOR(^)
-	VAL_ARRAY_BINARY_OPERATOR(>>)
-	VAL_ARRAY_BINARY_OPERATOR(<<)
+	VAL_ARRAY_BINARY_OPERATOR1(+)
+	VAL_ARRAY_BINARY_OPERATOR1(-)
+	VAL_ARRAY_BINARY_OPERATOR1(*)
+	VAL_ARRAY_BINARY_OPERATOR1(/)
+	VAL_ARRAY_BINARY_OPERATOR1(%)
+	VAL_ARRAY_BINARY_OPERATOR1(&&)
+	VAL_ARRAY_BINARY_OPERATOR1(||)
+	VAL_ARRAY_BINARY_OPERATOR1(&)
+	VAL_ARRAY_BINARY_OPERATOR1(|)
+	VAL_ARRAY_BINARY_OPERATOR1(^)
+	VAL_ARRAY_BINARY_OPERATOR1(>>)
+	VAL_ARRAY_BINARY_OPERATOR1(<<)
 	VAL_ARRAY_COMPARE_OPERATOR(<)
 	VAL_ARRAY_COMPARE_OPERATOR(>)
 	VAL_ARRAY_COMPARE_OPERATOR(<=)
 	VAL_ARRAY_COMPARE_OPERATOR(>=)
 	VAL_ARRAY_COMPARE_OPERATOR(==)
 	VAL_ARRAY_COMPARE_OPERATOR(!=)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, abs)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, exp)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, log)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, log10)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, sqrt)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, asin)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, acos)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, atan)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, sin)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, cos)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, tan)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, sinh)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, cosh)
-	VAL_ARRAY_UNARY_FUNCTION(Expression, tanh)
-	VAL_ARRAY_BINARY_FUNCTION(Expression, pow)
-	VAL_ARRAY_BINARY_FUNCTION(Expression, atan2)
-	VAL_ARRAY_BINARY_FUNCTION(Expression, min)
-	VAL_ARRAY_BINARY_FUNCTION(Expression, max)
-	VAL_ARRAY_BINARY_FUNCTION(Expression, copysign)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, abs)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, exp)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, log)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, log10)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, sqrt)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, asin)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, acos)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, atan)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, sin)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, cos)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, tan)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, sinh)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, cosh)
+	VAL_ARRAY_UNARY_FUNCTION(Derived, tanh)
+	VAL_ARRAY_BINARY_FUNCTION(Derived, pow, pow)
+	VAL_ARRAY_BINARY_FUNCTION(Derived, copysign, copysign)
+	VAL_ARRAY_BINARY_FUNCTION(Derived, atan2, atan2)
+	VAL_ARRAY_BINARY_FUNCTION(Derived, min, std::min)
+	VAL_ARRAY_BINARY_FUNCTION(Derived, max, std::max)
 	Type operator[](Integer index) const {
-		return static_cast<Derived const*>(this)->operator[](index);
+		return this->operator[](index);
+	}
+	Type operator[](Integer index) {
+		return this->operator[](index);
 	}
 	auto getHandle() const {
 		return Handle<Type, Integer, Derived> { *this };

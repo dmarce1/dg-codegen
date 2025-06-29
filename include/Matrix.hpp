@@ -159,11 +159,9 @@ struct Matrix {
 	}
 
 	constexpr Matrix operator/(Type const &a) const {
-		constexpr Type one = Type(1);
 		Matrix B;
-		Type const aInv = one / a;
 		for (std::size_t k = 0; k < size(); k++) {
-			B.values[k] = aInv * values[k];
+			B.values[k] = values[k] / a;
 		}
 		return B;
 	}
@@ -1095,8 +1093,8 @@ template<typename T, auto N, int M, typename Container>
 inline constexpr auto operator*(Matrix<T, N, M> const &A, Container const &B) {
 	Container C;
 	for (int n = 0; n < N; n++) {
-		C[n] = T(0);
-		for (int m = 0; m < M; m++) {
+		C[n] = A(n, 0) * B[0];
+		for (int m = 1; m < M; m++) {
 			C[n] += A(n, m) * B[m];
 		}
 	}

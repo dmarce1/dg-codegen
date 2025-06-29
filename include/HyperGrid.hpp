@@ -10,55 +10,48 @@
 
 #include <functional>
 #include <numeric>
+#include <span>
 
 template<typename Type>
 inline constexpr Type minmod(Type const &a, Type const &b) {
-	using namespace Math;
 	Type const sgn = copysign(Type(0.5), a) + copysign(Type(0.5), b);
 	Type const mag = min(abs(a), abs(b));
 	return sgn * mag;
 }
 
-template<typename Type, int modeCount, TransformDirection transformDirection>
-constexpr auto fourierLegendreTransform() {
-	if constexpr (transformDirection == TransformDirection::forward) {
-		return matrixInverse(fourierLegendreTransform<Type, modeCount, TransformDirection::backward>());
-	} else {
-		using namespace Math;
-		SquareMatrix<Type, modeCount> transform;
-		for (int basisIndex = 0; basisIndex < modeCount; basisIndex++) {
-			for (int quadratureIndex = 0; quadratureIndex < modeCount; quadratureIndex++) {
-				auto const [quadraturePosition, quadratureWeight] = gaussLegendreQuadraturePoint<Type, modeCount>(quadratureIndex);
-				transform(quadratureIndex, basisIndex) = legendrePolynomial(basisIndex, quadraturePosition);
-			}
-		}
-		return transform;
-	}
-}
-
-template<typename State, int cellsAcrossInterior, int modeCount, typename RungeKutta>
+template<typename Type, int dimensionCount, int cellsAcrossInterior, int modeCount, typename RungeKutta, template<typename, int> typename State>
 class HyperGrid {
-	static constexpr int dimensionCount = State::dimCount();
 	static constexpr int ghostWidth = 2;
-	static constexpr int fieldCount = State::fieldCount();
+	static constexpr int fieldCount = State<Type, dimensionCount>::fieldCount();
 	static constexpr int rungeKuttaStageCount = RungeKutta::stageCount();
 	static constexpr int modeVolume = BasisIndexType<modeCount, dimensionCount>::count();
 	static constexpr int nodeVolume = ipow(modeCount, dimensionCount);
+	static constexpr int modeSurface = BasisIndexType<modeCount, dimensionCount - 1>::count();
+	static constexpr int nodeSurface = ipow(modeCount, dimensionCount - 1);
 	static constexpr int cellsAcrossExterior = cellsAcrossInterior + 2 * ghostWidth;
 	static constexpr int exteriorVolume = ipow(cellsAcrossExterior, dimensionCount);
 	static constexpr RungeKutta butcherTable { };
 	static constexpr Range<int, dimensionCount> exteriorBox { repeat<dimensionCount>(-ghostWidth), repeat<dimensionCount>(cellsAcrossInterior + ghostWidth) };
 	static constexpr Range<int, dimensionCount> interiorBox { repeat<dimensionCount>(0), repeat<dimensionCount>(cellsAcrossInterior) };
-	static constexpr auto inverseTransformMatrix = fourierLegendreTransform<typename State::value_type, modeCount, TransformDirection::backward>();
-	static constexpr auto transformMatrix = fourierLegendreTransform<typename State::value_type, modeCount, TransformDirection::forward>();
-
-	using Type = State::value_type;
-	using BasisIndex = BasisIndexType<modeCount, dimensionCount>;
-	using InteriorIndex = MultiIndex<exteriorBox, interiorBox>;
-
-	std::array<std::array<ValArray<Type>, modeVolume>, rungeKuttaStageCount> stageDerivatives_;
-	std::array<ValArray<Type>, modeVolume> currentState;
-	std::array<ValArray<Type>, modeVolume> previousState;
+	template<typename V>
+	static constexpr auto vAnalyze = dgAnalyze<V, dimensionCount, modeCount>;
+	template<typename V>
+	static constexpr auto vMassInverse = dgMassInverse<V, dimensionCount, modeCount>;
+	template<typename V>
+	static constexpr auto vSynthesize = dgSynthesize<V, dimensionCount, modeCount>;
+	template<typename V>
+	static constexpr auto vStiffness = dgStiffness<V, dimensionCount, modeCount>;
+	template<typename V>
+	static constexpr auto sAnalyze = dgAnalyze<V, dimensionCount - 1, modeCount>;
+	template<typename V>
+	static constexpr auto sSynthesize = dgSynthesize<V, dimensionCount - 1, modeCount>;
+	template<typename V>
+	static constexpr auto sTrace = dgTrace<V, dimensionCount, modeCount>;
+	template<typename V>
+	static constexpr auto sTraceInverse = dgTraceInverse<ValArray<Type>, dimensionCount, modeCount>;
+	std::array<State<std::array<ValArray<Type>, modeVolume>, dimensionCount>, rungeKuttaStageCount> stageDerivatives_;
+	State<std::array<ValArray<Type>, modeVolume>, dimensionCount> currentState;
+	State<std::array<ValArray<Type>, modeVolume>, dimensionCount> previousState;
 	std::array<ValArray<Type>, dimensionCount> position;
 	Type cellWidth;
 	ValArray<int> gridSizes;
@@ -75,8 +68,10 @@ class HyperGrid {
 public:
 	HyperGrid(Type const &xNint = Type(1)) {
 		cellWidth = xNint / Type(cellsAcrossInterior);
-		for (int mode = 0; mode < modeVolume; mode++) {
-			currentState[mode].resize(fieldCount * exteriorVolume);
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+				currentState[fieldIndex][modeIndex].resize(exteriorVolume);
+			}
 		}
 		gridSizes.resize(dimensionCount, cellsAcrossExterior);
 		gridStrides.resize(dimensionCount);
@@ -95,10 +90,12 @@ public:
 			}
 		}
 	}
-	void initialize(std::function<State(std::array<Type, dimensionCount> const&)> const &initialState) {
+	void initialize(std::function<State<Type, dimensionCount>(std::array<Type, dimensionCount> const&)> const &initialState) {
 		Type const halfCellWidth = Type(0.5) * cellWidth;
-		std::array<ValArray<Type>, nodeVolume> nodalValues;
-		nodalValues.fill(ValArray<Type> { exteriorVolume * fieldCount });
+		State<std::array<ValArray<Type>, nodeVolume>, dimensionCount> nodalValues;
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			nodalValues[fieldIndex].fill(ValArray<Type> { exteriorVolume });
+		}
 		for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
 			auto quadraturePoint = getQuadraturePoint<Type, dimensionCount, modeCount>(nodeIndex);
 			auto thisPosition = position;
@@ -111,12 +108,14 @@ public:
 					x[dimension] = thisPosition[dimension][i];
 				}
 				auto const state = initialState(x);
-				std::copy_n(state.begin(), fieldCount, nodalValues[nodeIndex].begin() + i * fieldCount);
+				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+					nodalValues[fieldIndex][nodeIndex][i] = state[fieldIndex];
+				}
 			}
 		}
-		currentState = dgMassInverse<ValArray<Type>, dimensionCount, modeCount>(dgAnalyze<ValArray<Type>, dimensionCount, modeCount>(nodalValues));
-//		GSlice const toSlice { 0, { fieldCount, exteriorVolume }, { exteriorVolume, 1 } };
-//		GSlice const fromSlice { 0, { fieldCount, exteriorVolume }, { 1, fieldCount } };
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			currentState[fieldIndex] = vMassInverse<ValArray<Type>>(vAnalyze<ValArray<Type>>(nodalValues[fieldIndex]));
+		}
 	}
 	void output(const char *filenameBase, int timeStepNumber, Type const &time) {
 //		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
@@ -187,22 +186,22 @@ public:
 		//		return timeStepSize;
 	}
 	void subStep(Type const &timeStepSize, int stageIndex) {
-//		currentState = previousState;
-//		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//			for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-//				for (int thisStage = 0; thisStage < stageIndex; thisStage++) {
+		currentState = previousState;
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+				for (int thisStage = 0; thisStage < stageIndex; thisStage++) {
 //					for (auto cellMultiIndex = InteriorIndex::begin(); cellMultiIndex != InteriorIndex::end(); cellMultiIndex++) {
 //						int const cellFlatIndex = cellMultiIndex;
 //						currentState[fieldIndex][modeIndex][cellFlatIndex] +=
 //								butcherTable.a(stageIndex, thisStage) * stageDerivatives_[thisStage][fieldIndex][modeIndex][cellFlatIndex];
 //					}
-//				}
-//				stageDerivatives_[stageIndex][fieldIndex][modeIndex].fill(Type(0));
-//			}
-//		}
-//		enforceBoundaryConditions();
-//		applyLimiter();
-//		computeDudt(timeStepSize, stageDerivatives_[stageIndex], std::make_integer_sequence<int, dimensionCount> { });
+				}
+				stageDerivatives_[stageIndex][fieldIndex][modeIndex].fill(Type(0));
+			}
+		}
+		enforceBoundaryConditions();
+		applyLimiter();
+		computeTimeDerivative(timeStepSize, stageDerivatives_[stageIndex]);
 	}
 	void endStep() {
 //		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
@@ -222,32 +221,58 @@ public:
 //		previousState = { };
 	}
 	void applyLimiter() {
-		constexpr int lowModeVolume = binco(dimensionCount + modeCount - 2, dimensionCount);
-		std::array<std::array<ValArray<Type>, lowModeVolume>, dimensionCount> differenceState;
-		ValArray<bool> mask { true, fieldCount * exteriorVolume };
-		for (int modeIndex = 0; modeIndex < lowModeVolume; modeIndex++) {
-			for (int dimension = 0; dimension < dimensionCount; dimension++) {
-				differenceState[dimension][modeIndex].resize(fieldCount * exteriorVolume);
-				auto const statePlus = currentState[modeIndex].shift(+fieldCount * gridStrides[dimension]);
-				auto const &stateCentral = currentState[modeIndex];
-				auto const stateMinus = currentState[modeIndex].shift(-fieldCount * gridStrides[dimension]);
-				differenceState[dimension][modeIndex] = minmod(statePlus - stateCentral, stateCentral - stateMinus);
+		constexpr int hiModeVolume = modeVolume - 1;
+		constexpr int loModeVolume = binco(dimensionCount + modeCount - 2, dimensionCount);
+		std::array<std::array<std::array<ValArray<Type>, fieldCount>, loModeVolume>, dimensionCount> differenceState;
+		std::array<std::array<std::array<ValArray<Type>, fieldCount>, hiModeVolume>, dimensionCount> polynomialState;
+		State<ValArray<Type>, dimensionCount> meanState;
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			for (int i = 0; i < exteriorVolume; i++) {
+				meanState[fieldIndex][i] = currentState[fieldIndex][0][i];
+			}
+		}
+		ValArray<bool> mask(true, fieldCount * exteriorVolume);
+		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				for (int modeIndex = 0; modeIndex < loModeVolume; modeIndex++) {
+					differenceState[dimension][modeIndex][fieldIndex].resize(exteriorVolume);
+					auto const statePlus = currentState[fieldIndex][modeIndex].shift(+gridStrides[dimension]);
+					auto const &stateCentral = currentState[fieldIndex][modeIndex];
+					auto const stateMinus = currentState[fieldIndex][modeIndex].shift(-gridStrides[dimension]);
+					differenceState[dimension][modeIndex][fieldIndex] = minmod(ValArray<Type>(statePlus - stateCentral), ValArray<Type>(stateCentral - stateMinus));
+				}
+				for (int modeIndex = 0; modeIndex < hiModeVolume; modeIndex++) {
+					polynomialState[dimension][modeIndex][fieldIndex].resize(exteriorVolume);
+					polynomialState[dimension][modeIndex][fieldIndex] = currentState[fieldIndex][modeIndex + 1];
+				}
+			}
+			auto const rightEigenvectors = meanState.eigenSystem(dimension).second;
+			auto const leftEigenvectors = matrixInverse(rightEigenvectors);
+			for (int modeIndex = 0; modeIndex < loModeVolume; modeIndex++) {
+				differenceState[dimension][modeIndex] = leftEigenvectors * differenceState[dimension][modeIndex];
+			}
+			for (int modeIndex = 0; modeIndex < hiModeVolume; modeIndex++) {
+				polynomialState[dimension][modeIndex] = leftEigenvectors * polynomialState[dimension][modeIndex];
 			}
 		}
 		for (int polynomialDegree = modeCount - 1; polynomialDegree > 0; polynomialDegree--) {
 			int const begin = binco(polynomialDegree + dimensionCount - 1, dimensionCount);
 			int const end = binco(polynomialDegree + dimensionCount, dimensionCount);
-			auto const nextMask = mask;
-			for (int modeIndex = begin; modeIndex < end; modeIndex++) {
-				auto hiModeIndex = flatToTriangular<dimensionCount, modeCount>(modeIndex);
+			auto nextMask = mask;
+			for (int hiModeIndex = begin; hiModeIndex < end; hiModeIndex++) {
+				auto hiModeIndices = flatToTriangular<dimensionCount, modeCount>(hiModeIndex);
 				for (int dimension = 0; dimension < dimensionCount; dimension++) {
-					auto loModeIndex = hiModeIndex;
-					loModeIndex[dimension]--;
-					auto const cLimit = Type(1) / Type(2 * loModeIndex[dimension] + 1);
-					auto const oldState = currentState[hiModeIndex];
-					auto const nextState = minmod(oldState[mask], cLimit * differenceState[dimension][loModeIndex][mask]);
-					currentState[hiModeIndex][mask] = nextState;
-					nextMask = nextMask || (currentState[hiModeIndex] != oldState);
+					auto loModeIndices = hiModeIndices;
+					loModeIndices[dimension]--;
+					for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+						auto const loModeIndex = triangularToFlat<dimensionCount, modeCount>(loModeIndices);
+						auto const cLimit = Type(1) / Type(2 * loModeIndices[dimension] + 1);
+						auto const nextState = minmod(polynomialState[dimension][hiModeIndex - 1][fieldIndex],
+								ValArray<Type>(differenceState[dimension][loModeIndex][fieldIndex] * cLimit));
+						auto const oldState = currentState[fieldIndex][hiModeIndex];
+						currentState[fieldIndex][hiModeIndex][mask] = nextState[mask];
+						nextMask = nextMask || (currentState[fieldIndex][hiModeIndex] != oldState);
+					}
 				}
 			}
 			mask = std::move(nextMask);
@@ -255,101 +280,92 @@ public:
 				break;
 			}
 		}
+		ValArray<Type> theta { Type(1), exteriorVolume };
+		std::array<State<ValArray<Type>, dimensionCount>, nodeSurface> surfaceState;
+		std::array<State<ValArray<Type>, dimensionCount>, nodeVolume> volumeState;
+		for (int face = 0; face < 2 * dimensionCount; face++) {
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				auto const surfaceNodes = sSynthesize<ValArray<Type>>(sTrace<ValArray<Type>>(face, currentState[fieldIndex]));
+				for (int nodeIndex = 0; nodeIndex < nodeSurface; nodeIndex++) {
+					surfaceState[nodeIndex][fieldIndex] = surfaceNodes[nodeIndex];
+				}
+			}
+			for (int nodeIndex = 0; nodeIndex < nodeSurface; nodeIndex++) {
+				theta = min(Type(1), findPositivityPreservingTheta(meanState, surfaceState[nodeIndex]));
+			}
+		}
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			auto const volumeNodes = vSynthesize<ValArray<Type>>(currentState[fieldIndex]);
+			for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
+				volumeState[nodeIndex][fieldIndex] = volumeNodes[nodeIndex];
+			}
+		}
+		for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
+			theta = min(Type(1), findPositivityPreservingTheta(meanState, volumeState[nodeIndex]));
+		}
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			for (int modeIndex = 1; modeIndex < modeVolume; modeIndex++) {
+				currentState[fieldIndex][modeIndex] *= theta;
+			}
+		}
 	}
-
-	template<int ... dimension>
-	void computeDudt(Type timeStepSize, ValArray<ValArray<ValArray<Type>>> &stateDerivative, std::integer_sequence<int, dimension...>) {
-		(computeDudtByDim<dimension>(timeStepSize, stateDerivative), ...);
-	}
-	template<int dimension>
-	void computeDudtByDim(Type timeStepSize, ValArray<ValArray<ValArray<Type>>> &stateDerivative) {
-		auto const nodalLeft = dgSynthesize<Type, dimensionCount - 1, modeCount>(dgTrace<Type, dimensionCount, modeCount>(2 * dimension + 1, currentState));
-		auto const nodalRight = dgSynthesize<Type, dimensionCount - 1, modeCount>(dgTrace<Type, dimensionCount, modeCount>(2 * dimension - 1, currentState));
-//		constexpr Range<int, dimensionCount> interiorBoxPlusOne { repeat<dimensionCount>(0), repeat<dimensionCount>(cellsAcrossInterior) + unit<dimensionCount>(
-//				dimension) };
-//		using FluxIndexType = MultiIndex<exteriorBox, interiorBoxPlusOne>;
-//		Type const lambda = Type(2) * timeStepSize / cellWidth;
-//		for (auto cellMultIndex = FluxIndexType::begin(); cellMultIndex != FluxIndexType::end(); cellMultIndex++) {
-//			int const rightInterfaceIndex = cellMultIndex;
-//			int const leftInterfaceIndex = rightInterfaceIndex - stride(dimension);
-//
-//			std::array<std::array<Type, triangleSize<dimensionCount, modeCount>>, fieldCount> volumeModesLeft, volumeModesRight;
-//			std::array<std::array<Type, squareSize<dimensionCount - 1, modeCount>>, fieldCount> surfaceNodesLeft, surfaceNodesRight, surfaceNodesFlux;
-//			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-//					volumeModesLeft[fieldIndex][modeIndex] = currentState[fieldIndex][modeIndex][leftInterfaceIndex];
-//					volumeModesRight[fieldIndex][modeIndex] = currentState[fieldIndex][modeIndex][rightInterfaceIndex];
-//				}
-//				surfaceNodesLeft[fieldIndex] = dgSynthesize<Type, dimensionCount - 1, modeCount>(
-//						dgTrace<Type, dimensionCount, modeCount>(2 * dimension + 1, volumeModesLeft[fieldIndex]));
-//				surfaceNodesRight[fieldIndex] = dgSynthesize<Type, dimensionCount - 1, modeCount>(
-//						dgTrace<Type, dimensionCount, modeCount>(2 * dimension + 0, volumeModesRight[fieldIndex]));
-//			}
-//
-//			for (int nodeIndex = 0; nodeIndex<squareSize < dimensionCount - 1, modeCount> ; nodeIndex++) {
-//				State stateRight, stateLeft;
-//				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//					stateLeft[fieldIndex] = surfaceNodesLeft[fieldIndex][nodeIndex];
-//					stateRight[fieldIndex] = surfaceNodesRight[fieldIndex][nodeIndex];
-//				}
-//				auto const riemannFlux = solveRiemannProblem(stateLeft, stateRight, dimension);
-//				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//					surfaceNodesFlux[fieldIndex][nodeIndex] = riemannFlux[fieldIndex];
-//				}
-//			}
-//			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//				auto const modes = dgAnalyze<Type, dimensionCount - 1, modeCount>(surfaceNodesFlux[fieldIndex]);
-//				volumeModesLeft[fieldIndex] = dgTraceInverse<Type, dimensionCount, modeCount>(2 * dimension + 1, modes);
-//				volumeModesLeft[fieldIndex] = dgMassInverse<Type, dimensionCount, modeCount>(volumeModesLeft[fieldIndex]);
-//				volumeModesRight[fieldIndex] = dgTraceInverse<Type, dimensionCount, modeCount>(2 * dimension + 0, modes);
-//				volumeModesRight[fieldIndex] = dgMassInverse<Type, dimensionCount, modeCount>(volumeModesRight[fieldIndex]);
-//			}
-//
-//			if (cellMultIndex[dimension] > 0) {
-//				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//					for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-//						stateDerivative[fieldIndex][modeIndex][leftInterfaceIndex] -= lambda * volumeModesLeft[fieldIndex][modeIndex];
-//					}
-//				}
-//			}
-//			if (cellMultIndex[dimension] < cellsAcrossInterior) {
-//				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//					for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-//						stateDerivative[fieldIndex][modeIndex][rightInterfaceIndex] += lambda * volumeModesRight[fieldIndex][modeIndex];
-//					}
-//				}
-//			}
-//		}
-//		for (auto cellMultiIndex = InteriorIndex::begin(); cellMultiIndex != InteriorIndex::end(); cellMultiIndex++) {
-//			int const cellFlatIndex = cellMultiIndex;
-//			std::array<State, nodeVolume> nodeStates;
-//			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//				std::array<Type, modeVolume> modalState;
-//				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-//					modalState[modeIndex] = currentState[fieldIndex][modeIndex][cellFlatIndex];
-//				}
-//				auto thisValue = dgSynthesize<Type, dimensionCount, modeCount>(modalState);
-//				for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
-//					nodeStates[nodeIndex][fieldIndex] = thisValue[nodeIndex];
-//				}
-//			}
-//			for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
-//				nodeStates[nodeIndex] = nodeStates[nodeIndex].flux(dimension);
-//			}
-//			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//				std::array<Type, nodeVolume> nodes;
-//				for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
-//					nodes[nodeIndex] = nodeStates[nodeIndex][fieldIndex];
-//				}
-//				auto flux = dgAnalyze<Type, dimensionCount, modeCount>(nodes);
-//				flux = dgMassInverse<Type, dimensionCount, modeCount>(flux);
-//				flux = dgStiffness<Type, dimensionCount, modeCount>(dimension, flux);
-//				flux = dgMassInverse<Type, dimensionCount, modeCount>(flux);
-//				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-//					stateDerivative[fieldIndex][modeIndex][cellFlatIndex] += lambda * flux[modeIndex];
-//				}
-//			}
-//		}
+	void computeTimeDerivative(Type timeStepSize, State<std::array<ValArray<Type>, modeVolume>, dimensionCount> &stateDerivative) {
+		Type const lambda = Type(2) * timeStepSize / cellWidth;
+		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			auto const shift = gridStrides[dimension];
+			std::array<State<ValArray<Type>, dimensionCount>, nodeSurface> leftState;
+			std::array<State<ValArray<Type>, dimensionCount>, nodeSurface> rightState;
+			State<std::array<ValArray<Type>, nodeSurface>, dimensionCount> riemannFlux;
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				auto leftModes = currentState[fieldIndex];
+				for (int modeIndex = 0; modeIndex < modeCount; modeIndex++) {
+					leftModes[modeIndex] = currentState[fieldIndex][modeIndex].cshift(-shift);
+				}
+				auto const left = sSynthesize<ValArray<Type>>(sTrace<ValArray<Type>>(2 * dimension + 1, leftModes));
+				auto const right = sSynthesize<ValArray<Type>>(sTrace<ValArray<Type>>(2 * dimension + 0, currentState[fieldIndex]));
+				for (int nodeIndex = 0; nodeIndex < nodeSurface; nodeIndex++) {
+					leftState[nodeIndex][fieldIndex] = left[nodeIndex];
+					rightState[nodeIndex][fieldIndex] = right[nodeIndex];
+				}
+			}
+			for (int nodeIndex = 0; nodeIndex < nodeSurface; nodeIndex++) {
+				auto const tmp = solveRiemannProblem(leftState[nodeIndex], rightState[nodeIndex], dimension);
+				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+					riemannFlux[fieldIndex][nodeIndex] = tmp[fieldIndex];
+				}
+			}
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				auto const thisFlux = sAnalyze<ValArray<Type>>(riemannFlux[fieldIndex]);
+				auto const leftFlux =  vMassInverse<ValArray<Type>>(sTraceInverse<ValArray<Type>>(2 * dimension + 1, thisFlux));
+				auto const rightFlux = vMassInverse<ValArray<Type>>(sTraceInverse<ValArray<Type>>(2 * dimension + 0, thisFlux));
+				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+					stateDerivative[fieldIndex][modeIndex] -= lambda * leftFlux[modeIndex].cshift(+shift);
+					stateDerivative[fieldIndex][modeIndex] += lambda * rightFlux[modeIndex];
+				}
+			}
+		}
+		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			std::array<State<ValArray<Type>, dimensionCount>, nodeVolume> volumeState;
+			State<std::array<ValArray<Type>, nodeVolume>, dimensionCount> volumeFlux;
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				auto const nodes = vSynthesize<ValArray<Type>>(currentState[fieldIndex]);
+				for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
+					volumeState[nodeIndex][fieldIndex] = nodes[nodeIndex];
+				}
+			}
+			for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
+				auto tmp = volumeState[nodeIndex].flux(dimension);
+				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+					volumeFlux[fieldIndex][nodeIndex] = tmp[fieldIndex];
+				}
+			}
+			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+				auto const source = vMassInverse<ValArray<Type>>(vStiffness<ValArray<Type>>(dimension, vMassInverse<ValArray<Type>>(vAnalyze<ValArray<Type>>(volumeFlux[fieldIndex]))));
+				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+					stateDerivative[fieldIndex][modeIndex] += lambda * source[modeIndex];
+				}
+			}
+		}
 	}
 };
 

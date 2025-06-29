@@ -18,14 +18,14 @@ int hpx_main(int argc, char *argv[]) {
 	printf("Reading options...\n");
 	processOptions(argc, argv);
 	constexpr int P = 3;
-	constexpr int D = 2;
+	constexpr int D = 3;
 	constexpr int N = 128;
-	using T = Real;
+	using T = double;
 	using RK = typename RungeKutta<T, P>::type;
-	using S = EulerState<T, D>;
-	HyperGrid<S, N, P, RK> grid;
+	HyperGrid<T, D, N, P, RK, EulerState> grid;
 	grid.initialize(initSodShockTube<T, D>);
 	grid.enforceBoundaryConditions();
+	grid.applyLimiter();
 	T t = T(0);
 	T tmax = T(.15);
 	T dt;

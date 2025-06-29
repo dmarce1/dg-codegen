@@ -7,8 +7,10 @@
 #include <functional>
 #include <numeric>
 #include <map>
+#include <set>
 #include <vector>
 #include <utility>
+
 constexpr auto tiny = std::numeric_limits<double>::epsilon();
 
 template<typename T>
@@ -332,50 +334,86 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 		if (v[n] == "") {
 			continue;
 		}
-		bool first = true;
-		char *ptr;
+		code += std::string(indent);
+		struct Less {
+			bool operator()(Real a, Real b) const {
+				if (std::abs(a - b) < tiny) {
+					return false;
+				} else {
+					return a < b;
+				}
+			}
+		};
+		std::map<Real, std::vector<std::pair<signed char, std::string>>, Less> terms;
+		std::set<Real, Less> coefficients;
 		for (int m = 0; m < M; m++) {
 			Real const C = A[n][m];
 			if (std::abs(C) < tiny) {
 				continue;
 			}
-			std::string cons;
-			if (std::abs(std::abs(C) - Real(1)) >= tiny) {
-				cons = getConstant(std::abs(C));
-			}
-			if (first) {
-				if (std::abs(C - Real(+1)) < tiny) {
-					asprintf(&ptr, "%s = %s;\n", v[n].c_str(), x[m].c_str());
-				} else if (std::abs(C - Real(-1)) < tiny) {
-					asprintf(&ptr, "%s = -%s;\n", v[n].c_str(), x[m].c_str());
-				} else if (C < Real(0)) {
-					assert(cons != "");
-					asprintf(&ptr, "%s = -%s * %s;\n", v[n].c_str(), cons.c_str(), x[m].c_str());
-				} else/*if (C > Real(0))*/{
-					assert(cons != "");
-					asprintf(&ptr, "%s = %s * %s;\n", v[n].c_str(), cons.c_str(), x[m].c_str());
-				}
-				first = false;
+			if (C > Real(0)) {
+				terms[std::abs(C)].push_back( { +1, x[m] });
 			} else {
-				if (std::abs(C - Real(+1)) < tiny) {
-					asprintf(&ptr, "%s += %s;\n", v[n].c_str(), x[m].c_str());
-				} else if (std::abs(C - Real(-1)) < tiny) {
-					asprintf(&ptr, "%s -= %s;\n", v[n].c_str(), x[m].c_str());
-				} else if (C < Real(0)) {
-					assert(cons != "");
-					asprintf(&ptr, "%s -= %s * %s;\n", v[n].c_str(), cons.c_str(), x[m].c_str());
-				} else/*if (C > Real(0))*/{
-					assert(cons != "");
-					asprintf(&ptr, "%s += %s * %s;\n", v[n].c_str(), cons.c_str(), x[m].c_str());
+				terms[std::abs(C)].push_back( { -1, x[m] });
+			}
+			coefficients.insert(std::abs(C));
+		}
+		code += v[n] + " = ";
+		if (coefficients.size()) {
+			bool first1 = true;
+			for (auto it = coefficients.begin(); it != coefficients.end(); it++) {
+				Real const C = *it;
+				std::cerr << std::to_string(C) << " ";
+				auto const &theseTerms = terms[C];
+				if (first1) {
+					first1 = false;
+				} else {
+					code += " + ";
+				}
+				bool const isOne = std::abs(C - Real(1)) < tiny;
+				if (theseTerms.size() > 1) {
+					if (!isOne) {
+						code += getConstant(C) + " * (";
+					}
+					bool first2 = true;
+					for (auto const &term : terms[C]) {
+						auto const s = term.first;
+						auto const v = term.second;
+						if (first2) {
+							if (s < Real(0)) {
+								code += "-";
+							}
+							first2 = false;
+						} else {
+							code += (s > 0) ? std::string(" + ") : std::string(" - ");
+						}
+						code += v;
+					}
+					if (!isOne) {
+						code += ")";
+					}
+				} else {
+					auto const s = theseTerms[0].first;
+					auto const v = theseTerms[0].second;
+					if (s < Real(0)) {
+						code += "-";
+					}
+					if (!isOne) {
+						code += getConstant(C) + " * ";
+					}
+					code += v;
 				}
 			}
-			code += indent + ptr;
-			free(ptr);
+			code += ";\n";
+		} else {
+			code += "T(0);\n";
 		}
-		if (first) {
-			asprintf(&ptr, "%s  = %s(0);\n", v[n].c_str(), (std::string("T")).c_str());
-			code += indent + ptr;
-			free(ptr);
+		std::cerr << "\n";
+		std::string const str = "+ -";
+		size_t i = code.find(str);
+		while(i != std::string::npos) {
+			code.replace(i, str.size(), "- ");
+			i = code.find(str, i);
 		}
 	}
 	return code;
@@ -398,7 +436,6 @@ Matrix permutationMatrix(int N, int modeCount, int triIndexCount) {
 		}
 	}
 	Matrix P = createMatrix(M, N);
-	int m = 0;
 	for (int n = 0; n < N; n++) {
 		if (ones[n] >= 0) {
 			P[ones[n]][n] = Real(1.0);
@@ -928,16 +965,16 @@ int main(int, char*[]) {
 			hppCode += genStiffnessMatrix(dim, order);
 			hppCode += genTrace(dim, order, false);
 			hppCode += genTrace(dim, order, true);
-			hppCode += generateGaussLobattoSynthesize(dim, order);
+//			hppCode += generateGaussLobattoSynthesize(dim, order);
 		}
 	}
 	for (int iter = 0; iter <= 5; iter++) {
 		hppCode += indent + "\n";
-		if (iter == 1) {
-			hppCode += indent + "template<typename T, int D, int O, Quadrature Q = Quadrature::gaussLegendre>\n";
-		} else {
-			hppCode += indent + "template<typename T, int D, int O>\n";
-		}
+//		if (iter == 1) {
+//			hppCode += indent + "template<typename T, int D, int O, Quadrature Q = Quadrature::gaussLegendre>\n";
+//		} else {
+		hppCode += indent + "template<typename T, int D, int O>\n";
+//		}
 		hppCode += std::string(indent);
 		std::string fname, varname;
 		if (iter == 0) {
@@ -975,17 +1012,17 @@ int main(int, char*[]) {
 				}
 				hppCode += "if constexpr(O == " + std::to_string(order) + ") {\n";
 				indent++;
-				if(fname == "dgSynthesize") {
-					hppCode += indent + "if constexpr(Q == Quadrature::gaussLobatto) {\n";
-					indent++;
-					hppCode += indent + "return " + fname + "GaussLobatto" + tag(dim, order) + "(" + varname + "input);\n";
-					indent--;
-					hppCode += indent + "} else /*if constexpr(Q == Quadrature::gaussLegendre)*/ {\n";
-					indent++;
+				if (fname == "dgSynthesize") {
+//					hppCode += indent + "if constexpr(Q == Quadrature::gaussLobatto) {\n";
+//					indent++;
+//					hppCode += indent + "return " + fname + "GaussLobatto" + tag(dim, order) + "(" + varname + "input);\n";
+//					indent--;
+//					hppCode += indent + "} else /*if constexpr(Q == Quadrature::gaussLegendre)*/ {\n";
+//					indent++;
 					hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
-					indent--;
-					hppCode += indent + "}\n";
-			} else {
+//					indent--;
+//					hppCode += indent + "}\n";
+				} else {
 					hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
 				}
 				indent--;
@@ -1101,7 +1138,7 @@ int main(int, char*[]) {
 			hppCode += "if constexpr(O == " + std::to_string(order) + ") {\n";
 			indent++;
 			bool first = true;
-			hppCode += indent + "constexpr std::array<int, triangleSize<D, O>> map = {\n";
+			hppCode += indent + "constexpr std::array<std::array<int, D>, triangleSize<D, O>> map{{\n";
 			indent++;
 			hppCode += std::string(indent);
 			int cnt = 0;
@@ -1138,7 +1175,7 @@ int main(int, char*[]) {
 				}
 			}
 			indent--;
-			hppCode += "\n" + std::string(indent) + "};\n";
+			hppCode += "\n" + std::string(indent) + "}};\n";
 			hppCode += indent + "return map[flatIndex];\n";
 			indent--;
 			hppCode += indent + "}";
@@ -1160,7 +1197,7 @@ int main(int, char*[]) {
 	hppCode += indent + "}\n";
 	hppCode += "\n";
 	hppCode += "template<int D, int O>\n"
-			"std::array<int, D> triangularToFlat(std::array<int, D> const &ti) {\n"
+			"int triangularToFlat(std::array<int, D> ti) {\n"
 			"\tstd::array<int, D> num, den;\n"
 			"\tfor (int d = D - 1; d > 0; d--) {\n"
 			"\t\tti[d - 1] += ti[d];\n"
