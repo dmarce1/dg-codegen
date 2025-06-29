@@ -118,72 +118,73 @@ public:
 		}
 	}
 	void output(const char *filenameBase, int timeStepNumber, Type const &time) {
-//		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
-//		writeHdf5<Type, dimensionCount, cellsAcrossInterior, modeCount, ghostWidth>(filename, cellWidth, currentState, State::getFieldNames());
-//		writeList("X.visit", "!NBLOCKS 1\n", filename + ".xmf");
+		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
+		writeHdf5<Type, dimensionCount, cellsAcrossInterior, modeCount, ghostWidth>(filename, cellWidth, currentState, State<Type, dimensionCount>::getFieldNames());
+		writeList("X.visit", "!NBLOCKS 1\n", filename + ".xmf");
 	}
 	void enforceBoundaryConditions() {
-//		using Index = MultiIndex<exteriorBox>;
-//		for (auto ghostZoneIndex = Index::begin(); ghostZoneIndex != Index::end(); ghostZoneIndex++) {
-//			Index interiorIndex;
-//			bool isGhostZone = false;
-//			for (int dimensionIndex = 0; dimensionIndex < dimensionCount; dimensionIndex++) {
-//				if (ghostZoneIndex[dimensionIndex] < 0) {
-//					isGhostZone = true;
-//					interiorIndex[dimensionIndex] = ghostZoneIndex[dimensionIndex] + cellsAcrossInterior;
-//				} else if (ghostZoneIndex[dimensionIndex] >= cellsAcrossInterior) {
-//					isGhostZone = true;
-//					interiorIndex[dimensionIndex] = ghostZoneIndex[dimensionIndex] - cellsAcrossInterior;
-//				} else
-//					interiorIndex[dimensionIndex] = ghostZoneIndex[dimensionIndex];
-//			}
-//			if (!isGhostZone) {
-//				continue;
-//			}
-//			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//				for (int basisIndex = 0; basisIndex < modeVolume; basisIndex++) {
-//					currentState[fieldIndex][basisIndex][ghostZoneIndex] = currentState[fieldIndex][basisIndex][interiorIndex];
-//				}
-//			}
-//		}
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+				for (int dimension = 0; dimension < dimensionCount; dimension++) {
+					GSlice<int> fromSlice, toSlice;
+					int fromStart, toStart;
+					auto sizes = gridSizes;
+					sizes[dimension] = ghostWidth;
+					fromStart = 0;
+					for (int d = 0; d <= dimension; d++) {
+						fromStart += ghostWidth * gridStrides[d];
+					}
+					toStart = fromStart + gridStrides[dimension] * cellsAcrossInterior;
+					fromSlice = GSlice<int> { fromStart, sizes, gridStrides };
+					toSlice = GSlice<int> { toStart, sizes, gridStrides };
+					currentState[fieldIndex][modeIndex][toSlice] = currentState[fieldIndex][modeIndex][fromSlice];
+					toStart = 0;
+					for (int d = 0; d < dimension; d++) {
+						toStart += ghostWidth * gridStrides[d];
+					}
+					fromStart = toStart - gridStrides[dimension] * cellsAcrossInterior;
+					fromSlice = GSlice { fromStart, sizes, gridStrides };
+					toSlice = GSlice { toStart, sizes, gridStrides };
+					currentState[fieldIndex][modeIndex][toSlice] = currentState[fieldIndex][modeIndex][fromSlice];
+				}
+			}
+		}
 	}
 	Type beginStep() {
-//		applyLimiter();
-//		using namespace Math;
-//		previousState = currentState;
-//		stageDerivatives_.fill(rungeKuttaStageCount, ValArray<Type> { fieldCount * modeVolume * exteriorVolume });
-//		std::array<Type, dimensionCount> maximumEigenvalue;
-//		maximumEigenvalue.fill(Type(0));
-//		for (auto cellMultiIndex = InteriorIndex::begin(); cellMultiIndex != InteriorIndex::end(); cellMultiIndex++) {
-//			int const cellFlatIndex = cellMultiIndex;
-//			std::array<Type, modeVolume> modalState;
-//			std::array<std::array<Type, nodeVolume>, fieldCount> nodalState;
-//			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-//					modalState[modeIndex] = currentState[fieldIndex][modeIndex][cellFlatIndex];
-//				}
-//				nodalState[fieldIndex] = dgSynthesize<Type, dimensionCount, modeCount>(modalState);
-//			}
-//			for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
-//				State thisState;
-//				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//					thisState[fieldIndex] = nodalState[fieldIndex][nodeIndex];
-//				}
-//				for (int dimension = 0; dimension < dimensionCount; dimension++) {
-//					auto const eigenvalues = thisState.eigenvalues(dimension);
-//					for (auto thisEigenvalue : eigenvalues) {
-//						maximumEigenvalue[dimension] = max(maximumEigenvalue[dimension], abs(thisEigenvalue));
-//					}
-//				}
-//			}
-//		}
-//		Type maximumEigenvalueSum = Type(0);
-//		for (int dimension = 0; dimension < dimensionCount; dimension++) {
-//			maximumEigenvalueSum += maximumEigenvalue[dimension];
-//		}
-//		Type const timeStepSize = (cellWidth * butcherTable.cfl()) / (Type(2 * modeCount - 1) * maximumEigenvalueSum);
-		return Type(0);
-		//		return timeStepSize;
+		applyLimiter();
+		using namespace Math;
+		previousState = currentState;
+		for (int stageIndex = 0; stageIndex < rungeKuttaStageCount; stageIndex++) {
+			for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+				for (int fieldIndex = 0; fieldIndex < modeVolume; fieldIndex++) {
+					stageDerivatives_[stageIndex][fieldIndex][modeIndex].resize(exteriorVolume);
+				}
+			}
+		}
+		std::array<Type, dimensionCount> maximumEigenvalue;
+		maximumEigenvalue.fill(Type(0));
+		std::array<State<ValArray<Type>, dimensionCount>, nodeVolume> nodalState;
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			auto const tmp = vSynthesize<ValArray<Type>>(currentState[fieldIndex]);
+			for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
+				nodalState[nodeIndex][fieldIndex] = tmp[nodeIndex];
+			}
+		}
+		for (int nodeIndex = 0; nodeIndex < nodeVolume; nodeIndex++) {
+			for (int dimension = 0; dimension < dimensionCount; dimension++) {
+				auto const eigenvalues = nodalState[nodeIndex].eigenvalues(dimension);
+				for (int eigenIndex = 0; eigenIndex < int(eigenvalues.size()); eigenIndex++) {
+					ValArray<Type> const lambda = abs(eigenvalues[eigenIndex]);
+					maximumEigenvalue[dimension] = max(maximumEigenvalue[dimension], lambda.max());
+				}
+			}
+		}
+		Type maximumEigenvalueSum = Type(0);
+		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			maximumEigenvalueSum += maximumEigenvalue[dimension];
+		}
+		Type const timeStepSize = (cellWidth * butcherTable.cfl()) / (Type(2 * modeCount - 1) * maximumEigenvalueSum);
+		return timeStepSize;
 	}
 	void subStep(Type const &timeStepSize, int stageIndex) {
 		currentState = previousState;
@@ -200,25 +201,18 @@ public:
 		computeTimeDerivative(timeStepSize, stageDerivatives_[stageIndex]);
 	}
 	void endStep() {
-//		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-//			for (auto modeMultiIndex = BasisIndex::begin(); modeMultiIndex != BasisIndex::end(); modeMultiIndex++) {
-//				int const modeFlatIndex = modeMultiIndex;
-//				for (auto cellMultiIndex = InteriorIndex::begin(); cellMultiIndex != InteriorIndex::end(); cellMultiIndex++) {
-//					int const cellFlatIndex = cellMultiIndex;
-//					currentState[fieldIndex][modeFlatIndex][cellFlatIndex] = previousState[fieldIndex][modeFlatIndex][cellFlatIndex];
-//					for (int stageIndex = 0; stageIndex < rungeKuttaStageCount; stageIndex++) {
-//						currentState[fieldIndex][modeFlatIndex][cellFlatIndex] +=
-//								butcherTable.b(stageIndex) * stageDerivatives_[stageIndex][fieldIndex][modeFlatIndex][cellFlatIndex];
-//					}
-//				}
-//			}
-//		}
-//		stageDerivatives_ = { };
-//		previousState = { };
+		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+			for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
+				currentState[fieldIndex][modeIndex] = previousState[fieldIndex][modeIndex];
+				for (int stageIndex = 0; stageIndex < rungeKuttaStageCount; stageIndex++) {
+					currentState[fieldIndex][modeIndex] += butcherTable.b(stageIndex) * stageDerivatives_[stageIndex][fieldIndex][modeIndex];
+				}
+			}
+		}
+		stageDerivatives_ = { };
+		previousState = { };
 	}
 	void applyLimiter() {
-		constexpr int hiModeVolume = modeVolume - 1;
-		constexpr int loModeVolume = binco(dimensionCount + modeCount - 2, dimensionCount);
 		State<ValArray<Type>, dimensionCount> meanState;
 		for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
 			for (int i = 0; i < exteriorVolume; i++) {
@@ -267,7 +261,7 @@ public:
 						continue;
 					}
 					for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-						auto& current = currentState[fieldIndex][hiModeIndex];
+						auto &current = currentState[fieldIndex][hiModeIndex];
 						current = minmod(current, transposedState[dimension][fieldIndex]);
 					}
 				}
@@ -361,5 +355,6 @@ public:
 			}
 		}
 	}
-};
+}
+;
 

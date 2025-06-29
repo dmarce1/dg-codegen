@@ -19,8 +19,8 @@
 #include "Util.hpp"
 #include "ValArray.hpp"
 
-template<typename T, int D, int N, int P, int BW>
-void writeHdf5(std::string filename, T const &h, ValArray<ValArray<ValArray<T>>> const &fieldData,
+template<typename T, int D, int N, int P, int BW, template<typename, int> typename S>
+void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T>, binco(D + P - 1, D)>, D> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
 	constexpr Range<int, D> Box { repeat<D>(-BW), repeat<D>(N + BW) };
 	using hindex_t = MultiIndex<Box>;
@@ -88,8 +88,8 @@ void writeHdf5(std::string filename, T const &h, ValArray<ValArray<ValArray<T>>>
 	if (!xmfFile) {
 		throw std::runtime_error("Unable to open XDMF file \"" + xFilename + "\" for writing");
 	}
-	std::string const precision =  (sizeof(T) == sizeof(double)) ? "8" : "4";
-	std::string const dataType =  (sizeof(T) == sizeof(double)) ? "double" : "float";
+	std::string const precision = (sizeof(T) == sizeof(double)) ? "8" : "4";
+	std::string const dataType = (sizeof(T) == sizeof(double)) ? "double" : "float";
 	std::string const topology = std::to_string(D) + "DCoRectMesh";
 	std::string cDimensions, nDimensions, geometry = "ORIGIN_";
 	for (int d = 0; d < D; d++) {

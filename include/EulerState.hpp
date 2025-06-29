@@ -62,7 +62,7 @@ struct EulerState: public std::array<T, 2 + D> {
 		T const irho = T(1) / rho;
 		T const v = S[dim] * irho;
 		T const ek = T(0.5) * irho * dot(S, S);
-		T const ei = std::max(eg - ek, T(0));
+		T const ei = max(eg - ek, 0.0);
 		T const p = gamm1 * ei;
 		T const a = sqrt(gamma * p * irho);
 		std::fill(lambda.begin(), lambda.end(), v);
