@@ -105,7 +105,7 @@ inline constexpr int nonepow(int k) {
 }
 
 template<typename T, int D>
-inline constexpr std::array<T, D> zero() {
+inline constexpr std::array<T, D> zeroArray() {
 	std::array<T, D> u;
 	u.fill(T(0));
 	return u;
@@ -113,13 +113,22 @@ inline constexpr std::array<T, D> zero() {
 
 template<int D>
 inline constexpr std::array<int, D> unit(int d) {
-	auto u = zero<int, D>();
+	auto u = zeroArray<int, D>();
 	u[d] = 1;
 	return u;
 }
 
+template<typename T, typename = void>
+struct ElementType {
+	using type = T;
+};
+
+template<typename T>
+struct ElementType<T, std::void_t<typename T::value_type>> {
+	using type = typename ElementType<typename T::value_type>::type;
+};
+
 void installFpeHandler();
 
 void toFile(std::string const &content, std::filesystem::path const &filePath);
-
 

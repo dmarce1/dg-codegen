@@ -49,18 +49,12 @@ struct Constants {
 		}
 		return name_ + std::to_string(iterator->second);
 	}
-//	std::string getHeader(std::string const &realTypename, int simdWidth) const {
-//		std::ostringstream code;
-//		code << std::string(indent) << "static const std::array<" << realTypename << ", " << std::to_string(indexes_.size()) << "> " << name_ << simdWidth
-//				<< ";\n";
-//		return code.str();
-//	}
 	std::string getCode() const {
 		std::ostringstream code;
 		std::ostringstream line;
 		for (int i = 0; i < values_.size(); i++) {
-			code << indent + "static const T " + name_ + std::to_string(i) + " = ";
-			code << "T(" << std::setprecision(std::numeric_limits<double>::max_digits10 - 1) << std::scientific << values_[i] << ");\n";
+			code << indent + "static U const " + name_ + std::to_string(i) + " = ";
+			code << "U(" << std::setprecision(std::numeric_limits<double>::max_digits10 - 1) << std::scientific << values_[i] << ");\n";
 		}
 		return code.str();
 	}
@@ -363,7 +357,7 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 			bool first1 = true;
 			for (auto it = coefficients.begin(); it != coefficients.end(); it++) {
 				Real const C = *it;
-				std::cerr << std::to_string(C) << " ";
+				//		std::cerr << std::to_string(C) << " ";
 				auto const &theseTerms = terms[C];
 				if (first1) {
 					first1 = false;
@@ -406,12 +400,12 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 			}
 			code += ";\n";
 		} else {
-			code += "T{0.0};\n";
+			code += "U(0.0);\n";
 		}
-		std::cerr << "\n";
+		//	std::cerr << "\n";
 		std::string const str = "+ -";
 		size_t i = code.find(str);
-		while(i != std::string::npos) {
+		while (i != std::string::npos) {
 			code.replace(i, str.size(), "- ");
 			i = code.find(str, i);
 		}
@@ -712,6 +706,9 @@ SYNTHESIZE:
 		currentSize += arraySizes[i + 2];
 		bufferSize = std::max(bufferSize, currentSize);
 	}
+	if (isAnalyze || modeCount > 1) {
+		hppCode += indent + "using U = typename ElementType<T>::type;\n";
+	}
 	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
 	int bufferOffset;
 	bufferOffset = 0;
@@ -791,6 +788,7 @@ std::string generateGaussLobattoSynthesize(int dimensionCount, int modeCount) {
 		currentSize += arraySizes[i + 2];
 		bufferSize = std::max(bufferSize, currentSize);
 	}
+	hppCode += indent + "using U = typename ElementType<T>::type;\n";
 	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
 	int bufferOffset;
 	bufferOffset = 0;
@@ -832,6 +830,7 @@ std::string genMassMatrix(int dimensionCount, int modeCount) {
 	code1 += "dgMassInverse" + tag(dimensionCount, modeCount);
 	code1 += "(" + arrayType + " const& input) {\n";
 	indent++;
+	code1 += indent + "using U = typename ElementType<T>::type;\n";
 	code2 += indent + arrayType + " output;\n";
 	auto A = massMatrix(dimensionCount, modeCount, true);
 	code2 += matrixVectorProduct(outputs, A, inputs);
@@ -855,6 +854,7 @@ std::string genStiffnessMatrix(int dimensionCount, int modeCount) {
 	code1 += "dgStiffness" + tag(dimensionCount, modeCount);
 	code1 += "(int dimension, " + arrayType + " const& input) {\n";
 	indent++;
+	code1 += indent + "using U = typename ElementType<T>::type;\n";
 	code2 += indent + arrayType + " output;\n";
 	if (dimensionCount > 1) {
 		code2 += std::string(indent);
@@ -910,6 +910,7 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 	code1 += tag(dimensionCount, modeCount);
 	code1 += "(int face, " + arrayType2 + " const& input) {\n";
 	indent++;
+	//code2 += indent + "using U = typename ElementType<T>::type;\n";
 	code2 += indent + arrayType1 + " output;\n";
 	code2 += std::string(indent);
 	for (int face = 0; face < 2 * dimensionCount; face++) {

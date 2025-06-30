@@ -12,6 +12,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "Util.hpp"
+
 #define VAL_ARRAY_UNARY_OPERATOR(op)                                             \
 	auto operator op() const {                                                    \
 		using Handle = decltype(this->getHandle());                                \
@@ -217,11 +219,11 @@
 		int64_t const start = gSlice_.start();                                                            \
 		auto const &strides = gSlice_.strides();                                                          \
 		auto const &sizes = gSlice_.sizes();                                                              \
-		ValArray<int64_t, elementCount> indices;                                              \
+		ValArray<int64_t, dimensionCount> indices;                                              \
 		indices.fill(0);\
 		int64_t i  = start;                                                                                \
 		(*pointer_)[start] OP##= other[0];                                                                \
-		for (int64_t j = 1; j < elementCount; j++) {                                                         \
+		for (int64_t j = 1; j < sliceCount; j++) {                                                         \
 			int dimension = dimensionCount - 1;                                                          \
 			while (++indices[dimension] == sizes[dimension]) {                                             \
 				indices[dimension] = 0;                                                                     \
@@ -237,16 +239,16 @@
 		int64_t const start = gSlice_.start();                                                            \
 		auto const &strides = gSlice_.strides();                                                          \
 		auto const &sizes = gSlice_.sizes();                                                              \
-		ValArray<int64_t, elementCount> indices(0, sizes.size());                                              \
+		ValArray<int64_t, dimensionCount> indices(0, sizes.size());                                              \
 		indices.fill(0);\
 		int64_t i  = start;                                                                                \
 		(*pointer_)[start] OP##= value;                                                                   \
-		for (int64_t j = 1; j < elementCount; j++) {                                                         \
+		for (int64_t j = 1; j < sliceCount; j++) {                                                         \
 			int64_t dimension = dimensionCount - 1;                                                          \
 			while (++indices[dimension] == sizes[dimension]) {                                             \
 				indices[dimension] = 0;                                                                     \
 				i -= (sizes[dimension] - 1) * strides[dimension];                                           \
-					dimension--;                                                                                \
+				dimension--;                                                                                \
 			}                                                                                              \
 			i += strides[dimension];                                                                       \
 			(*pointer_)[i] OP##= value;                                                                    \
@@ -306,13 +308,13 @@ struct ShiftRight;
 
 struct Slice;
 
-template<int>
+template<int, int64_t>
 class GSlice;
 
 template<typename, int64_t>
 struct SliceArray;
 
-template<typename, int64_t, int>
+template<typename, int64_t, int64_t, int>
 struct GSliceArray;
 
 #include <cstddef>
@@ -340,7 +342,7 @@ public:
 	}
 };
 
-template<int dimensionCount>
+template<int dimensionCount, int64_t totalSize>
 class GSlice {
 	int64_t start_;
 	ValArray<int64_t, dimensionCount> sizes_;
@@ -350,6 +352,13 @@ public:
 	}
 	GSlice(int64_t start, ValArray<int64_t, dimensionCount> sizes, ValArray<int64_t, dimensionCount> strides) :
 			start_(start), sizes_(sizes), strides_(strides) {
+		auto const actualSize = std::accumulate(sizes_.begin(), sizes_.end(), int64_t(1), std::multiplies<int64_t>());
+		if(totalSize != actualSize) {
+			printf( "totalSize = %li\n", totalSize);
+			printf( "actualSize = %li\n", actualSize);
+			assert(false);
+			THROW( "GSlice size error\n" );
+		}
 	}
 	GSlice(GSlice const &other) :
 			start_(other.start_), sizes_(other.sizes_), strides_(other.strides_) {
@@ -401,12 +410,13 @@ public:
 	SLICE_ARRAY_COMPOUND_ASSIGNMENT_OPERATOR(>>)
 };
 
-template<typename Type, int64_t elementCount, int dimensionCount>
+template<typename Type, int64_t elementCount, int64_t sliceCount, int dimensionCount>
 class GSliceArray {
-	friend class ValArray<Type, elementCount> ;
+	template<typename, int64_t>
+	friend class ValArray;
 	ValArray<Type, elementCount> *pointer_;
-	GSlice<dimensionCount> gSlice_;
-	GSliceArray(ValArray<Type, elementCount> *pointer, GSlice<dimensionCount> const &slice) :
+	GSlice<dimensionCount, sliceCount> gSlice_;
+	GSliceArray(ValArray<Type, elementCount> *pointer, GSlice<dimensionCount, sliceCount> const &slice) :
 			pointer_(pointer), gSlice_(slice) {
 	}
 public:
@@ -414,15 +424,14 @@ public:
 			pointer_(other.pointer_), gSlice_(other.gSlice_) {
 	}
 	GSliceArray& operator=(auto const &other) {
-		constexpr std::multiplies<int64_t> integerMultiply { };
 		int64_t const start = gSlice_.start();
 		auto const &strides = gSlice_.strides();
 		auto const &sizes = gSlice_.sizes();
-		int64_t const totalSize = std::accumulate(sizes.begin(), sizes.end(), int64_t(1), integerMultiply);
-		ValArray<int64_t, elementCount> indices(0, sizes.size());
+		ValArray<int64_t, dimensionCount> indices;
+		indices.fill(0);
 		int64_t i = start;
 		(*pointer_)[start] = other[0];
-		for (int64_t j = 1; j < totalSize; j++) {
+		for (int64_t j = 1; j < sliceCount; j++) {
 			int dimension = dimensionCount - 1;
 			while (++indices[dimension] == sizes[dimension]) {
 				indices[dimension] = 0;
@@ -435,16 +444,14 @@ public:
 		return *this;
 	}
 	GSliceArray& operator=(Type const &value) {
-		constexpr std::multiplies<int64_t> integerMultiply { };
 		int64_t const start = gSlice_.start();
 		auto const &strides = gSlice_.strides();
 		auto const &sizes = gSlice_.sizes();
-		int64_t const totalSize = std::accumulate(sizes.begin(), sizes.end(), int64_t(1), integerMultiply);
 		ValArray<int64_t, dimensionCount> indices;
 		indices.fill(0);
 		int64_t i = start;
 		(*pointer_)[start] = value;
-		for (int64_t j = 1; j < totalSize; j++) {
+		for (int64_t j = 1; j < sliceCount; j++) {
 			int dimension = dimensionCount - 1;
 			while (++indices[dimension] == sizes[dimension]) {
 				indices[dimension] = 0;
@@ -452,6 +459,8 @@ public:
 				dimension--;
 			}
 			i += strides[dimension];
+			assert(i < elementCount);
+			assert(j < sliceCount);
 			(*pointer_)[i] = value;
 		}
 		return *this;
@@ -560,7 +569,8 @@ struct ValArray {
 		data_.resize(elementCount);
 	}
 	ValArray(const Type &value) {
-		data_.resize(elementCount, value);
+		data_.resize(elementCount);
+		*this = value;
 	}
 	ValArray(const Type *valuesPointer) {
 		data_.resize(elementCount);
@@ -580,8 +590,8 @@ struct ValArray {
 		data_.resize(elementCount);
 		*this = sliceArray;
 	}
-	template<int dimensionCount>
-	ValArray(GSliceArray<Type, elementCount, dimensionCount> const &gSliceArray) {
+	template<int dimensionCount, int64_t sliceCount>
+	ValArray(GSliceArray<Type, sliceCount, elementCount, dimensionCount> const &gSliceArray) {
 		data_.resize(elementCount);
 		*this = gSliceArray;
 	}
@@ -609,7 +619,7 @@ struct ValArray {
 		return *this;
 	}
 	ValArray& operator=(ValArray &&other) {
-		swap(std::move(other));
+		data_ = std::move(other.data_);
 		return *this;
 	}
 	ValArray& operator=(std::initializer_list<Type> valuesList) {
@@ -624,8 +634,8 @@ struct ValArray {
 		}
 		return *this;
 	}
-	template<int dimensionCount>
-	ValArray& operator=(GSliceArray<Type, elementCount, dimensionCount> const &gSliceArray) {
+	template<int dimensionCount, int64_t sliceCount>
+	ValArray& operator=(GSliceArray<Type, sliceCount, elementCount, dimensionCount> const &gSliceArray) {
 		int64_t const start = gSliceArray.gSlice_.start();
 		auto const &strides = gSliceArray.gSlice_.strides();
 		auto const &sizes = gSliceArray.gSlice_.sizes();
@@ -680,9 +690,9 @@ struct ValArray {
 	SliceArray<Type, elementCount> operator[](Slice slice) {
 		return SliceArray<Type, elementCount> { this, slice };
 	}
-	template<int dimensionCount>
-	GSliceArray<Type, elementCount, dimensionCount> operator[](GSlice<dimensionCount> const &gSlice) {
-		return GSliceArray<Type, elementCount, dimensionCount> { this, std::move(gSlice) };
+	template<int dimensionCount, int64_t sliceCount>
+	GSliceArray<Type, elementCount, sliceCount, dimensionCount> operator[](GSlice<dimensionCount, sliceCount> const &gSlice) {
+		return GSliceArray<Type, elementCount, sliceCount, dimensionCount> { this, std::move(gSlice) };
 	}
 	MaskArray<Type, elementCount> operator[](ValArray<bool, elementCount> const &mask) {
 		return MaskArray<Type, elementCount> { this, std::move(mask) };
@@ -693,8 +703,8 @@ struct ValArray {
 	auto operator[](Slice slice) const {
 		return const_cast<ValArray*>(this)->operator[](slice);
 	}
-	template<int dimensionCount>
-	auto operator[](GSlice<dimensionCount> const &gSlice) const {
+	template<int dimensionCount, int64_t sliceCount>
+	auto operator[](GSlice<dimensionCount, sliceCount> const &gSlice) const {
 		return const_cast<ValArray*>(this)->operator[](gSlice);
 	}
 	auto operator[](ValArray<bool, elementCount> const &mask) const {
@@ -734,7 +744,7 @@ struct ValArray {
 		return result;
 	}
 	ValArray shift(int thisShift) const {
-		ValArray result(elementCount);
+		ValArray result;
 		if (thisShift > 0) {
 			std::copy_n(data_.begin() + thisShift, elementCount - thisShift, result.begin());
 		} else if (thisShift < 0) {
@@ -743,8 +753,8 @@ struct ValArray {
 		return result;
 	}
 	ValArray cshift(int thisShift) const {
-		ValArray result(elementCount);
-		if (thisShift > 0) {
+		ValArray result;
+		if (thisShift >= 0) {
 			std::copy_n(data_.begin() + thisShift, elementCount - thisShift, result.begin());
 			std::copy_n(data_.begin(), thisShift, result.begin() + elementCount - thisShift);
 		} else if (thisShift < 0) {
@@ -839,6 +849,15 @@ struct ValArray {
 	}
 	std::vector<Type>::const_iterator getHandle() const {
 		return data_.begin();
+	}
+	void randomize(Type a, Type b) {
+		auto const thisRand = [a, b]() {
+			Type const x = Type(rand()) / Type(RAND_MAX);
+			return a + (b - a) * x;
+		};
+		for (int64_t i = 0; i < elementCount; i++) {
+			data_[i] = thisRand();
+		}
 	}
 private:
 	std::vector<Type> data_;

@@ -752,16 +752,20 @@ template<typename Type, int Ndim>
 constexpr SquareMatrix<Type, Ndim - 1> subMatrix(SquareMatrix<Type, Ndim> const &A, int row, int col) {
 	SquareMatrix<Type, Ndim - 1> M;
 	for (int r = 0; r < row; r++) {
-		for (int c = 0; c < col; c++)
+		for (int c = 0; c < col; c++) {
 			M(r, c) = A(r, c);
-		for (int c = col; c < Ndim - 1; c++)
+		}
+		for (int c = col; c < Ndim - 1; c++) {
 			M(r, c) = A(r, c + 1);
+		}
 	}
 	for (int r = row; r < Ndim - 1; r++) {
-		for (int c = 0; c < col; c++)
+		for (int c = 0; c < col; c++) {
 			M(r, c) = A(r + 1, c);
-		for (int c = col; c < Ndim - 1; c++)
+		}
+		for (int c = col; c < Ndim - 1; c++) {
 			M(r, c) = A(r + 1, c + 1);
+		}
 	}
 	return M;
 }
@@ -772,8 +776,11 @@ constexpr T matrixDeterminant(SquareMatrix<T, N> const &A);
 template<typename T, int N>
 constexpr T matrixCofactor(SquareMatrix<T, N> const &A, int r, int c) {
 	if constexpr (N > 1) {
-		T sgn = ((r + c) & 1) ? -T(1) : T(1);
-		return sgn * matrixDeterminant(subMatrix(A, r, c));
+		if ((r + c) % 2 == 0) {
+			return matrixDeterminant(subMatrix(A, r, c));
+		} else {
+			return -matrixDeterminant(subMatrix(A, r, c));
+		}
 	} else {
 		return A(0, 0);
 	}
@@ -793,9 +800,12 @@ constexpr SquareMatrix<T, N> matrixCofactor(SquareMatrix<T, N> const &A) {
 template<typename T, int N>
 constexpr T matrixDeterminant(SquareMatrix<T, N> const &A) {
 	if constexpr (N > 1) {
+		T cof = matrixCofactor(A, 0, 0);
 		T sum = A(0, 0) * matrixCofactor(A, 0, 0);
 		for (int c = 1; c < N; c++) {
-			sum += A(0, c) * matrixCofactor(A, 0, c);
+			cof = matrixCofactor(A, 0, c);
+			auto const tmp = A(0, c) * cof;
+			sum += tmp;
 		}
 		return sum;
 	} else {
@@ -810,7 +820,9 @@ constexpr SquareMatrix<T, N> matrixAdjoint(SquareMatrix<T, N> const &A) {
 
 template<typename T, int N>
 constexpr auto matrixInverse(SquareMatrix<T, N> const &A) {
-	return matrixAdjoint(A) / matrixDeterminant(A);
+	auto const det = matrixDeterminant(A);
+	auto const adj = matrixAdjoint(A);
+	return adj / det;
 }
 
 template<typename T, int N>

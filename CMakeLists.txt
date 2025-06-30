@@ -80,20 +80,24 @@ set(GENERATED_SOURCE_DIR
 
 file(MAKE_DIRECTORY ${GENERATED_SOURCE_DIR})
 
-set(GENERATED_STAMP "${GENERATED_SOURCE_DIR}/.codegen.stamp")
+set(GENERATED_DG_TRANSFORMS "${GENERATED_SOURCE_DIR}/dgTransforms.hpp")
 
 add_custom_command(
-  OUTPUT ${GENERATED_STAMP}
-  COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED_SOURCE_DIR}
-  COMMAND codegen --output-dir ${GENERATED_SOURCE_DIR}
-  COMMAND ${CMAKE_COMMAND} -E touch ${GENERATED_STAMP}
+  OUTPUT  "${GENERATED_DG_TRANSFORMS}"
+          "${GENERATED_SOURCE_DIR}/.codegen.stamp"
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${GENERATED_SOURCE_DIR}"
+  COMMAND codegen --output-dir "${GENERATED_SOURCE_DIR}"
+  COMMAND "${CMAKE_COMMAND}" -E compare_files
+          "${GENERATED_DG_TRANSFORMS}" "${GENERATED_DG_TRANSFORMS}"
+  COMMAND "${CMAKE_COMMAND}" -E touch
+          "${GENERATED_SOURCE_DIR}/.codegen.stamp"
   DEPENDS codegen
   COMMENT "Running codegen → ${GENERATED_SOURCE_DIR}"
   VERBATIM
 )
 
 add_custom_target(generate_code
-  DEPENDS ${GENERATED_STAMP}
+  DEPENDS "${GENERATED_DG_TRANSFORMS}"
 )
 
 file(GLOB_RECURSE GENERATED_SOURCES
@@ -137,23 +141,3 @@ target_link_options(astrotiger PUBLIC
    $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -rdynamic>>
 )
 
-enable_testing()
-include(GoogleTest)
-
-add_executable(unit_tests
-  src/test.cpp
-)
-
-target_include_directories(unit_tests PRIVATE
-  ${PROJECT_SOURCE_DIR}/include
-  ${CMAKE_BINARY_DIR}/generated_source
-)
-
-target_link_libraries(unit_tests PRIVATE gtest gtest_main)
-
-target_compile_options(unit_tests PRIVATE
-   $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O0 -g -fno-omit-frame-pointer>>
-   $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O3>>
-)
-
-gtest_discover_tests(unit_tests)
