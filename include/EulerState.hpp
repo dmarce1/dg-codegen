@@ -3,6 +3,7 @@
 #include "ContainerArithmetic.hpp"
 #include "Matrix.hpp"
 #include "Util.hpp"
+#include "ValArray.hpp"
 
 #include <array>
 #include <cmath>
@@ -10,9 +11,9 @@
 #include <string>
 
 #define EULERS_CONSTRUCTION : \
-	rho(*std::launder(reinterpret_cast<T*>(base_type::data() + 0))), \
-	eg (*std::launder(reinterpret_cast<T*>(base_type::data() + 1))), \
-	S  (*std::launder(reinterpret_cast<std::array<T, D>*>(base_type::data() + 2)))
+	S  (*std::launder(reinterpret_cast<std::array<T, D>*>(base_type::data()))), \
+	rho(*std::launder(reinterpret_cast<T*>(base_type::data() + D))), \
+	eg (*std::launder(reinterpret_cast<T*>(base_type::data() + 1 + D)))
 
 enum class RiemannSolver : int {
 	LLF, HLL, HLLC
@@ -20,16 +21,21 @@ enum class RiemannSolver : int {
 
 template<typename T, int D, RiemannSolver riemannSolver = RiemannSolver::LLF>
 struct EulerState: public std::array<T, 2 + D> {
+	static_assert(D <= 3);
 	using EleType = typename ElementType<T>::type;
 	static constexpr int NF = 2 + D;
 	static constexpr EleType zero = EleType(0);
-	static constexpr EleType half = EleType(1) / EleType(2);
 	static constexpr EleType one = EleType(1);
-	static constexpr EleType gamma = EleType(5) / EleType(3);
+	static constexpr EleType two = EleType(2);
+	static constexpr EleType three = EleType(3);
+	static constexpr EleType five = EleType(5);
+	static constexpr EleType half = one / two;
+	static constexpr EleType third = one / three;
+	static constexpr EleType gamma = five * third;
 	static constexpr EleType gamm1 = gamma - one;
 	static constexpr EleType igamm1 = one / gamm1;
 	using base_type = std::array<T, NF>;
-	using value_type = EleType;
+	using value_type = T;
 	using eigensys_type = std::pair<std::array<T, NF>, SquareMatrix<T, NF>>;
 	static int dimCount() noexcept {
 		return D;
@@ -71,63 +77,118 @@ struct EulerState: public std::array<T, 2 + D> {
 		T const p = gamm1 * ei;
 		T const a = sqrt(gamma * p * irho);
 		std::fill(lambda.begin(), lambda.end(), v);
-		lambda[0] -= a;
-		lambda[2] += a;
+		lambda[D - 1] -= a;
+		lambda[D + 1] += a;
 		return lambda;
 
 	}
 	eigensys_type eigenSystem(int dim) const {
 		eigensys_type rc;
 		auto& eigenvalues = rc.first;
-		auto& rightEigenvectors = rc.second;
-		T const invρ = one / rho;
-		std::array<T, D> u = S * invρ;
-		if(dim) {
-			std::swap(u[dim], u[0]);
+		auto& eigenvectors = rc.second;
+		T const irho = one / rho;
+		std::array<T, D> u = S * irho;
+		if(dim != D - 1) {
+			std::swap(u[dim], u[D - 1]);
 		}
 		T const ek = half * dot(u, u);
-		T const ei = max(zero, eg - rho * ek);
-		T const p = gamm1 * ei;
-		T const a = sqrt(gamma * p * invρ);
-		T const h0 = (p + eg) * invρ;
-		std::fill(eigenvalues.begin(), eigenvalues.end(), u[0]);
-		eigenvalues[0] -= a;
-		eigenvalues[2] += a;
-		rightEigenvectors(0, 0) = one;
-		rightEigenvectors(0, 1) = one;
-		rightEigenvectors(0, 2) = one;
-		rightEigenvectors(1, 0) = u[0] - a;
-		rightEigenvectors(1, 1) = u[0];
-		rightEigenvectors(1, 2) = u[0] + a;
-		for(int r = 2; r < NF - 1; r++) {
-			rightEigenvectors(r, 0) = u[r - 1];
-			rightEigenvectors(r, 1) = u[r - 1];
-			rightEigenvectors(r, 2) = u[r - 1];
-		}
-		rightEigenvectors(NF - 1, 0) = h0 - a * u[0];
-		rightEigenvectors(NF - 1, 1) = ek;
-		rightEigenvectors(NF - 1, 2) = h0 + a * u[0];
-		for(int c = 3; c < NF; c++) {
-			rightEigenvectors(0, c) = zero;
-			for(int r = 1; r < NF - 1; r++) {
-				rightEigenvectors(r, c) = (r + 1 == c) ? one : zero;
+		T const ei = max(zero, eg * irho - ek);
+		T const p = gamm1 * rho * ei;
+		T const a = sqrt(gamma * p * irho);
+		T const h = (p + eg) * irho;
+		T const v = u[D - 1];
+		std::fill(eigenvalues.begin(), eigenvalues.end(), v);
+		eigenvalues[D - 1] -= a;
+		eigenvalues[D + 1] += a;
+		for(int r = 0; r < D; r++) {
+			for(int c = 0; c < D - 1; c++) {
+				eigenvectors(r, c) = (r == c) ? one : zero;
 			}
-			rightEigenvectors(NF - 1, c) = u[c - 2];
+			eigenvectors(r, D - 1) = u[r];
+			eigenvectors(r, D) = u[r];
+			eigenvectors(r, D + 1) = u[r];
 		}
-		if( dim ) {
+		for(int c = 0; c < D - 1; c++) {
+			eigenvectors(D, c) = zero;
+			eigenvectors(D + 1, c) = u[c];
+		}
+		for(int c = D - 1; c <= D + 1; c++) {
+			eigenvectors(D, c) = one;
+		}
+		eigenvectors(D - 1, D - 1) -= a;
+		eigenvectors(D - 1, D + 1) += a;
+		eigenvectors(D + 1, D - 1) = h - a * v;
+		eigenvectors(D + 1, D) = ek;
+		eigenvectors(D + 1, D + 1) = h + a * v;
+		if( dim != D - 1 ) {
 			for(int c = 0; c < NF; c++) {
-				std::swap(rightEigenvectors(1, c), rightEigenvectors(dim + 1, c));
+				std::swap(eigenvectors(D - 1, c), eigenvectors(dim, c));
 			}
 		}
 		return rc;
 	}
-	EulerState flux(int d1) const noexcept {
+	SquareMatrix<T, NF> rightEigenvectors() const {
+		std::array<std::array<T, D>, D> n;
+		T const magS = sqrt(dot(S, S));
+		n[0] = S / (magS + EleType(std::numeric_limits<double>::min()));
+		T theta = dot(n[0], n[0]);
+		n[0][0] += one - theta;
+		if constexpr (D == 2) {
+			n[1] = n[0];
+			std::swap(n[1][0], n[1][1]);
+			n[1][0] = -n[1][0];
+		} else if constexpr (D == 3) {
+			auto const maskT = (sqr(n[0][0]) + sqr(n[0][1]) > two * third);
+			auto const maskF = !maskT;
+			n[1][0][maskT] = zero;
+			n[1][0][maskF] = one;
+			n[1][1] = zero;
+			n[1][2][maskT] = one;
+			n[1][2][maskF] = zero;
+			n[1] -= n[0] * dot(n[1], n[0]);
+			n[1] = n[1] / norm(n[1]);
+			n[2][0] = +n[0][1] * n[1][2] - n[0][2] * n[1][1];
+			n[2][1] = -n[0][0] * n[1][2] + n[0][2] * n[1][0];
+			n[2][2] = +n[0][0] * n[1][1] - n[0][1] * n[1][0];
+			n[2] = n[2] / norm(n[2]);
+		}
+		T const irho = one / rho;
+		T const v = magS * irho;
+		T const ek = half * v * magS;
+		T const ei = max(zero, eg - ek);
+		T const p = gamm1 * ei;
+		T const a = sqrt(gamma * p * irho);
+		T const h = (eg + p) * irho;
+		SquareMatrix<T, NF> R;
+		for(int d = 0; d < D; d++) {
+			R(d, 0) = (v - a) * n[0][d];
+			R(d, 1) = v * n[0][d];
+			R(d, 2) = (v + a) * n[0][d];
+		}
+		R(D + 0, 0) = R(D + 0, 1) = R(D + 0, 2) = one;
+		R(D + 1, 0) = h - a * v;
+		R(D + 1, 1) = sqr(v) * half;
+		R(D + 1, 2) = h + a * v;
+		if constexpr(D == 2) {
+			for(int d = 0; d < D; d++) {
+				R(d, 3) = n[1][d];
+			}
+			R(D + 0, 3) = R(D + 1, 3) = zero;
+		} else if constexpr(D == 3) {
+			for(int d = 0; d < D; d++) {
+				R(d, 4) = n[2][d];
+			}
+			R(D + 0, 4) = R(D + 1, 4) = zero;
+		}
+		return R;
+	}
+	EulerState flux(int d1) const {
 		EulerState F;
 		T const irho = one / rho;
 		auto const v = S * irho;
 		T const ek = half * dot(v, S);
 		T const ei = max(zero, eg - ek);
-		T const p = (gamma - one) * ei;
+		T const p = gamm1 * ei;
 		T const u = v[d1];
 		F.rho = S[d1];
 		F.eg = u * (eg + p);
@@ -183,18 +244,21 @@ struct EulerState: public std::array<T, 2 + D> {
 				for(int d = 0; d < D; d++) {
 					ek[i] += half * irho[i] * sqr(u[i].S[d]);
 				}
-				ei[i] = std::max(zero, u[i].eg - ek[i]);
-				p[i] = (gamma - one) * ei[i];
+				ei[i] = max(zero, u[i].eg - ek[i]);
+				p[i] = gamm1 * ei[i];
 				a[i] = sqrt(gamma * p[i] * irho[i]);
 			}
-			s[L] = min(v[L] - a[L], v[R] - a[R]);
-			s[R] = max(v[R] + a[R], v[L] + a[L]);
-			s[L] = min(s[L], zero);
-			s[R] = max(s[R], zero);
+			s[L] = min( zero, min(v[L] - a[L], v[R] - a[R]));
+			s[R] = max( zero, max(v[L] + a[L], v[R] + a[R]));
 			for(int i = 0; i < N2; i++) {
 				f[i] = u[i].flux(dim);
 			}
-			return (s[R] * f[L] - s[L] * f[R] + s[L] * s[R] *(uR - uL)) / (s[R] - s[L]);
+			EulerState flux;
+			T const w = EleType(1) / (s[R] - s[L]);
+			for(int fi = 0; fi < NF; fi++) {
+				flux[fi] = w * (s[R] * f[L][fi] - s[L] * f[R][fi] + s[L] * s[R] * (uR[fi] - uL[fi]));
+			}
+			return flux;
 		} else/*if constexpr(riemannSolver == RiemannSolver::HLLC)*/{
 			constexpr int N2 = 2;
 			constexpr int N3 = 3;
@@ -277,20 +341,20 @@ struct EulerState: public std::array<T, 2 + D> {
 	static std::vector<std::string> getFieldNames() {
 		static std::vector<std::string> const fieldNames = []() {
 			std::vector<std::string> names;
-			names.push_back("rho");
-			names.push_back("eg");
 			for(int d = 0; d < D; d++) {
 				std::string const name = std::string("s_") + std::string(1, 'x' + d);
 				names.push_back(name);
 			}
+			names.push_back("rho");
+			names.push_back("eg");
 			return names;
 		}();
 		return fieldNames;
 	}
 private:
+	std::array<T, D>& S;
 	T& rho;
 	T& eg;
-	std::array<T, D>& S;
 };
 
 template<typename T, int D>
@@ -301,7 +365,6 @@ struct CanDoArithmetic<EulerState<T, D>> {
 template<typename T, int D>
 EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	using EleType = typename ElementType<T>::type;
-	static constexpr EleType half = EleType(1) / EleType(2);
 	static constexpr EleType one = EleType(1);
 	/*********************************************************/
 	static constexpr T rhoL = one;
@@ -314,16 +377,22 @@ EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	static constexpr T eR = c0 * pR;
 	EulerState<T, D> u;
 	u.setMomentum(zeroArray<T, D>());
-	if (x[0] < half) {
+	if (x[0] < 0.25 || 0.75 < x[0]) {
 		u.setDensity(rhoL);
 		u.setEnergy(eL);
-	} else if (x[0] > half) {
+	} else {
 		u.setDensity(rhoR);
 		u.setEnergy(eR);
-	} else {
-		u.setDensity(half * (rhoL + rhoR));
-		u.setEnergy(half * (eL + eR));
 	}
 	return u;
 }
+
+template<typename T, int D>
+using EulerStateLLF = EulerState<T, D, RiemannSolver::LLF>;
+
+template<typename T, int D>
+using EulerStateHLL = EulerState<T, D, RiemannSolver::HLL>;
+
+template<typename T, int D>
+using EulerStateHLLC = EulerState<T, D, RiemannSolver::HLLC>;
 

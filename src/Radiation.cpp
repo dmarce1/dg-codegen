@@ -294,26 +294,6 @@ std::array<T, 3> crossProduct(std::array<T, 3> const &a, std::array<T, 3> const 
 	return c;
 }
 
-template<typename T, auto D>
-T dot(std::array<T, D> const &a, std::array<T, D> const &b) {
-	T sum = T(0);
-	for (int i = 0; i < int(D); i++) {
-		sum += a[i] * b[i];
-	}
-	return sum;
-}
-
-template<typename T, auto D>
-T norm(std::array<T, D> const &a) {
-	return sqrt(dot(a, a));
-}
-
-template<typename T, auto D>
-std::array<T, D> normalize(std::array<T, D> const &a) {
-	std::array<T, D> n = a;
-	n *= T(1) / norm(a);
-	return n;
-}
 
 template<typename T>
 SquareMatrix<T, 3> crossProductMatrix(std::array<T, 3> const &a) {
@@ -675,7 +655,6 @@ void testRadiation() {
 	std::cout << getUnits() << "\n";
 	std::cout << getCodeConstants() << "\n";
 	int ntrial = 100000;
-	double err_max = 0.0;
 	for (int trialNum = 0; trialNum < ntrial; trialNum++) {
 		printf("%i\n", trialNum);
 		std::array<T, NDIM + 1> uR;
@@ -709,8 +688,7 @@ void testRadiation() {
 		printf("f = %e\n", f);
 		printf("Fr = %e %e %e ", uR[0], uR[1], uR[2]);
 		printf("Beta = %e %e %e \n", uG[0] / (rho * cons.c), uG[1] / (rho * cons.c), uG[2] / (rho * cons.c));
-		auto const eps = sqrt(std::numeric_limits<double>::epsilon());
-		auto sol = solveImplicitRadiation(uR, uG, rho, mu, kappa, chi, gamma, dt);
+		solveImplicitRadiation(uR, uG, rho, mu, kappa, chi, gamma, dt);
 
 		//		std::array<std::array<T, NDIM + 1>, NDIM + 1> dJ2;
 //		auto dJ1 = computeG2D(0, 0, 0, Er0, F0x, F0y, Eg0, Beta0x, Beta0y, rho, mu, kappa, chi, gamma, dt).second;

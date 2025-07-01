@@ -15,47 +15,19 @@ int hpx_main(int argc, char *argv[]) {
 	enableFPE();
 	processOptions(argc, argv);
 	printf("\nPrologue complete\n");
-//	constexpr int D = 4;
-//	constexpr int N = 3;
-//	SquareMatrix<ValArray<double, N>, D> A;
-//	for (int n = 0; n < D; n++) {
-//		for (int m = 0; m < D; m++) {
-//			A(n, m).randomize(-1.0, 1.0);
-//		}
-//	}
-//	for (int n = 0; n < D; n++) {
-//		for (int m = 0; m < D; m++) {
-//			for (int l = 0; l < N; l++) {
-//				printf("%e ", A(n, m)[l]);
-//			}
-//			printf("\n\n");
-//		}
-//	}
-//	auto const B = matrixInverse(A);
-//	auto const C = matrixInverse(B);
-//	auto const E = A - C;
-//	printf("\n\n");
-//	for (int n = 0; n < D; n++) {
-//		for (int m = 0; m < D; m++) {
-//			for (int l = 0; l < N; l++) {
-//				printf("%e ", E(n, m)[l]);
-//			}
-//			printf("\n\n");
-//		}
-//	}
-//	return hpx::local::finalize();
 	constexpr int P = 3;
-	constexpr int D = 3;
-	constexpr int N = 32;
+	constexpr int D = 2;
+	constexpr int N = 100;
 	using T = Real;
 	using RK = typename RungeKutta<T, P>::type;
-	HyperGrid<T, D, N, P, RK, EulerState> grid;
+	HyperGrid<T, D, N, P, RK, EulerStateHLL> grid;
 	grid.initialize(initSodShockTube<T, D>);
 	grid.enforceBoundaryConditions();
 	grid.output("X", 0, Real(0.0));
 	grid.applyLimiter();
+	grid.enforceBoundaryConditions();
 	T t = T(0);
-	T tmax = T(1);
+	T tmax = T(.125);
 	T dt;
 	RK const rk;
 	int iter = 0;
@@ -67,8 +39,10 @@ int hpx_main(int argc, char *argv[]) {
 		std::cout << "  dt = " << dt << std::endl;
 		for (int s = 0; s < rk.stageCount(); s++) {
 			grid.subStep(dt, s);
+			grid.enforceBoundaryConditions();
 		}
 		grid.endStep();
+		grid.enforceBoundaryConditions();
 		iter++;
 		t += dt;
 	}

@@ -121,7 +121,7 @@ public:
 	}
 	void output(const char *filenameBase, int timeStepNumber, Type const &time) {
 		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
-		writeHdf5<Type, dimensionCount, cellsAcrossInterior, modeCount, ghostWidth>(filename, cellWidth, currentState,
+		writeHdf5<Type, dimensionCount, cellsAcrossInterior, modeCount, ghostWidth, State>(filename, cellWidth, currentState,
 				State<Type, dimensionCount>::getFieldNames());
 		writeList("X.visit", "!NBLOCKS 1\n", filename + ".xmf");
 	}
@@ -152,6 +152,7 @@ public:
 		}
 	}
 	Type beginStep() {
+		applyLimiter();
 		using namespace Math;
 		previousState = currentState;
 		std::array<Type, dimensionCount> maximumEigenvalue;
@@ -202,8 +203,6 @@ public:
 				}
 			}
 		}
-		enforceBoundaryConditions();
-		applyLimiter();
 	}
 	void applyLimiter() {
 		constexpr int limiterVolume = ipow(cellsAcrossInterior + 2, dimensionCount);
@@ -222,14 +221,19 @@ public:
 			rightEigenvectors[dimension] = meanState.eigenSystem(dimension).second;
 			leftEigenvectors[dimension] = matrixInverse(rightEigenvectors[dimension]);
 		}
-		State<LimiterArray, dimensionCount> differenceState;
 		for (int polynomialDegree = modeCount - 1; polynomialDegree > 0; polynomialDegree--) {
 			int const begin = binco(polynomialDegree + dimensionCount - 1, dimensionCount);
 			int const end = binco(polynomialDegree + dimensionCount, dimensionCount);
 			for (int hiModeIndex = begin; hiModeIndex < end; hiModeIndex++) {
-				std::array<State<LimiterArray, dimensionCount>, dimensionCount> transposedState;
+				State<LimiterArray, dimensionCount> differenceState;
+				State<LimiterArray, dimensionCount> transposedState;
+				auto hiModeIndices = flatToTriangular<dimensionCount, modeCount>(hiModeIndex);
+				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+					transposedState[fieldIndex] = currentState[fieldIndex][hiModeIndex][limiterSlice];
+				}
 				for (int dimension = 0; dimension < dimensionCount; dimension++) {
-					auto hiModeIndices = flatToTriangular<dimensionCount, modeCount>(hiModeIndex);
+					GSlice<dimensionCount, limiterVolume> const limiterPlusSlice(limiterStart + gridStrides[dimension], limiterSizes, gridStrides);
+					GSlice<dimensionCount, limiterVolume> const limiterMinusSlice(limiterStart - gridStrides[dimension], limiterSizes, gridStrides);
 					if (hiModeIndices[dimension] == 0) {
 						continue;
 					}
@@ -237,44 +241,26 @@ public:
 					loModeIndices[dimension]--;
 					auto const loModeIndex = triangularToFlat<dimensionCount, modeCount>(loModeIndices);
 					for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-						transposedState[dimension][fieldIndex] = currentState[fieldIndex][hiModeIndex][limiterSlice];
-					}
-					for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
 						LimiterArray const stateCentral = currentState[fieldIndex][loModeIndex][limiterSlice];
-						LimiterArray const stateMinus = (currentState[fieldIndex][loModeIndex].cshift(-gridStrides[dimension]))[limiterSlice];
-						LimiterArray const statePlus = (currentState[fieldIndex][loModeIndex].cshift(+gridStrides[dimension]))[limiterSlice];
+						LimiterArray const statePlus = currentState[fieldIndex][loModeIndex][limiterPlusSlice];
+						LimiterArray const stateMinus = currentState[fieldIndex][loModeIndex][limiterMinusSlice];
 						differenceState[fieldIndex] = minmod(LimiterArray(statePlus - stateCentral), LimiterArray(stateCentral - stateMinus));
 					}
-					differenceState = leftEigenvectors[dimension] * differenceState;
-					transposedState[dimension] = leftEigenvectors[dimension] * transposedState[dimension];
+					//differenceState = leftEigenvectors[dimension] * differenceState;
+					//transposedState = leftEigenvectors[dimension] * transposedState;
+					auto const cLimit = Type(1) / Type(2 * loModeIndices[dimension] + 1);
 					for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-						auto const cLimit = Type(1) / Type(2 * loModeIndices[dimension] + 1);
 						differenceState[fieldIndex] *= cLimit;
-						transposedState[dimension][fieldIndex] = minmod(transposedState[dimension][fieldIndex], differenceState[fieldIndex]);
+						transposedState[fieldIndex] = minmod(transposedState[fieldIndex], differenceState[fieldIndex]);
 					}
+				//	transposedState = rightEigenvectors[dimension] * transposedState;
 				}
-				bool first = true;
-				for (int dimension = 0; dimension < dimensionCount; dimension++) {
-					auto hiModeIndices = flatToTriangular<dimensionCount, modeCount>(hiModeIndex);
-					if (hiModeIndices[dimension] == 0) {
-						continue;
-					}
-					transposedState[dimension] = rightEigenvectors[dimension] * transposedState[dimension];
-					if (first) {
-						first = false;
-						for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-							auto &current = currentState[fieldIndex][hiModeIndex];
-							current[limiterSlice] = transposedState[dimension][fieldIndex];
-						}
-					} else {
-						for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-							auto &current = currentState[fieldIndex][hiModeIndex];
-							current[limiterSlice] = minmod(LimiterArray(current[limiterSlice]), transposedState[dimension][fieldIndex]);
-						}
-					}
+				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+					currentState[fieldIndex][hiModeIndex][limiterSlice] = transposedState[fieldIndex];
 				}
 			}
 		}
+
 //		ValArray<Type, exteriorVolume> theta(Type(1));
 //		std::array<State<ValArray<Type, exteriorVolume>, dimensionCount>, nodeSurface> surfaceState;
 //		std::array<State<ValArray<Type, exteriorVolume>, dimensionCount>, nodeVolume> volumeState;
@@ -308,23 +294,20 @@ public:
 		constexpr int fluxVolume = interiorVolume + interiorVolume / cellsAcrossInterior;
 		Type const lambda = Type(2) * timeStepSize / cellWidth;
 		for (int dimension = 0; dimension < dimensionCount; dimension++) {
+			auto const thisGridStride = gridStrides[dimension];
 			auto fluxSizes = interiorSizes;
 			fluxSizes[dimension]++;
-			int const fluxStartLeft = interiorStart - gridStrides[dimension];
-			int const fluxStartRight = interiorStart;
 			ValArray<int64_t, dimensionCount> fluxStrides;
 			int stride = 1;
-			for( int thisDimension = dimensionCount - 1; thisDimension >= 0; thisDimension--) {
+			for (int thisDimension = dimensionCount - 1; thisDimension >= 0; thisDimension--) {
 				fluxStrides[thisDimension] = stride;
 				stride *= fluxSizes[thisDimension];
 			}
-			GSlice<dimensionCount, fluxVolume> fluxLeftSlice(fluxStartLeft, fluxSizes, gridStrides);
-			GSlice<dimensionCount, fluxVolume> fluxRightSlice(fluxStartRight, fluxSizes, gridStrides);
-			GSlice<dimensionCount, interiorVolume> fluxPlusSlice(fluxStrides[dimension], interiorSizes, fluxStrides);
-			GSlice<dimensionCount, interiorVolume> fluxMinusSlice(0, interiorSizes, fluxStrides);
+			auto const thisFluxStride = fluxStrides[dimension];
+			GSlice<dimensionCount, fluxVolume> const fluxLeftSlice(interiorStart - thisGridStride, fluxSizes, gridStrides);
+			GSlice<dimensionCount, fluxVolume> const fluxRightSlice(interiorStart, fluxSizes, gridStrides);
 			std::array<State<ValArray<Type, fluxVolume>, dimensionCount>, nodeSurface> leftState;
 			std::array<State<ValArray<Type, fluxVolume>, dimensionCount>, nodeSurface> rightState;
-			State<std::array<ValArray<Type, fluxVolume>, nodeSurface>, dimensionCount> riemannFlux;
 			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
 				std::array<ValArray<Type, fluxVolume>, modeVolume> leftModes;
 				std::array<ValArray<Type, fluxVolume>, modeVolume> rightModes;
@@ -339,20 +322,33 @@ public:
 					rightState[nodeIndex][fieldIndex] = right[nodeIndex];
 				}
 			}
+			State<std::array<ValArray<Type, fluxVolume>, nodeSurface>, dimensionCount> nodalFlux;
+			State<std::array<ValArray<Type, interiorVolume>, nodeSurface>, dimensionCount> leftFlux;
+			State<std::array<ValArray<Type, interiorVolume>, nodeSurface>, dimensionCount> rightFlux;
 			for (int nodeIndex = 0; nodeIndex < nodeSurface; nodeIndex++) {
 				auto const tmp = solveRiemannProblem(leftState[nodeIndex], rightState[nodeIndex], dimension);
 				for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-					riemannFlux[fieldIndex][nodeIndex] = tmp[fieldIndex];
+					nodalFlux[fieldIndex][nodeIndex] = tmp[fieldIndex];
 				}
 			}
+			GSlice<dimensionCount, interiorVolume> const fluxPlusSlice(thisFluxStride, interiorSizes, fluxStrides);
+			GSlice<dimensionCount, interiorVolume> const fluxMinusSlice(0, interiorSizes, fluxStrides);
 			for (int fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
-				auto const thisFlux = sAnalyze<fluxVolume>(riemannFlux[fieldIndex]);
-				auto const fluxPlus = vMassInverse<fluxVolume>(sTraceInverse<fluxVolume>(2 * dimension + 1, thisFlux));
-				auto const fluxMinus = vMassInverse<fluxVolume>(sTraceInverse<fluxVolume>(2 * dimension + 0, thisFlux));
+				auto const modalFlux = sAnalyze<fluxVolume>(nodalFlux[fieldIndex]);
+				std::array<ValArray<Type, interiorVolume>, modeSurface> modalSurfaceFluxPlus;
+				std::array<ValArray<Type, interiorVolume>, modeSurface> modalSurfaceFluxMinus;
+				std::array<ValArray<Type, interiorVolume>, modeVolume> modalVolumeFluxPlus;
+				std::array<ValArray<Type, interiorVolume>, modeVolume> modalVolumeFluxMinus;
+				for (int modeIndex = 0; modeIndex < modeSurface; modeIndex++) {
+					modalSurfaceFluxPlus[modeIndex] = modalFlux[modeIndex][fluxPlusSlice];
+					modalSurfaceFluxMinus[modeIndex] = modalFlux[modeIndex][fluxMinusSlice];
+				}
+				modalVolumeFluxPlus = sTraceInverse<interiorVolume>(2 * dimension + 1, modalSurfaceFluxPlus);
+				modalVolumeFluxMinus = sTraceInverse<interiorVolume>(2 * dimension, modalSurfaceFluxMinus);
+				modalVolumeFluxPlus = vMassInverse<interiorVolume>(modalVolumeFluxPlus);
+				modalVolumeFluxMinus = vMassInverse<interiorVolume>(modalVolumeFluxMinus);
 				for (int modeIndex = 0; modeIndex < modeVolume; modeIndex++) {
-					ValArray<Type, interiorVolume> const plus = fluxPlus[modeIndex][fluxPlusSlice];
-					ValArray<Type, interiorVolume> const minus = fluxMinus[modeIndex][fluxMinusSlice];
-					stateDerivative[fieldIndex][modeIndex][interiorSlice] -= lambda * (plus - minus);
+					stateDerivative[fieldIndex][modeIndex][interiorSlice] -= lambda * (modalVolumeFluxPlus[modeIndex] - modalVolumeFluxMinus[modeIndex]);
 				}
 			}
 		}

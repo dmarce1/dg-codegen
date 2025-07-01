@@ -29,7 +29,7 @@
 		return ThisExpression(this->getHandle());                          \
 	}
 
-#define VAL_ARRAY_BINARY_OPERATOR1(op)                                                  \
+#define VAL_ARRAY_BINARY_OPERATOR1(_class, op)                                                  \
 	auto operator op(auto const& other) const {                                          \
 		using HandleA = decltype(this->getHandle());                                      \
 		using HandleB = decltype(other.getHandle());                                      \
@@ -60,7 +60,7 @@
 			Type value_;                                                                   \
 		};                                                                                \
 		return ThisExpression(this->getHandle(), value);                          \
-	}                                                                                    \
+	}                                                                                     \
 
 #define VAL_ARRAY_BINARY_OPERATOR2(op)                                                  \
 	template<typename Type, int64_t elementCount, typename Derived> \
@@ -96,7 +96,7 @@
 		return ThisExpression(value, other.getHandle());        \
 	}                                                                                    \
 
-#define VAL_ARRAY_COMPARE_OPERATOR(op)                                                  \
+#define VAL_ARRAY_COMPARE_OPERATOR(_class, op)                                                  \
 	auto operator op(auto const& other) const {                                          \
 		using HandleA = decltype(this->getHandle());                                      \
 		using HandleB = decltype(other.getHandle());                                      \
@@ -104,7 +104,7 @@
 			ThisExpression(HandleA const &handleA, HandleB const &handleB) : \
 				handleA_(handleA), handleB_(handleB) {                         \
 			}                                                                              \
-			bool operator[](int64_t index) {                                               \
+			bool access(int64_t index) const {                                               \
 				return handleA_[index] op handleB_[index];                                  \
 			}                                                                              \
 		private:                                                                          \
@@ -112,6 +112,36 @@
 			HandleB handleB_;                                                              \
 		};                                                                                \
 		return ThisExpression(this->getHandle(), other.getHandle());        \
+	}\
+	auto operator op(Type const& value) const {                                          \
+		using Handle = decltype(this->getHandle());                                      \
+		struct ThisExpression : public Expression<bool, elementCount, ThisExpression> {        \
+			ThisExpression(Handle const &handle, Type const& value) : \
+				handle_(handle), value_(value) {                         \
+			}                                                                              \
+			bool access(int64_t index) const {                                               \
+				return handle_[index] op value_;                                  \
+			}                                                                              \
+		private:                                                                          \
+			Handle handle_;                                                              \
+			Type value_;                                                              \
+		};                                                                                \
+		return ThisExpression(this->getHandle(), value);        \
+	} \
+	friend auto operator op(Type const& value, _class const& other)  {                                          \
+		using Handle = decltype(other.getHandle());                                      \
+		struct ThisExpression : public Expression<bool, elementCount, ThisExpression> {        \
+			ThisExpression(Type const& value, Handle const &handle) : \
+				handle_(handle), value_(value) {                         \
+			}                                                                              \
+			bool access(int64_t index) const {                                               \
+				return value_ op handle_[index];                                  \
+			}                                                                              \
+		private:                                                                          \
+			Handle handle_;                                                              \
+			Type value_;                                                              \
+		};                                                                                \
+		return ThisExpression(value, other.getHandle());        \
 	}
 
 #define VAL_ARRAY_UNARY_FUNCTION(class_, name)                                   \
@@ -681,10 +711,10 @@ struct ValArray {
 		}
 		return *this;
 	}
-	Type& operator[](int64_t index) {
+	std::vector<Type>::reference operator[](int64_t index) {
 		return data_[index];
 	}
-	Type const& operator[](int64_t index) const {
+	std::vector<Type>::const_reference operator[](int64_t index) const {
 		return data_[index];
 	}
 	SliceArray<Type, elementCount> operator[](Slice slice) {
@@ -781,24 +811,24 @@ struct ValArray {
 	VAL_ARRAY_UNARY_OPERATOR(-)
 	VAL_ARRAY_UNARY_OPERATOR(!)
 	VAL_ARRAY_UNARY_OPERATOR(~)
-	VAL_ARRAY_BINARY_OPERATOR1(+)
-	VAL_ARRAY_BINARY_OPERATOR1(-)
-	VAL_ARRAY_BINARY_OPERATOR1(*)
-	VAL_ARRAY_BINARY_OPERATOR1(/)
-	VAL_ARRAY_BINARY_OPERATOR1(%)
-	VAL_ARRAY_BINARY_OPERATOR1(&&)
-	VAL_ARRAY_BINARY_OPERATOR1(||)
-	VAL_ARRAY_BINARY_OPERATOR1(&)
-	VAL_ARRAY_BINARY_OPERATOR1(|)
-	VAL_ARRAY_BINARY_OPERATOR1(^)
-	VAL_ARRAY_BINARY_OPERATOR1(>>)
-	VAL_ARRAY_BINARY_OPERATOR1(<<)
-	VAL_ARRAY_COMPARE_OPERATOR(<)
-	VAL_ARRAY_COMPARE_OPERATOR(>)
-	VAL_ARRAY_COMPARE_OPERATOR(<=)
-	VAL_ARRAY_COMPARE_OPERATOR(>=)
-	VAL_ARRAY_COMPARE_OPERATOR(==)
-	VAL_ARRAY_COMPARE_OPERATOR(!=)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, +)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, -)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, *)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, /)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, %)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, &&)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, ||)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, &)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, |)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, ^)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, >>)
+	VAL_ARRAY_BINARY_OPERATOR1(ValArray, <<)
+	VAL_ARRAY_COMPARE_OPERATOR(ValArray, <)
+	VAL_ARRAY_COMPARE_OPERATOR(ValArray, >)
+	VAL_ARRAY_COMPARE_OPERATOR(ValArray, <=)
+	VAL_ARRAY_COMPARE_OPERATOR(ValArray, >=)
+	VAL_ARRAY_COMPARE_OPERATOR(ValArray, ==)
+	VAL_ARRAY_COMPARE_OPERATOR(ValArray, !=)
 	VAL_ARRAY_UNARY_FUNCTION(ValArray, abs)
 	VAL_ARRAY_UNARY_FUNCTION(ValArray, exp)
 	VAL_ARRAY_UNARY_FUNCTION(ValArray, log)
@@ -859,6 +889,9 @@ struct ValArray {
 			data_[i] = thisRand();
 		}
 	}
+	static constexpr int64_t size() {
+		return elementCount;
+	}
 private:
 	std::vector<Type> data_;
 };
@@ -881,24 +914,24 @@ struct Expression {
 	VAL_ARRAY_UNARY_OPERATOR(-)
 	VAL_ARRAY_UNARY_OPERATOR(!)
 	VAL_ARRAY_UNARY_OPERATOR(~)
-	VAL_ARRAY_BINARY_OPERATOR1(+)
-	VAL_ARRAY_BINARY_OPERATOR1(-)
-	VAL_ARRAY_BINARY_OPERATOR1(*)
-	VAL_ARRAY_BINARY_OPERATOR1(/)
-	VAL_ARRAY_BINARY_OPERATOR1(%)
-	VAL_ARRAY_BINARY_OPERATOR1(&&)
-	VAL_ARRAY_BINARY_OPERATOR1(||)
-	VAL_ARRAY_BINARY_OPERATOR1(&)
-	VAL_ARRAY_BINARY_OPERATOR1(|)
-	VAL_ARRAY_BINARY_OPERATOR1(^)
-	VAL_ARRAY_BINARY_OPERATOR1(>>)
-	VAL_ARRAY_BINARY_OPERATOR1(<<)
-	VAL_ARRAY_COMPARE_OPERATOR(<)
-	VAL_ARRAY_COMPARE_OPERATOR(>)
-	VAL_ARRAY_COMPARE_OPERATOR(<=)
-	VAL_ARRAY_COMPARE_OPERATOR(>=)
-	VAL_ARRAY_COMPARE_OPERATOR(==)
-	VAL_ARRAY_COMPARE_OPERATOR(!=)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, +)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, -)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, *)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, /)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, %)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, &&)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, ||)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, &)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, |)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, ^)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, >>)
+	VAL_ARRAY_BINARY_OPERATOR1(Derived, <<)
+	VAL_ARRAY_COMPARE_OPERATOR(Derived, <)
+	VAL_ARRAY_COMPARE_OPERATOR(Derived, >)
+	VAL_ARRAY_COMPARE_OPERATOR(Derived, <=)
+	VAL_ARRAY_COMPARE_OPERATOR(Derived, >=)
+	VAL_ARRAY_COMPARE_OPERATOR(Derived, ==)
+	VAL_ARRAY_COMPARE_OPERATOR(Derived, !=)
 	VAL_ARRAY_UNARY_FUNCTION(Derived, abs)
 	VAL_ARRAY_UNARY_FUNCTION(Derived, exp)
 	VAL_ARRAY_UNARY_FUNCTION(Derived, log)

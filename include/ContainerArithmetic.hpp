@@ -156,3 +156,13 @@ inline constexpr auto dot(T const& a, T const& b) {
 }
 
 
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+inline constexpr auto norm(T const& a) {
+	return sqrt(dot(a, a));
+}
+
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+inline constexpr auto normalize(T const& a) {
+	using U = typename ElementType<T>::type;
+	return a / (norm(a) + (U(2 * std::numeric_limits<U>::min())));
+}
