@@ -17,7 +17,7 @@ int hpx_main(int argc, char *argv[]) {
 	printf("\nPrologue complete\n");
 	constexpr int P = 3;
 	constexpr int D = 2;
-	constexpr int N = 100;
+	constexpr int N = 200;
 	using T = Real;
 	using RK = typename RungeKutta<T, P>::type;
 	HyperGrid<T, D, N, P, RK, EulerStateHLL> grid;
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 	installFpeHandler();
 #endif
 	std::vector<std::string> cfg = { "hpx.commandline.allow_unknown=1" };
-	cfg.push_back("hpx.stacks.small_size=524288");
+	cfg.push_back("hpx.stacks.small_size=1048576");
 	hpx::init_params init_params;
 	init_params.cfg = std::move(cfg);
 	auto rc = hpx::init(argc, argv, init_params);

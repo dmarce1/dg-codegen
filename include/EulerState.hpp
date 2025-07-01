@@ -376,8 +376,10 @@ EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	static constexpr T eL = c0 * pL;
 	static constexpr T eR = c0 * pR;
 	EulerState<T, D> u;
+	T const r = T(1.0/2.0) * (x[0] - x[1] + T(1));
 	u.setMomentum(zeroArray<T, D>());
-	if (x[0] < 0.25 || 0.75 < x[0]) {
+//	printf( "%e %e %e \n", r, x[0],  x[1]);
+	if (r < 0.25 || 0.75 < r) {
 		u.setDensity(rhoL);
 		u.setEnergy(eL);
 	} else {
