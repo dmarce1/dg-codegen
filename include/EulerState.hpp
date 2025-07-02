@@ -278,7 +278,7 @@ struct EulerState: public std::array<T, 2 + D> {
 		T const a = dot(v_d, v_d) * half;
 		T const b = (dot(v_0, v_d) + u_0.eg - u_h.eg);
 		T const c = dot(v_0, v_0) * half - u_0.eg;
-		T const theta1 = min(EleType(1), (-b + sqrt(sqr(b) - four * a * c)) / (two * a + tiny));
+		T const theta1 = min(EleType(1), (sqrt(sqr(b) - four * a * c) - b) / (two * a + tiny));
 		T const drho = u_0.rho - u_h.rho;
 		T const theta2 = (one - feps) * abs(u_0.rho / (abs(drho) + tiny));
 		return min(theta1, theta2);
