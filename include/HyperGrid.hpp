@@ -8,6 +8,8 @@
 #include "dgTransforms.hpp"
 #include "ValArray.hpp"
 
+#include <hpx/future.hpp>
+
 #include <bitset>
 #include <functional>
 #include <memory>
@@ -92,12 +94,12 @@ class HyperGrid {
 	using FlxGridType = State<std::array<ValArray<Type, flxVolume>, modeVolume>, dimCount>;
 	using BaseType = typename ElementType<Type>::type;
 	using BoundaryGrid = State<std::array<ValArray<Type, intSurface>, modeVolume>, dimCount>;
-	using BoundaryHandle = std::function<BoundaryGrid(Face)>;
+	using BoundaryHandle = std::function<hpx::future<BoundaryGrid>(Face)>;
 
 	Type cellWidth;
-	std::shared_ptr<ExtGridType> currentStatePtr;
-	IntGridType state;
-	std::array<IntGridType, rkStageCount> stateStages;
+	IntGridType np1State;
+	IntGridType nState;
+	std::array<IntGridType, rkStageCount> jState;
 	int64_t corner;
 	ValArray<int64_t, dimCount> intSizes;
 	ValArray<int64_t, dimCount> intStrides;
@@ -105,27 +107,13 @@ class HyperGrid {
 	ValArray<int64_t, dimCount> extStrides;
 	std::array<ValArray<Type, intVolume>, dimCount> position;
 	std::array<BoundaryHandle, faceCount(dimCount)> boundaryHandles;
+	GSlice<dimCount, intVolume> intSlice;
 
 	static constexpr BaseType zero = BaseType(0);
 	static constexpr BaseType one = BaseType(1);
 	static constexpr BaseType two = BaseType(2);
 	static constexpr BaseType half = one / two;
 public:
-	ValArray<int64_t, dimCount> flxSizes(int dim) {
-		ValArray<int64_t, dimCount> sizes;
-		for (int n = 0; n < dimCount; n++) {
-			sizes[n] = (intWidth + int64_t(n == dim));
-		}
-		return sizes;
-	}
-	ValArray<int64_t, dimCount> flxStrides(int dim) {
-		ValArray<int64_t, dimCount> strides;
-		strides[dimCount - 1] = 1;
-		for (int n = dimCount - 1; n > 0; n--) {
-			strides[n - 1] = strides[n] * (intWidth + int64_t(n == dim));
-		}
-		return strides;
-	}
 	HyperGrid(Type const &xNint = Type(1)) :
 			cellWidth { xNint / Type(intWidth) } {
 		extSizes.fill(intWidth + 2);
@@ -137,6 +125,7 @@ public:
 			intStrides[n - 1] = intStrides[n] * intSizes[n];
 		}
 		corner = std::accumulate(extSizes.begin(), extSizes.end(), int64_t(1), std::multiplies<int64_t>());
+		intSlice = GSlice<dimCount, intVolume>(corner, intSizes, extStrides);
 		for (int dim = 0; dim < dimCount; dim++) {
 			for (int i = 0; i < intWidth; i++) {
 				auto const start = i * intStrides[dim];
@@ -173,66 +162,99 @@ public:
 		}
 		for (int field = 0; field < fieldCount; field++) {
 			auto const tmp = vAnalyze<>(nodalValues[field]);
-			state[field] = vMassInverse<>(tmp);
+			np1State[field] = vMassInverse<>(tmp);
 		}
 	}
 	void output(const char *filenameBase, int timeStepNumber, Type const &time) {
 		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
-		writeHdf5<Type, dimCount, intWidth, modeCount, State>(filename, cellWidth, state, State<Type, dimCount>::getFieldNames());
+		writeHdf5<Type, dimCount, intWidth, modeCount, State>(filename, cellWidth, np1State, State<Type, dimCount>::getFieldNames());
 		writeList("X.visit", "!NBLOCKS 1\n", filename + ".xmf");
 	}
 	BoundaryHandle getBoundaryHandle(Face face) const {
 		return BoundaryHandle([this](Face face) {
-			auto const dim = getFaceDim(face);
-			auto sizes = intSizes;
-			sizes[dim] = 1;
-			GSlice<dimCount, intSurface> slice(corner, sizes, extStrides);
-			BndGridType bndState;
-			for (int field = 0; field < fieldCount; field++) {
-				for (int mode = 0; mode < modeVolume; mode++) {
-					bndState[field][mode] = (*currentStatePtr)[field][mode][slice];
+			return hpx::async([this, face]() {
+				auto const dim = getFaceDim(face);
+				auto sizes = intSizes;
+				sizes[dim] = 1;
+				GSlice<dimCount, intSurface> slice(corner, sizes, extStrides);
+				BndGridType bndState;
+				for (int field = 0; field < fieldCount; field++) {
+					for (int mode = 0; mode < modeVolume; mode++) {
+						bndState[field][mode] = np1State[field][mode][slice];
+					}
 				}
-			}
-			return bndState;
+				return bndState;
+			});
 		});
 	}
-	void enforceBoundaryConditions() {
+	ExtGridType createGhostState() {
+		constexpr int nFaces = faceCount(dimCount);
+		std::array<GSlice<dimCount, intSurface>, nFaces> bndSlices;
+		ExtGridType gState;
+		std::vector<hpx::future<BndGridType>> bndFutures(nFaces);
+		for (Face face = 0; face < nFaces; face++) {
+			bndFutures[face] = boundaryHandles[face](nFaces);
+		}
 		for (Face face = 0; face < faceCount(dimCount); face++) {
-			auto const dim = getFaceDim(face);
+			int64_t const dim = getFaceDim(face);
+			int64_t const start = (getFaceDir(face) < 0) ? int64_t(0) : (extSizes[dim] * extStrides[dim]);
 			auto sizes = intSizes;
 			sizes[dim] = 1;
-			auto const bnd = boundaryHandles[face](flipFace(face));
-			GSlice<dimCount, intSurface> slice(corner - extStrides[dim], sizes, extStrides);
+			bndSlices[face] = GSlice<dimCount, intSurface>(start, sizes, extStrides);
+		}
+		for (int field = 0; field < fieldCount; field++) {
+			for (int mode = 0; mode < modeVolume; mode++) {
+				gState[field][mode][intSlice] = np1State[field][mode];
+			}
+		}
+		for (Face face = 0; face < nFaces; face++) {
+			auto const bndState = bndFutures[face].get();
 			for (int field = 0; field < fieldCount; field++) {
 				for (int mode = 0; mode < modeVolume; mode++) {
-					(*currentStatePtr)[field][mode][slice] = bnd[field][mode];
+					gState[field][mode][bndSlices[face]] = bndState[field][mode];
 				}
 			}
 		}
+		return gState;
 	}
-	Type beginStep() {
-		GSlice<dimCount, intVolume> const intSlice(corner, intSizes, extStrides);
-		applyLimiter();
-		using namespace Math;
+	void retireGhostState(ExtGridType &&gState) {
 		for (int field = 0; field < fieldCount; field++) {
 			for (int mode = 0; mode < modeVolume; mode++) {
-				state[field][mode] = (*currentStatePtr)[field][mode][intSlice];
+				np1State[field][mode] = gState[field][mode][intSlice];
 			}
 		}
+	}
+	ValArray<int64_t, dimCount> flxSizes(int dim) {
+		ValArray<int64_t, dimCount> sizes;
+		for (int n = 0; n < dimCount; n++) {
+			sizes[n] = (intWidth + int64_t(n == dim));
+		}
+		return sizes;
+	}
+	ValArray<int64_t, dimCount> flxStrides(int dim) {
+		ValArray<int64_t, dimCount> strides;
+		strides[dimCount - 1] = 1;
+		for (int n = dimCount - 1; n > 0; n--) {
+			strides[n - 1] = strides[n] * (intWidth + int64_t(n == dim));
+		}
+		return strides;
+	}
+	Type beginStep() {
 		std::array<Type, dimCount> maximumEigenvalue;
+		std::array<State<ValArray<Type, intVolume>, dimCount>, nodeVolume> stateAtNodes;
+		nState = np1State;
 		maximumEigenvalue.fill(Type(0));
-		std::array<State<ValArray<Type, extVolume>, dimCount>, nodeVolume> nodalState;
 		for (int field = 0; field < fieldCount; field++) {
-			auto const tmp = vSynthesize<extVolume>((*currentStatePtr)[field]);
+			auto const tmp = vSynthesize<>(np1State[field]);
 			for (int node = 0; node < nodeVolume; node++) {
-				nodalState[node][field] = tmp[node];
+				stateAtNodes[node][field] = tmp[node];
 			}
 		}
 		for (int node = 0; node < nodeVolume; node++) {
 			for (int dim = 0; dim < dimCount; dim++) {
-				auto const eigenvalues = nodalState[node].eigenvalues(dim);
-				for (int eigenIndex = 0; eigenIndex < int(eigenvalues.size()); eigenIndex++) {
-					ValArray<Type, extVolume> const lambda = abs(eigenvalues[eigenIndex]);
+				auto const eigenvalues = stateAtNodes[node].eigenvalues(dim);
+				for (int i = 0; i < fieldCount; i++) {
+					ValArray<Type, intVolume> const lambda = abs(eigenvalues[i]);
 					maximumEigenvalue[dim] = max(maximumEigenvalue[dim], lambda.max());
 				}
 			}
@@ -246,34 +268,31 @@ public:
 	}
 	void subStep(Type const &timeStepSize, int stageIndex) {
 		GSlice<dimCount, intVolume> const intSlice(corner, intSizes, extStrides);
-		currentStatePtr = std::make_shared<ExtGridType>();
 		for (int field = 0; field < fieldCount; field++) {
 			for (int mode = 0; mode < modeVolume; mode++) {
-				(*currentStatePtr)[field][mode][intSlice] = state[field][mode];
+				np1State[field][mode] = nState[field][mode];
 				for (int thisStage = 0; thisStage < stageIndex; thisStage++) {
-					(*currentStatePtr)[field][mode][intSlice] += butcherTable.a(stageIndex, thisStage) * stateStages[thisStage][field][mode];
+					np1State[field][mode] += butcherTable.a(stageIndex, thisStage) * jState[thisStage][field][mode];
 				}
-				stateStages[stageIndex][field][mode].fill(Type(0));
+				jState[stageIndex][field][mode].fill(Type(0));
 			}
 		}
-		enforceBoundaryConditions();
 		applyLimiter();
-		computeTimeDerivative(timeStepSize, stateStages[stageIndex]);
+		jState[stageIndex] = computeTimeDerivative(timeStepSize);
 	}
 	void endStep() {
-		GSlice<dimCount, intVolume> const intSlice(corner, intSizes, extStrides);
 		for (int field = 0; field < fieldCount; field++) {
 			for (int mode = 0; mode < modeVolume; mode++) {
-				(*currentStatePtr)[field][mode][intSlice] = state[field][mode];
-				for (int stageIndex = 0; stageIndex < rkStageCount; stageIndex++) {
-					(*currentStatePtr)[field][mode][intSlice] += butcherTable.b(stageIndex) * stateStages[stageIndex][field][mode];
+				np1State[field][mode] = nState[field][mode];
+				for (int j = 0; j < rkStageCount; j++) {
+					np1State[field][mode] += butcherTable.b(j) * jState[j][field][mode];
 				}
 			}
 		}
 	}
 	void applyLimiter() {
-		GSlice<dimCount, intVolume> const intSlice(corner, intSizes, extStrides);
 		{
+			auto gState = createGhostState();
 			std::array<std::array<State<IntArray, dimCount>, modeVolume>, dimCount> alpha;
 			std::array<SquareMatrix<IntArray, fieldCount>, dimCount> leftEigenvectors;
 			std::array<SquareMatrix<IntArray, fieldCount>, dimCount> rightEigenvectors;
@@ -282,7 +301,7 @@ public:
 			State<IntArray, dimCount> differenceState;
 			std::array<std::bitset<modeCount>, dimCount> wasLimited;
 			for (int field = 0; field < fieldCount; field++) {
-				meanState[field] = (*currentStatePtr)[field][0][intSlice];
+				meanState[field] = gState[field][0][intSlice];
 			}
 			for (int dim = 0; dim < dimCount; dim++) {
 				rightEigenvectors[dim] = meanState.eigenSystem(dim).second;
@@ -308,15 +327,15 @@ public:
 						GSlice<dimCount, intVolume> const intPlusSlice(corner + extStrides[dim], intSizes, extStrides);
 						GSlice<dimCount, intVolume> const intMinusSlice(corner - extStrides[dim], intSizes, extStrides);
 						for (int field = 0; field < fieldCount; field++) {
-							transposedState[field] = (*currentStatePtr)[field][hiMode][intSlice];
+							transposedState[field] = gState[field][hiMode][intSlice];
 						}
 						auto loModeIndices = hiModeIndices;
 						loModeIndices[dim]--;
 						auto const loMode = triangularToFlat<dimCount, modeCount>(loModeIndices);
 						for (int field = 0; field < fieldCount; field++) {
-							IntArray const stateCentral = (*currentStatePtr)[field][loMode][intSlice];
-							IntArray const statePlus = (*currentStatePtr)[field][loMode][intPlusSlice];
-							IntArray const stateMinus = (*currentStatePtr)[field][loMode][intMinusSlice];
+							IntArray const stateCentral = gState[field][loMode][intSlice];
+							IntArray const statePlus = gState[field][loMode][intPlusSlice];
+							IntArray const stateMinus = gState[field][loMode][intMinusSlice];
 							differenceState[field] = minmod(IntArray(statePlus - stateCentral), IntArray(stateCentral - stateMinus));
 						}
 						State<IntArray, dimCount> initialStateInverse;
@@ -354,9 +373,10 @@ public:
 							count++;
 						}
 					}
-					(*currentStatePtr)[field][mode][intSlice] *= (thisAlpha / BaseType(count));
+					gState[field][mode][intSlice] *= (thisAlpha / BaseType(count));
 				}
 			}
+			retireGhostState(std::move(gState));
 		}
 		{
 			ValArray<Type, intVolume> theta(Type(1));
@@ -365,14 +385,14 @@ public:
 			State<ValArray<Type, intVolume>, dimCount> meanState;
 			std::array<IntArray, modeVolume> modes;
 			for (int field = 0; field < fieldCount; field++) {
-				meanState[field] = (*currentStatePtr)[field][0][intSlice];
+				meanState[field] = np1State[field][0];
 			}
 			for (Face face = 0; face < faceCount(dimCount); face++) {
 				for (int field = 0; field < fieldCount; field++) {
 					for (int mode = 0; mode < modeVolume; mode++) {
-						modes[mode] = (*currentStatePtr)[field][mode][intSlice];
+						modes[mode] = np1State[field][mode][intSlice];
 					}
-					auto const surfaceNodes = sSynthesize<intVolume>(sTrace<intVolume>(face, modes));
+					auto const surfaceNodes = sSynthesize<>(sTrace<>(face, modes));
 					for (int node = 0; node < nodeSurface; node++) {
 						surfaceState[node][field] = surfaceNodes[node];
 					}
@@ -383,7 +403,7 @@ public:
 			}
 			for (int field = 0; field < fieldCount; field++) {
 				for (int mode = 0; mode < modeVolume; mode++) {
-					modes[mode] = (*currentStatePtr)[field][mode][intSlice];
+					modes[mode] = np1State[field][mode][intSlice];
 				}
 				auto const volumeNodes = vSynthesize<intVolume>(modes);
 				for (int node = 0; node < nodeVolume; node++) {
@@ -395,90 +415,97 @@ public:
 			}
 			for (int field = 0; field < fieldCount; field++) {
 				for (int mode = 1; mode < modeVolume; mode++) {
-					(*currentStatePtr)[field][mode][intSlice] *= theta;
+					np1State[field][mode][intSlice] *= theta;
 				}
 			}
 		}
 	}
-	void computeTimeDerivative(Type timeStepSize, IntGridType &stateDerivative) {
+	IntGridType computeTimeDerivative(Type timeStepSize) {
+		IntGridType kState;
 		Type const lambda = Type(2) * timeStepSize / cellWidth;
-		GSlice<dimCount, intVolume> const intSlice(corner, intSizes, extStrides);
-		for (int dim = 0; dim < dimCount; dim++) {
-			GSlice<dimCount, flxVolume> const fluxLeftSlice(corner - extStrides[dim], flxSizes(dim), extStrides[dim]);
-			GSlice<dimCount, flxVolume> const fluxRightSlice(corner, flxSizes(dim), extStrides[dim]);
-			std::array<State<ValArray<Type, flxVolume>, dimCount>, nodeSurface> leftState;
-			std::array<State<ValArray<Type, flxVolume>, dimCount>, nodeSurface> rightState;
-			for (int field = 0; field < fieldCount; field++) {
-				std::array<ValArray<Type, flxVolume>, modeVolume> leftModes;
-				std::array<ValArray<Type, flxVolume>, modeVolume> rightModes;
-				for (int mode = 0; mode < modeVolume; mode++) {
-					leftModes[mode] = (*currentStatePtr)[field][mode][fluxLeftSlice];
-					rightModes[mode] = (*currentStatePtr)[field][mode][fluxRightSlice];
+		{
+			auto gState = createGhostState();
+			for (int dim = 0; dim < dimCount; dim++) {
+				GSlice<dimCount, flxVolume> const fluxLeftSlice(corner - extStrides[dim], flxSizes(dim), extStrides[dim]);
+				GSlice<dimCount, flxVolume> const fluxRightSlice(corner, flxSizes(dim), extStrides[dim]);
+				std::array<ValArray<Type, intVolume>, modeSurface> pModalFaceFlux;
+				std::array<ValArray<Type, intVolume>, modeSurface> mModalFaceFlux;
+				std::array<ValArray<Type, flxVolume>, modeVolume> lModes;
+				std::array<ValArray<Type, flxVolume>, modeVolume> rModes;
+				std::array<ValArray<Type, intVolume>, modeVolume> pModalVolumeFlux;
+				std::array<ValArray<Type, intVolume>, modeVolume> mModalVolumeFlux;
+				State<std::array<ValArray<Type, flxVolume>, nodeSurface>, dimCount> nodalFlux;
+				State<std::array<ValArray<Type, intVolume>, nodeSurface>, dimCount> lNodalFlux;
+				State<std::array<ValArray<Type, intVolume>, nodeSurface>, dimCount> rNodalFlux;
+				std::array<State<ValArray<Type, flxVolume>, dimCount>, nodeSurface> lState;
+				std::array<State<ValArray<Type, flxVolume>, dimCount>, nodeSurface> rState;
+				for (int field = 0; field < fieldCount; field++) {
+					for (int mode = 0; mode < modeVolume; mode++) {
+						lModes[mode] = gState[field][mode][fluxLeftSlice];
+						rModes[mode] = gState[field][mode][fluxRightSlice];
+					}
+					auto const left = sSynthesize<flxVolume>(sTrace<flxVolume>(2 * dim + 1, lModes));
+					auto const right = sSynthesize<flxVolume>(sTrace<flxVolume>(2 * dim + 0, rModes));
+					for (int node = 0; node < nodeSurface; node++) {
+						lState[node][field] = left[node];
+						rState[node][field] = right[node];
+					}
 				}
-				auto const left = sSynthesize<flxVolume>(sTrace<flxVolume>(2 * dim + 1, leftModes));
-				auto const right = sSynthesize<flxVolume>(sTrace<flxVolume>(2 * dim + 0, rightModes));
 				for (int node = 0; node < nodeSurface; node++) {
-					leftState[node][field] = left[node];
-					rightState[node][field] = right[node];
+					auto const tmp = solveRiemannProblem(lState[node], rState[node], dim);
+					for (int field = 0; field < fieldCount; field++) {
+						nodalFlux[field][node] = tmp[field];
+					}
 				}
-			}
-			State<std::array<ValArray<Type, flxVolume>, nodeSurface>, dimCount> nodalFlux;
-			State<std::array<ValArray<Type, intVolume>, nodeSurface>, dimCount> leftFlux;
-			State<std::array<ValArray<Type, intVolume>, nodeSurface>, dimCount> rightFlux;
-			for (int node = 0; node < nodeSurface; node++) {
-				auto const tmp = solveRiemannProblem(leftState[node], rightState[node], dim);
+				GSlice<dimCount, intVolume> const fluxPlusSlice(flxStrides(dim)[dim], intSizes, flxStrides(dim));
+				GSlice<dimCount, intVolume> const fluxMinusSlice(0, intSizes, flxStrides(dim));
 				for (int field = 0; field < fieldCount; field++) {
-					nodalFlux[field][node] = tmp[field];
+					auto const modalFlux = sAnalyze<flxVolume>(nodalFlux[field]);
+					for (int mode = 0; mode < modeSurface; mode++) {
+						pModalFaceFlux[mode] = modalFlux[mode][fluxPlusSlice];
+						mModalFaceFlux[mode] = modalFlux[mode][fluxMinusSlice];
+					}
+					pModalVolumeFlux = sTraceInverse<intVolume>(2 * dim + 1, pModalFaceFlux);
+					mModalVolumeFlux = sTraceInverse<intVolume>(2 * dim, mModalFaceFlux);
+					pModalVolumeFlux = vMassInverse<intVolume>(pModalVolumeFlux);
+					mModalVolumeFlux = vMassInverse<intVolume>(mModalVolumeFlux);
+					for (int mode = 0; mode < modeVolume; mode++) {
+						kState[field][mode] -= lambda * (pModalVolumeFlux[mode] - mModalVolumeFlux[mode]);
+					}
 				}
 			}
-			GSlice<dimCount, intVolume> const fluxPlusSlice(flxStrides(dim)[dim], intSizes, flxStrides(dim));
-			GSlice<dimCount, intVolume> const fluxMinusSlice(0, intSizes, flxStrides(dim));
-			for (int field = 0; field < fieldCount; field++) {
-				auto const modalFlux = sAnalyze<flxVolume>(nodalFlux[field]);
-				std::array<ValArray<Type, intVolume>, modeSurface> modalSurfaceFluxPlus;
-				std::array<ValArray<Type, intVolume>, modeSurface> modalSurfaceFluxMinus;
-				std::array<ValArray<Type, intVolume>, modeVolume> modalVolumeFluxPlus;
-				std::array<ValArray<Type, intVolume>, modeVolume> modalVolumeFluxMinus;
-				for (int mode = 0; mode < modeSurface; mode++) {
-					modalSurfaceFluxPlus[mode] = modalFlux[mode][fluxPlusSlice];
-					modalSurfaceFluxMinus[mode] = modalFlux[mode][fluxMinusSlice];
-				}
-				modalVolumeFluxPlus = sTraceInverse<intVolume>(2 * dim + 1, modalSurfaceFluxPlus);
-				modalVolumeFluxMinus = sTraceInverse<intVolume>(2 * dim, modalSurfaceFluxMinus);
-				modalVolumeFluxPlus = vMassInverse<intVolume>(modalVolumeFluxPlus);
-				modalVolumeFluxMinus = vMassInverse<intVolume>(modalVolumeFluxMinus);
-				for (int mode = 0; mode < modeVolume; mode++) {
-					stateDerivative[field][mode] -= lambda * (modalVolumeFluxPlus[mode] - modalVolumeFluxMinus[mode]);
-				}
-			}
+			retireGhostState(std::move(gState));
 		}
-		for (int dim = 0; dim < dimCount; dim++) {
-			std::array<State<ValArray<Type, intVolume>, dimCount>, nodeVolume> volumeState;
-			State<std::array<ValArray<Type, intVolume>, nodeVolume>, dimCount> volumeFlux;
-			for (int field = 0; field < fieldCount; field++) {
-				std::array<ValArray<Type, intVolume>, modeVolume> volumeModes;
-				for (int mode = 0; mode < modeVolume; mode++) {
-					volumeModes[mode] = (*currentStatePtr)[field][mode][intSlice];
+		{
+			for (int dim = 0; dim < dimCount; dim++) {
+				std::array<State<ValArray<Type, intVolume>, dimCount>, nodeVolume> volumeState;
+				State<std::array<ValArray<Type, intVolume>, nodeVolume>, dimCount> volumeFlux;
+				for (int field = 0; field < fieldCount; field++) {
+					std::array<ValArray<Type, intVolume>, modeVolume> volumeModes;
+					for (int mode = 0; mode < modeVolume; mode++) {
+						volumeModes[mode] = np1State[field][mode][intSlice];
+					}
+					auto const nodes = vSynthesize<>(volumeModes);
+					for (int node = 0; node < nodeVolume; node++) {
+						volumeState[node][field] = nodes[node];
+					}
 				}
-				auto const nodes = vSynthesize<intVolume>(volumeModes);
 				for (int node = 0; node < nodeVolume; node++) {
-					volumeState[node][field] = nodes[node];
+					auto tmp = volumeState[node].flux(dim);
+					for (int field = 0; field < fieldCount; field++) {
+						volumeFlux[field][node] = tmp[field];
+					}
 				}
-			}
-			for (int node = 0; node < nodeVolume; node++) {
-				auto tmp = volumeState[node].flux(dim);
 				for (int field = 0; field < fieldCount; field++) {
-					volumeFlux[field][node] = tmp[field];
-				}
-			}
-			for (int field = 0; field < fieldCount; field++) {
-				auto const tmp = vMassInverse<intVolume>(vAnalyze<intVolume>(volumeFlux[field]));
-				auto const source = vMassInverse<intVolume>(vStiffness<intVolume>(dim, tmp));
-				for (int mode = 0; mode < modeVolume; mode++) {
-					stateDerivative[field][mode][intSlice] += lambda * source[mode];
+					auto const tmp = vMassInverse<>(vAnalyze<>(volumeFlux[field]));
+					auto const source = vMassInverse<>(vStiffness<>(dim, tmp));
+					for (int mode = 0; mode < modeVolume; mode++) {
+						kState[field][mode][intSlice] += lambda * source[mode];
+					}
 				}
 			}
 		}
+		return kState;
 	}
 }
 ;

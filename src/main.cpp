@@ -22,10 +22,8 @@ int hpx_main(int argc, char *argv[]) {
 	using RK = typename RungeKutta<T, P>::type;
 	HyperGrid<T, D, N, P, RK, EulerStateHLLC> grid;
 	grid.initialize(initSodShockTube<T, D>);
-	grid.enforceBoundaryConditions();
 	grid.output("X", 0, Real(0.0));
 	grid.applyLimiter();
-	grid.enforceBoundaryConditions();
 	T t = T(0);
 	T tmax = T(.125);
 	T dt;
@@ -39,10 +37,8 @@ int hpx_main(int argc, char *argv[]) {
 		std::cout << "  dt = " << dt << std::endl;
 		for (int s = 0; s < rk.stageCount(); s++) {
 			grid.subStep(dt, s);
-			grid.enforceBoundaryConditions();
 		}
 		grid.endStep();
-		grid.enforceBoundaryConditions();
 		iter++;
 		t += dt;
 	}
