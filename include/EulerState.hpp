@@ -265,7 +265,7 @@ struct EulerState: public std::array<T, 2 + D> {
 	bool sanityCheck() const {
 		return true;
 	}
-	friend T findPositivityPreservingTheta(const EulerState &u_0, const EulerState &u_h) noexcept {
+	friend T findPositivityPreservingTheta(const EulerState &u_0, const EulerState &u_h) {
 		constexpr auto tiny = EleType(std::numeric_limits<double>::min());
 		EleType const feps = EleType(1e-3);
 		auto const v_0 = u_0.S / u_0.rho;

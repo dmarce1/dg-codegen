@@ -19,14 +19,14 @@
 #include "Util.hpp"
 #include "ValArray.hpp"
 
-template<typename T, int D, int N, int P, int BW, template<typename, int> typename S>
-void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T, ipow(N + 2 * BW, D)>, binco(D + P - 1, D)>, D> const &fieldData,
+template<typename T, int D, int N, int P, template<typename, int> typename S>
+void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T, ipow(N, D)>, binco(D + P - 1, D)>, D> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
-	constexpr Range<int, D> Box { repeat<D>(-BW), repeat<D>(N + BW) };
+	constexpr Range<int, D> Box { repeat<D>(0), repeat<D>(N) };
 	using hindex_t = MultiIndex<Box>;
 	hid_t file_id;
 	file_id = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-	constexpr int M = N + 2 * BW + 1;
+	constexpr int M = N + 1;
 	std::array<double*, D> coordArrays;
 	std::array<hsize_t, D> dims;
 	int N3;
@@ -63,7 +63,7 @@ void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T, ipow(N
 	for (int d = 0; d < D; d++) {
 		N3 *= dims[d];
 	}
-	using index_type = BasisIndexType<P, D>;
+	using index_type = TriIndex<P, D>;
 	int const nf = fieldNames.size();
 	std::vector<T> buffer(N3);
 	for (int fi = 0; fi < nf; fi++) {
@@ -93,9 +93,9 @@ void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T, ipow(N
 	std::string const topology = std::to_string(D) + "DCoRectMesh";
 	std::string cDimensions, nDimensions, geometry = "ORIGIN_";
 	for (int d = 0; d < D; d++) {
-		cDimensions += std::to_string(N + 2 * BW);
+		cDimensions += std::to_string(N);
 		cDimensions += " ";
-		nDimensions += std::to_string(N + 2 * BW + 1);
+		nDimensions += std::to_string(N + 1);
 		nDimensions += " ";
 		geometry += "D";
 		geometry += std::string(1, 'X' + d);
@@ -112,7 +112,7 @@ void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T, ipow(N
 	std::string minStr;
 	std::string maxStr;
 	for (int d = 0; d < D; d++) {
-		minStr += std::to_string(-BW * h) + " ";
+		minStr += std::to_string(0) + " ";
 		maxStr += std::to_string(h) + " ";
 	}
 	minStr.pop_back();
