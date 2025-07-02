@@ -17,10 +17,10 @@ int hpx_main(int argc, char *argv[]) {
 	printf("\nPrologue complete\n");
 	constexpr int P = 3;
 	constexpr int D = 2;
-	constexpr int N = 200;
+	constexpr int N = 128;
 	using T = Real;
 	using RK = typename RungeKutta<T, P>::type;
-	HyperGrid<T, D, N, P, RK, EulerStateHLL> grid;
+	HyperGrid<T, D, N, P, RK, EulerStateHLLC> grid;
 	grid.initialize(initSodShockTube<T, D>);
 	grid.enforceBoundaryConditions();
 	grid.output("X", 0, Real(0.0));

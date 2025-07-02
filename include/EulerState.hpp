@@ -28,11 +28,14 @@ struct EulerState: public std::array<T, 2 + D> {
 	static constexpr EleType one = EleType(1);
 	static constexpr EleType two = EleType(2);
 	static constexpr EleType three = EleType(3);
+	static constexpr EleType four = EleType(4);
 	static constexpr EleType five = EleType(5);
-	static constexpr EleType half = one / two;
+	static constexpr EleType quarter = one / four;
 	static constexpr EleType third = one / three;
+	static constexpr EleType half = one / two;
 	static constexpr EleType gamma = five * third;
 	static constexpr EleType gamm1 = gamma - one;
+	static constexpr EleType gamp1o2gam = (gamma + one) / (two * gamma);
 	static constexpr EleType igamm1 = one / gamm1;
 	using base_type = std::array<T, NF>;
 	using value_type = T;
@@ -199,120 +202,86 @@ struct EulerState: public std::array<T, 2 + D> {
 		return F;
 	}
 	friend EulerState solveRiemannProblem(const EulerState &uL, const EulerState &uR, int dim) {
-		using std::sqrt;
-		using std::abs;
+		EulerState F;
+		T const irhoR = one / uR.rho;
+		T const irhoL = one / uL.rho;
+		T const vR = irhoR * uR.S[dim];
+		T const vL = irhoL * uL.S[dim];
+		T const ekR = half * irhoR * dot(uR.S, uR.S);
+		T const ekL = half * irhoL * dot(uL.S, uL.S);
+		T const eiR = max(zero, uR.eg - ekR);
+		T const eiL = max(zero, uL.eg - ekL);
+		T const pR = gamm1 * eiR;
+		T const pL = gamm1 * eiL;
+		T const aR = sqrt(gamma * pR * irhoR);
+		T const aL = sqrt(gamma * pL * irhoL);
+		EulerState const fL = uL.flux(dim);
+		EulerState const fR = uR.flux(dim);
 		if constexpr(riemannSolver == RiemannSolver::LLF) {
-			constexpr int N2 = 2;
-			constexpr int L = 0;
-			constexpr int R = 1;
-			std::array<EulerState, N2> u = {uL, uR};
-			std::array<EulerState, N2> f;
-			std::array<T, N2> irho, v, ek, ei, a;
-			std::array<T, N2> p;
-			for(int i = 0; i < N2; i++) {
-				irho[i] = one / u[i].rho;
-				v[i] = irho[i] * u[i].S[dim];
-				ek[i] = zero;
-				for(int d = 0; d < D; d++) {
-					ek[i] += half * irho[i] * sqr(u[i].S[d]);
-				}
-				ei[i] = max(zero, u[i].eg - ek[i]);
-				p[i] = gamm1 * ei[i];
-				a[i] = sqrt(gamma * p[i] * irho[i]);
-			}
-			T const s = max(T(a[L] + abs(v[L])), T(a[R] + abs(v[R])));
-			for(int i = 0; i < N2; i++) {
-				f[i] = u[i].flux(dim);
-			}
-			EulerState flux;
+			T const sStar = max(aL + abs(vL), aR + abs(vR));
 			for(int fi = 0; fi < NF; fi++) {
-				flux[fi] = (f[L][fi] + f[R][fi] - s * (uR[fi] - uL[fi])) * half;
+				F[fi] = (fL[fi] + fR[fi] - sStar * (uR[fi] - uL[fi])) * half;
 			}
-			return flux;
 		} else if constexpr(riemannSolver == RiemannSolver::HLL) {
-			constexpr int N2 = 2;
-			constexpr int L = 0;
-			constexpr int R = 1;
-			std::array<EulerState, N2> u = {uL, uR};
-			std::array<EulerState, N2> f;
-			std::array<T, N2> irho, v, ek, ei, a;
-			std::array<T, N2> s, p;
-			for(int i = 0; i < N2; i++) {
-				irho[i] = one / u[i].rho;
-				v[i] = irho[i] * u[i].S[dim];
-				ek[i] = zero;
-				for(int d = 0; d < D; d++) {
-					ek[i] += half * irho[i] * sqr(u[i].S[d]);
-				}
-				ei[i] = max(zero, u[i].eg - ek[i]);
-				p[i] = gamm1 * ei[i];
-				a[i] = sqrt(gamma * p[i] * irho[i]);
-			}
-			s[L] = min( zero, min(v[L] - a[L], v[R] - a[R]));
-			s[R] = max( zero, max(v[L] + a[L], v[R] + a[R]));
-			for(int i = 0; i < N2; i++) {
-				f[i] = u[i].flux(dim);
-			}
-			EulerState flux;
-			T const w = EleType(1) / (s[R] - s[L]);
+			T const sL = min(zero, min(vL - aL, vR - aR));
+			T const sR = max(zero, max(vL + aL, vR + aR));
+			T const w = EleType(1) / (sR - sL);
 			for(int fi = 0; fi < NF; fi++) {
-				flux[fi] = w * (s[R] * f[L][fi] - s[L] * f[R][fi] + s[L] * s[R] * (uR[fi] - uL[fi]));
+				F[fi] = w * (sR * fL[fi] - sL * fR[fi] + sL * sR * (uR[fi] - uL[fi]));
 			}
-			return flux;
 		} else/*if constexpr(riemannSolver == RiemannSolver::HLLC)*/{
-			constexpr int N2 = 2;
-			constexpr int N3 = 3;
-			constexpr int L = 0;
-			constexpr int R = 1;
-			constexpr int STAR = 2;
-			std::array<EulerState, N3> u = {uL, uR};
-			std::array<EulerState, N2> f;
-			std::array<T, N2> irho, v, ek, ei, a;
-			std::array<T, N3> s, p;
-			for(int i = 0; i < N2; i++) {
-				irho[i] = one / u[i].rho;
-				v[i] = irho[i] * u[i].S[dim];
-				ek[i] = zero;
-				for(int d = 0; d < D; d++) {
-					ek[i] += half * irho[i] * sqr(u[i].S[d]);
-				}
-				ei[i] = std::max(zero, u[i].eg - ek[i]);
-				p[i] = (gamma - one) * ei[i];
-				a[i] = sqrt(gamma * p[i] * irho[i]);
+			EulerState fStar, uK, fK;
+			T const pStar = max(zero, half * (pR + pL - quarter * (vR - vL) * (aR + aL) * (uR.rho + uL.rho)));
+			T const qL = sqrt(one + gamp1o2gam * max(zero, pStar / pL - one));
+			T const qR = sqrt(one + gamp1o2gam * max(zero, pStar / pR - one));
+			T const sL = vL - qL * aL;
+			T const sR = vR + qR * aR;
+			T const num = pR - pL + vL * uL.rho * (sL - vL) - vR * uR.rho * (sR - vR);
+			T const den = uL.rho * (sL - vL) - uR.rho * (sR - vR);
+			T const sStar = num / den;
+			T const pLR = half * (pR + pL + uL.rho * (sL - vL) * (sStar - vL) + uR.rho * (sR - vR) * (sStar - vR));
+			T const wL = half + copysign(half, sStar);
+			T const wR = half - copysign(half, sStar);
+			T const sK = wL * sL + wR * sR;
+			for(int fi = 0; fi < NF; fi++) {
+				uK[fi] = wL * uL[fi] + wR * uR[fi];
+				fK[fi] = wL * fL[fi] + wR * fR[fi];
 			}
-			s[L] = min(v[L] - a[L], v[R] - a[R]);
-			s[R] = max(v[L] + a[L], v[R] + a[R]);
-			T const num = p[R] - p[L] + u[L].rho * v[L] * (s[L] - v[L]) - u[R].rho * v[R] * (s[R] - v[R]);
-			T const den = u[L].rho * (s[L] - v[L]) - u[R].rho * (s[R] - v[R]);
-			s[STAR] = num / den;
-			for(int i = 0; i < N2; i++) {
-				f[i] = u[i].flux(dim);
+			T const iden = one / (sK - sStar);
+			for(int fi = 0; fi < NF; fi++) {
+				fStar[fi] = sStar * (sK * uK[fi] - fK[fi]) * iden;
 			}
-			if (zero < s[L]) {
-				return f[L];
-			} else if (zero > s[R]) {
-				return f[R];
-			} else {
-				int const i = ((s[STAR] > zero) ? L : R);
-				u[STAR].rho = u[i].rho * (s[i] - v[i]) / (s[i] - s[STAR]);
-				for(int dir = 0; dir < D; dir++) {
-					if(dim != dir ) {
-						u[STAR].S[dir] = u[STAR].rho * irho[i] * u[i].S[dir];
-					} else {
-						u[STAR].S[dir] = u[STAR].rho * s[STAR];
-					}
-				}
-				p[STAR] = p[i] + u[i].rho * (s[i] - v[i]) * (s[STAR] - v[i]);
-				u[STAR].eg = ((s[i] - v[i]) * u[i].eg - p[i] * v[i] + p[STAR] * s[STAR]) / (s[i] - s[STAR]);
-				return f[i] + s[i] * (u[STAR] - u[i]);
+			T const tmp = sK * pLR * iden;
+			fStar[dim] += tmp;
+			fStar.back() += sStar * tmp;
+			T const sStarK = sStar * sK;
+			T const wD = (one - copysign(one, sStar * sK)) * half;
+			for(int fi = 0; fi < NF; fi++) {
+				F[fi] = wD * fStar[fi] + (one - wD) * fK[fi];
 			}
 		}
+		return F;
 	}
 	bool sanityCheck() const {
 		return true;
 	}
-	friend T findPositivityPreservingTheta(const EulerState &uBar, const EulerState &uNode) noexcept {
-		return one;
+	friend T findPositivityPreservingTheta(const EulerState &u_0, const EulerState &u_h) noexcept {
+		constexpr auto tiny = EleType(std::numeric_limits<double>::min());
+		EleType const feps = EleType(1e-3);
+		auto const v_0 = u_0.S / u_0.rho;
+		auto const v_h = u_h.S / u_h.rho;
+		T const ek_0 = half * u_0.rho * dot(v_0, v_0);
+		T const ek_h = half * u_h.rho * dot(v_h, v_h);
+		T const ei_0 = u_0.eg - ek_0;
+		T const ei_h = u_h.eg - ek_h;
+		auto const v_d = v_h - v_0;
+		T const a = dot(v_d, v_d) * half;
+		T const b = (dot(v_0, v_d) + u_0.eg - u_h.eg);
+		T const c = dot(v_0, v_0) * half - u_0.eg;
+		T const theta1 = min(EleType(1), (-b + sqrt(sqr(b) - four * a * c)) / (two * a + tiny));
+		T const drho = u_0.rho - u_h.rho;
+		T const theta2 = (one - feps) * abs(u_0.rho / (abs(drho) + tiny));
+		return min(theta1, theta2);
 	}
 	T const& getDensity() const {
 		return rho;
@@ -376,7 +345,8 @@ EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	static constexpr T eL = c0 * pL;
 	static constexpr T eR = c0 * pR;
 	EulerState<T, D> u;
-	T const r = T(1.0/2.0) * (x[0] - x[1] + T(1));
+	T const r = x[0];
+	//T const r = T(1.0/2.0) * (x[0] - x[1] + T(1));
 	u.setMomentum(zeroArray<T, D>());
 //	printf( "%e %e %e \n", r, x[0],  x[1]);
 	if (r < 0.25 || 0.75 < r) {
