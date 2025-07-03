@@ -265,23 +265,33 @@ struct EulerState: public std::array<T, 2 + D> {
 	bool sanityCheck() const {
 		return true;
 	}
-	friend T findPositivityPreservingTheta(const EulerState &u_0, const EulerState &u_h) {
-		constexpr auto tiny = EleType(std::numeric_limits<double>::min());
-		EleType const feps = EleType(1e-3);
-		auto const v_0 = u_0.S / u_0.rho;
-		auto const v_h = u_h.S / u_h.rho;
-		T const ek_0 = half * u_0.rho * dot(v_0, v_0);
-		T const ek_h = half * u_h.rho * dot(v_h, v_h);
-		T const ei_0 = u_0.eg - ek_0;
-		T const ei_h = u_h.eg - ek_h;
-		auto const v_d = v_h - v_0;
-		T const a = dot(v_d, v_d) * half;
-		T const b = (dot(v_0, v_d) + u_0.eg - u_h.eg);
-		T const c = dot(v_0, v_0) * half - u_0.eg;
-		T const theta1 = min(EleType(1), (sqrt(sqr(b) - four * a * c) - b) / (two * a + tiny));
-		T const drho = u_0.rho - u_h.rho;
-		T const theta2 = (one - feps) * abs(u_0.rho / (abs(drho) + tiny));
-		return min(theta1, theta2);
+	friend T findPositivityPreservingTheta(const EulerState &u0, const EulerState &uh) {
+		constexpr EleType tiny = EleType(std::numeric_limits<double>::min());
+		constexpr EleType eps = EleType(1e-6);
+		auto const s0 = u0.S;
+		auto const sh = uh.S;
+		T const E0 = u0.eg;
+		T const Eh = uh.eg;
+		T const rho0 = u0.rho;
+		T const rhoh = uh.rho;
+		T const a = (Eh - E0) * (rhoh - rho0) - half * dot(s0 - sh, s0 - sh);
+		T const b = E0 * rhoh + Eh * rho0 - two * E0 * rho0 + dot(s0, s0 - sh);
+		T const c = (one - eps) * E0 * rho0 - half * dot(s0, s0);
+		T const desc = b * b - four * a * c;
+		if( (desc < zero).max() ) {
+			assert(false);
+			THROW("desc < zero");
+		}
+		T const maskQ = (abs(a) > tiny).template cast<EleType>();
+		T const maskL = (abs(a) <= tiny && abs(b) > tiny).template cast<EleType>();
+		T const maskC = one - maskQ - maskL;
+		T const thetaL = -c / (b  + maskQ + maskC);
+		T const thetaQ = T(sqrt(b * b - four * a * c) - b) / T(two * a + maskL + maskC);
+		T const thetaP = maskQ * thetaQ + maskL * thetaL + maskC;
+		T const num = (one - eps) * rho0;
+		T const drho = rho0 - rhoh;
+		T const thetaR = num / copysign(abs(drho) + EleType(2) * num * tiny, drho);
+		return max(min(min(thetaR, thetaP), EleType(1)), EleType(0));
 	}
 	T const& getDensity() const {
 		return rho;

@@ -74,7 +74,7 @@ using RK_3_3 = ButcherTable<T, 3, T(1),
 >;
 
 template<typename T>
-using RK_10_4 = ButcherTable<T, 10, T(6),
+using RK_10_4 = ButcherTable<T, 10, T(6.0),
 		std::array<std::array<T, 10>, 10> {
 			{
 				std::array<T, 10> { {T(0),       T(0),       T(0),       T(0),       T(0),       T(0),      T(0),      T(0),      T(0),      T(0)}},

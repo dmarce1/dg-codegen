@@ -383,11 +383,11 @@ public:
 	GSlice(int64_t start, ValArray<int64_t, dimensionCount> sizes, ValArray<int64_t, dimensionCount> strides) :
 			start_(start), sizes_(sizes), strides_(strides) {
 		auto const actualSize = std::accumulate(sizes_.begin(), sizes_.end(), int64_t(1), std::multiplies<int64_t>());
-		if(totalSize != actualSize) {
-			printf( "totalSize = %li\n", totalSize);
-			printf( "actualSize = %li\n", actualSize);
+		if (totalSize != actualSize) {
+			printf("totalSize = %li\n", totalSize);
+			printf("actualSize = %li\n", actualSize);
 			assert(false);
-			THROW( "GSlice size error\n" );
+			THROW("GSlice size error\n");
 		}
 	}
 	GSlice(GSlice const &other) :
@@ -711,6 +711,14 @@ struct ValArray {
 		}
 		return *this;
 	}
+	template<typename ConvType>
+	ValArray<ConvType, elementCount> cast() const {
+		ValArray<ConvType, elementCount> results;
+		for (int i = 0; i < elementCount; i++) {
+			results[i] = ConvType(data_[i]);
+		}
+		return results;
+	}
 	std::vector<Type>::reference operator[](int64_t index) {
 		return data_[index];
 	}
@@ -959,6 +967,41 @@ struct Expression {
 	}
 	int64_t size() const {
 		return static_cast<Derived const*>(this)->count();
+	}
+	Type sum() const {
+		Type result = (*this)[0];
+		for (int64_t i = 1; i < elementCount; i++) {
+			result += (*this)[i];
+		}
+		return result;
+	}
+	Type min() const {
+		Type result = (*this)[0];
+		for (int64_t i = 1; i < elementCount; i++) {
+			Type const &thisElement = (*this)[i];
+			if (thisElement < result) {
+				result = thisElement;
+			}
+		}
+		return result;
+	}
+	Type max() const {
+		Type result = (*this)[0];
+		for (int64_t i = 1; i < elementCount; i++) {
+			Type const &thisElement = (*this)[i];
+			if (result < thisElement) {
+				result = thisElement;
+			}
+		}
+		return result;
+	}
+	template<typename ConvType>
+	ValArray<ConvType, elementCount> cast() const {
+		ValArray<ConvType, elementCount> results;
+		for (int i = 0; i < elementCount; i++) {
+			results[i] = ConvType((*this)[i]);
+		}
+		return results;
 	}
 };
 
