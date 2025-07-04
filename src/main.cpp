@@ -15,7 +15,7 @@ int hpx_main(int argc, char *argv[]) {
 	enableFPE();
 	processOptions(argc, argv);
 	printf("\nPrologue complete\n");
-	constexpr int P = 3;
+	constexpr int P = 4;
 	constexpr int D = 2;
 	constexpr int N = 128;
 	using T = Real;

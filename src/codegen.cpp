@@ -960,7 +960,7 @@ int main(int, char*[]) {
 	hppCode += indent + "constexpr int squareSize = ipow(O, D);\n";
 	hppCode += indent + "\n";
 	for (int dim = 1; dim <= 3; dim++) {
-		for (int order = 1; order <= 4; order++) {
+		for (int order = 1; order <= 5; order++) {
 			hppCode += generate(dim, order);
 			hppCode += genMassMatrix(dim, order);
 			hppCode += genStiffnessMatrix(dim, order);

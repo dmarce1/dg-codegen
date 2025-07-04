@@ -255,6 +255,11 @@ struct Real {
 };
 
 namespace std {
+
+template<>
+struct numeric_limits<Real> : public numeric_limits<typename Real::Type> {
+};
+
 namespace numbers {
 template<>
 constexpr Real pi_v<Real> = Real(pi_v<typename Real::Type>);

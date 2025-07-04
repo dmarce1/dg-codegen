@@ -382,7 +382,6 @@ public:
 							alphaHi = alpha[dim][hiMode][field];
 							alphaLo = alpha[dim][loMode][field];
 							alphaHi = max(alphaHi, max(BaseType(0.0), hiState[field] * initialStateInverse[field]));
-							alphaLo = max(alphaLo, alphaHi);
 							alpha[dim][hiMode][field] = alphaHi;
 							alpha[dim][loMode][field] = alphaLo;
 						}

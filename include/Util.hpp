@@ -129,6 +129,17 @@ struct ElementType<T, std::void_t<typename T::value_type>> {
 	using type = typename ElementType<typename T::value_type>::type;
 };
 
+template<typename V>
+inline V safeDiv(V const &num, V const &den) {
+	using T = ElementType<V>::type;
+	constexpr T tiny = T(sqrt(std::numeric_limits<T>::min()));
+    return num / (den + copysign(tiny, den));
+}
+
+template<typename TypeA, typename TypeX, typename TypeC>
+TypeX clamp(TypeA const& a, TypeX const& x, TypeC const& c) {
+	return max(a, min(c, x));
+}
 void installFpeHandler();
 
 void toFile(std::string const &content, std::filesystem::path const &filePath);

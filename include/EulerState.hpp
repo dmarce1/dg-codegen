@@ -265,33 +265,38 @@ struct EulerState: public std::array<T, 2 + D> {
 	bool sanityCheck() const {
 		return true;
 	}
-	friend T findPositivityPreservingTheta(const EulerState &u0, const EulerState &uh) {
-		constexpr EleType tiny = EleType(std::numeric_limits<double>::min());
-		constexpr EleType eps = EleType(1e-6);
+	friend T findPositivityPreservingTheta(EulerState const &u0, EulerState const &uh) {
+		return one;
+		using EleType = typename ElementType<T>::type;
+		constexpr EleType epsRho = EleType(1e-13);
+		constexpr EleType tiny = EleType(sqrt(std::numeric_limits<EleType>::min()));
 		auto const s0 = u0.S;
-		auto const sh = uh.S;
-		T const E0 = u0.eg;
-		T const Eh = uh.eg;
+		auto const s1 = uh.S;
+		auto const dS = s1 - s0;
 		T const rho0 = u0.rho;
-		T const rhoh = uh.rho;
-		T const a = (Eh - E0) * (rhoh - rho0) - half * dot(s0 - sh, s0 - sh);
-		T const b = E0 * rhoh + Eh * rho0 - two * E0 * rho0 + dot(s0, s0 - sh);
-		T const c = (one - eps) * E0 * rho0 - half * dot(s0, s0);
-		T const desc = b * b - four * a * c;
-		if( (desc < zero).max() ) {
-			assert(false);
-			THROW("desc < zero");
-		}
-		T const maskQ = (abs(a) > tiny).template cast<EleType>();
-		T const maskL = (abs(a) <= tiny && abs(b) > tiny).template cast<EleType>();
-		T const maskC = one - maskQ - maskL;
-		T const thetaL = -c / (b  + maskQ + maskC);
-		T const thetaQ = T(sqrt(b * b - four * a * c) - b) / T(two * a + maskL + maskC);
-		T const thetaP = maskQ * thetaQ + maskL * thetaL + maskC;
-		T const num = (one - eps) * rho0;
-		T const drho = rho0 - rhoh;
-		T const thetaR = num / copysign(abs(drho) + EleType(2) * num * tiny, drho);
-		return max(min(min(thetaR, thetaP), EleType(1)), EleType(0));
+		T const rho1 = uh.rho;
+		T const dRho = rho1 - rho0;
+		T const E0 = u0.eg;
+		T const E1 = uh.eg;
+		T const dE = E1 - E0;
+		T const maskRho = (dRho < zero).template cast<EleType>();
+		T const thetaRho = maskRho * (safeDiv(T(epsRho - rho0), dRho) - one) + one;
+		T const a = dE * dRho - half * dot(dS, dS);
+		T const b = E0 * dRho + dE * rho0 - dot(s0, dS);
+		T const c = E0 * rho0 - half * dot(s0, s0);
+		T const g1 = a + b + c;
+		auto const needP = (g1 < zero).template cast<EleType>();
+		auto const skipP = one - needP;
+		T const disc = max(zero, needP * (b * b - four * a * c));
+		T const sqrtDisc = sqrt(disc);
+		auto const maskLin = needP * (abs(a) < tiny).template cast<EleType>();;
+		auto const maskQuad = needP - maskLin;
+		T const thetaLin = -safeDiv(c, b);
+		T const denom = -b - copysign(sqrtDisc, b);
+		T const thetaQuad = two * safeDiv(c, denom);
+		T const thetaP = skipP * one + maskLin * thetaLin + maskQuad * thetaQuad;
+		T const theta = clamp(zero, T(min(thetaRho, thetaP)), one);
+		return theta;
 	}
 	T const& getDensity() const {
 		return rho;
