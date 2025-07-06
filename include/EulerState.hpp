@@ -266,7 +266,6 @@ struct EulerState: public std::array<T, 2 + D> {
 		return true;
 	}
 	friend T findPositivityPreservingTheta(EulerState const &u0, EulerState const &uh) {
-		return one;
 		using EleType = typename ElementType<T>::type;
 		constexpr EleType epsRho = EleType(1e-13);
 		constexpr EleType tiny = EleType(sqrt(std::numeric_limits<EleType>::min()));
