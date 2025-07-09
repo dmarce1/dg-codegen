@@ -17,10 +17,10 @@
 
 #include "Matrix.hpp"
 #include "Util.hpp"
-#include "ValArray.hpp"
+#include "Valarray.hpp"
 
 template<typename T, int D, int N, int P, template<typename, int> typename S>
-void writeHdf5(std::string filename, T const &h, S<std::array<ValArray<T, ipow(N, D)>, binco(D + P - 1, D)>, D> const &fieldData,
+void writeHdf5(std::string filename, T const &h, S<std::array<Valarray<T>, binco(D + P - 1, D)>, D> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
 	constexpr Range<int, D> Box { repeat<D>(0), repeat<D>(N) };
 	using hindex_t = MultiIndex<Box>;

@@ -15,8 +15,8 @@ struct CanDoArithmetic<std::array<T, N>> {
 };
 
 
-template<typename T, typename U, std::enable_if_t<CanDoArithmetic<T>::value && CanDoArithmetic<U>::value, int> = 0>
-inline constexpr T& operator+=(T &A, U const &B) {
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+inline constexpr T& operator+=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
 		A[i] += B[i];
@@ -74,8 +74,8 @@ inline constexpr T operator-(T const &A) {
 	return B;
 }
 
-template<typename T, typename U, std::enable_if_t<CanDoArithmetic<T>::value && CanDoArithmetic<U>::value, int> = 0>
-inline constexpr T operator+(T const &A, U const &B) {
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+inline constexpr T operator+(T const &A, T const &B) {
 	auto C = A;
 	C += B;
 	return C;
@@ -88,8 +88,8 @@ inline constexpr T operator-(T const &A, T const &B) {
 	return C;
 }
 
-template<typename T, typename U, std::enable_if_t<CanDoArithmetic<T>::value && CanDoArithmetic<U>::value, int> = 0>
-inline constexpr T operator*(T const &A, U const &B) {
+template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+inline constexpr T operator*(T const &A, T const &B) {
 	auto C = A;
 	C *= B;
 	return C;

@@ -1,10 +1,9 @@
 #pragma once
 
+#include <Valarray.hpp>
 #include "ContainerArithmetic.hpp"
 #include "Matrix.hpp"
 #include "Util.hpp"
-#include "ValArray.hpp"
-
 #include <array>
 #include <cmath>
 #include <vector>

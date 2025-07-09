@@ -140,10 +140,30 @@ template<typename TypeA, typename TypeX, typename TypeC>
 TypeX clamp(TypeA const& a, TypeX const& x, TypeC const& c) {
 	return max(a, min(c, x));
 }
+
+template<typename T, size_t N>
+constexpr std::array<T, N> makeFilledArray(T const& value) {
+    std::array<T, N> arr{};
+    arr.fill(value);
+    return arr;
+}
+
+constexpr auto allSevens = makeFilledArray<int, 4>(7);    // {7,7,7,7}
+
 void installFpeHandler();
 
 void toFile(std::string const &content, std::filesystem::path const &filePath);
 
+//template<typename T1, typename T2, typename = void>
+//struct Multiplies {
+//	static constexpr bool value = false;
+//};
+//
+//template<typename T1, typename T2>
+//struct Multiplies<T1, T2, std::void_t<decltype(std::declval<T1>() * std::declval<T2>())>>  {
+//	static constexpr bool value = true;
+//};
+//
 //template<typename T, auto D>
 //std::array<std::array<T, D>, D> gramSchmidt(std::array<T, D> v) {
 //	using U = typename ElementType<T>::type;

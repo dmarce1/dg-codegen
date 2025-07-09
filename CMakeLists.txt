@@ -16,6 +16,7 @@ set(astrotiger_src
   src/Util.cpp
   src/Radiation.cpp
   src/SodShockTube.cpp
+  src/Valarray.cpp
 )
 
 set(astrotiger_header
@@ -43,7 +44,7 @@ set(astrotiger_header
   include/SparseMatrix.hpp
   include/TriIndex.hpp
   include/Util.hpp
-  include/ValArray.hpp
+  include/Valarray.hpp
   include/Zobrist.hpp
 )
 
