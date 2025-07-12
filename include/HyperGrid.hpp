@@ -74,17 +74,8 @@ class HyperGrid {
 	static constexpr auto sTrace = dgTrace<Valarray<Type>, dimCount, modeCount>;
 	static constexpr auto sTraceInverse = dgTraceInverse<Valarray<Type>, dimCount, modeCount>;
 
-//	using IntArray = Valarray<Type, intVolume>;
-//	using Pad1Array = Valarray<Type, pad1Volume>;
-//	using Pad2Array = Valarray<Type, pad2Volume>;
-//	using BndArray = Valarray<Type, bndVolume>;
-//	using IntGrid = State<std::array<IntArray, modeVolume>, dimCount>;
-//	using BndGrid = State<std::array<BndArray, modeVolume>, dimCount>;
-//	using Pad1Grid = State<std::array<Pad1Array, modeVolume>, dimCount>;
-//	using Pad2Grid = State<std::array<Pad2Array, modeVolume>, dimCount>;
 	using Grid = State<std::array<Valarray<Type>, modeVolume>, dimCount>;
 	using BndHandle = std::function<hpx::future<Grid>()>;
-	using BaseType = typename ElementType<Type>::type;
 
 	Grid createGrid(size_t count) const {
 		Grid grid;
@@ -111,10 +102,10 @@ class HyperGrid {
 	std::array<Valarray<size_t>, dimCount> pad2Sizes;
 	std::array<GSlice, dimCount> pad2Slices;
 
-	static constexpr BaseType zero = BaseType(0);
-	static constexpr BaseType one = BaseType(1);
-	static constexpr BaseType two = BaseType(2);
-	static constexpr BaseType half = one / two;
+	static constexpr Type zero = Type(0);
+	static constexpr Type one = Type(1);
+	static constexpr Type two = Type(2);
+	static constexpr Type half = one / two;
 
 public:
 	HyperGrid(Type const &xNint = Type(1)) {
@@ -139,7 +130,7 @@ public:
 				auto const start = i * intStrides[dim];
 				auto sizes = intSizes;
 				sizes[dim] = 1;
-				BaseType const x = (BaseType(i) + half) * half * cellWidth;
+				Type const x = (Type(i) + half) * half * cellWidth;
 				GSlice slice(start, sizes, intStrides);
 				position[dim][slice] = x;
 			}
@@ -240,7 +231,6 @@ public:
 	}
 	Grid createPaddedGrid2(int dim) {
 		Grid gState = createGrid(pad2Volume);
-		;
 		hpx::future<Grid> bndFuture1 = bndHandles[makeFace(dim, -1)]();
 		hpx::future<Grid> bndFuture2 = bndHandles[makeFace(dim, +1)]();
 		auto bndSizes = intSizes;
@@ -339,7 +329,7 @@ public:
 			for (int dim = 0; dim < dimCount; dim++) {
 				for (int mode = 0; mode < modeVolume; mode++) {
 					for (int field = 0; field < fieldCount; field++) {
-						alpha[dim][mode][field] = Type(mode == 0);
+						alpha[dim][mode][field] = Type(0);
 					}
 				}
 			}
@@ -347,7 +337,7 @@ public:
 			State<Valarray<Type>, dimCount> hiState = makeFilledArray<Valarray<Type>, fieldCount>(Valarray<Type>(intVolume));
 			State<Valarray<Type>, dimCount> slopeState = makeFilledArray<Valarray<Type>, fieldCount>(Valarray<Type>(intVolume));
 			for (int polynomialDegree = modeCount - 1; polynomialDegree > 0; polynomialDegree--) {
-				constexpr auto tiny = BaseType(std::numeric_limits<double>::min());
+				constexpr auto tiny = Type(std::numeric_limits<double>::min());
 				int const begin = binco(polynomialDegree + dimCount - 1, dimCount);
 				int const end = binco(polynomialDegree + dimCount, dimCount);
 				for (int hiMode = begin; hiMode < end; hiMode++) {
@@ -376,31 +366,31 @@ public:
 						}
 						State<Valarray<Type>, dimCount> initialStateInverse = makeFilledArray<Valarray<Type>, fieldCount>(Valarray<Type>(intVolume));
 						for (int field = 0; field < fieldCount; field++) {
-							initialStateInverse[field] = BaseType(1) / (hiState[field] + tiny);
+							initialStateInverse[field] = Type(1) / (hiState[field] + tiny);
 						}
 						slopeState = leftEigenvectors[dim] * slopeState;
 						hiState = leftEigenvectors[dim] * hiState;
 						auto const cLimit = Type(1) / Type(2 * loModeIndices[dim] + 1);
 						for (int field = 0; field < fieldCount; field++) {
 							slopeState[field] *= cLimit;
-							hiState[field] = minmod(hiState[field], slopeState[field]);
+							Valarray<Type> const tmp = minmod(hiState[field], slopeState[field]);
+							hiState[field] = tmp;
 						}
 						hiState = rightEigenvectors[dim] * hiState;
 						for (int field = 0; field < fieldCount; field++) {
-							Valarray<Type> alphaHi(intVolume), alphaLo(intVolume);
+							Valarray<Type> alphaHi(intVolume);
 							alphaHi = alpha[dim][hiMode][field];
-							alphaLo = alpha[dim][loMode][field];
-							alphaHi = max(alphaHi, max(BaseType(0.0), hiState[field] * initialStateInverse[field]));
-							alpha[dim][hiMode][field] = alphaHi;
-							alpha[dim][loMode][field] = alphaLo;
+							alpha[dim][hiMode][field] = max(alphaHi, max(zero, hiState[field] * initialStateInverse[field]));
 						}
 						wasLimited[dim][hiMode] = true;
 					}
 				}
 			}
 			for (int mode = 1; mode < modeVolume; mode++) {
+//				std::cout << "\n";
 				for (int field = 0; field < fieldCount; field++) {
-					Valarray<Type> thisAlpha(BaseType(0), intVolume);
+				//	std::cout << "\n";
+					Valarray<Type> thisAlpha(Type(0), intVolume);
 					int count = 0;
 					for (int dim = 0; dim < dimCount; dim++) {
 						if (wasLimited[dim][mode]) {
@@ -408,7 +398,9 @@ public:
 							count++;
 						}
 					}
-					np1State[field][mode] *= (thisAlpha / BaseType(count));
+					thisAlpha /= Type(count);
+				//	std::cout << toString(thisAlpha);
+					np1State[field][mode] *= thisAlpha;
 				}
 			}
 		}
@@ -503,10 +495,6 @@ public:
 					for (int mode = 0; mode < modeVolume; mode++) {
 						kState[field][mode] -= lambda * (pModalVolumeFlux[mode] - mModalVolumeFlux[mode]);
 					}
-//					if(field==2){
-//					for(int i = 0; i <= intWidth; i++) {
-//						printf( "%i %e %e\n", i, mModalVolumeFlux[0][64*i]/lambda, pModalVolumeFlux[0][64*i]/lambda);
-//					}}
 				}
 			}
 		}
@@ -534,7 +522,7 @@ public:
 					auto const tmp = vMassInverse(vAnalyze(volumeFlux[field]));
 					auto const source = vMassInverse(vStiffness(dim, tmp));
 					for (int mode = 0; mode < modeVolume; mode++) {
-					//	kState[field][mode] += lambda * source[mode];
+						kState[field][mode] += lambda * source[mode];
 					}
 				}
 			}

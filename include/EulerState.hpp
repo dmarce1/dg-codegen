@@ -71,7 +71,6 @@ struct EulerState: public std::array<T, 2 + D> {
 	}
 	std::array<T, NF> eigenvalues(int dim) const {
 		std::array<T, NF> lambda;
-		//using std::sqrt;
 		T const irho = one / rho;
 		T const v = S[dim] * irho;
 		T ek = half * irho * S[0] * S[0];
@@ -82,7 +81,7 @@ struct EulerState: public std::array<T, 2 + D> {
 		T const p = gamm1 * ei;
 		T const a = sqrt(gamma * p * irho);
 		std::fill(lambda.begin(), lambda.end(), v);
-		lambda[D - 1] -= a;
+		lambda[dim] -= a;
 		lambda[D + 1] += a;
 		return lambda;
 
@@ -144,61 +143,6 @@ struct EulerState: public std::array<T, 2 + D> {
 		}
 		return rc;
 	}
-	SquareMatrix<T, NF> rightEigenvectors() const {
-		std::array<std::array<T, D>, D> n;
-		T const magS = sqrt(dot(S, S));
-		n[0] = S / (magS + EleType(std::numeric_limits<double>::min()));
-		T theta = dot(n[0], n[0]);
-		n[0][0] += one - theta;
-		if constexpr (D == 2) {
-			n[1] = n[0];
-			std::swap(n[1][0], n[1][1]);
-			n[1][0] = -n[1][0];
-		} else if constexpr (D == 3) {
-			auto const maskT = (sqr(n[0][0]) + sqr(n[0][1]) > two * third);
-			auto const maskF = !maskT;
-			n[1][0][maskT] = zero;
-			n[1][0][maskF] = one;
-			n[1][1] = zero;
-			n[1][2][maskT] = one;
-			n[1][2][maskF] = zero;
-			n[1] -= n[0] * dot(n[1], n[0]);
-			n[1] = n[1] / norm(n[1]);
-			n[2][0] = +n[0][1] * n[1][2] - n[0][2] * n[1][1];
-			n[2][1] = -n[0][0] * n[1][2] + n[0][2] * n[1][0];
-			n[2][2] = +n[0][0] * n[1][1] - n[0][1] * n[1][0];
-			n[2] = n[2] / norm(n[2]);
-		}
-		T const irho = one / rho;
-		T const v = magS * irho;
-		T const ek = half * v * magS;
-		T const ei = max(zero, eg - ek);
-		T const p = gamm1 * ei;
-		T const a = sqrt(gamma * p * irho);
-		T const h = (eg + p) * irho;
-		SquareMatrix<T, NF> R;
-		for(int d = 0; d < D; d++) {
-			R(d, 0) = (v - a) * n[0][d];
-			R(d, 1) = v * n[0][d];
-			R(d, 2) = (v + a) * n[0][d];
-		}
-		R(D + 0, 0) = R(D + 0, 1) = R(D + 0, 2) = one;
-		R(D + 1, 0) = h - a * v;
-		R(D + 1, 1) = sqr(v) * half;
-		R(D + 1, 2) = h + a * v;
-		if constexpr(D == 2) {
-			for(int d = 0; d < D; d++) {
-				R(d, 3) = n[1][d];
-			}
-			R(D + 0, 3) = R(D + 1, 3) = zero;
-		} else if constexpr(D == 3) {
-			for(int d = 0; d < D; d++) {
-				R(d, 4) = n[2][d];
-			}
-			R(D + 0, 4) = R(D + 1, 4) = zero;
-		}
-		return R;
-	}
 	EulerState flux(int d1) const {
 		EulerState F;
 		T const irho = one / rho;
@@ -231,8 +175,8 @@ struct EulerState: public std::array<T, 2 + D> {
 		ekR = half * irhoR * uR.S[0] * uR.S[0];
 		ekL = half * irhoL * uL.S[0] * uL.S[0];
 		for(int d2 = 1; d2 < D; d2++) {
-			ekR += half * irhoR[d2] * uR.S[d2] * uR.S[d2];
-			ekL += half * irhoL[d2] * uL.S[d2] * uL.S[d2];
+			ekR += half * irhoR * uR.S[d2] * uR.S[d2];
+			ekL += half * irhoL * uL.S[d2] * uL.S[d2];
 		}
 		T const eiR = uR.eg - ekR;
 		T const eiL = uL.eg - ekL;
@@ -377,12 +321,12 @@ EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	static constexpr EleType half = EleType(0.5);
 	static constexpr EleType one = EleType(1);
 	/*********************************************************/
-	static constexpr T rhoL = one;
-	static constexpr T rhoR = half;
-	static constexpr T pL = 0.05;
-	static constexpr T pR = 0.05;
-	static constexpr T vL = one;
-	static constexpr T vR = one;
+	static constexpr T rhoL = EleType(1.000);
+	static constexpr T rhoR = EleType(0.125);
+	static constexpr T pL = EleType(1.000);
+	static constexpr T pR = EleType(0.100);
+	static constexpr T vL = EleType(0.000);
+	static constexpr T vR = EleType(0.000);
 //	static constexpr T pR = T(0.1);
 	/*********************************************************/
 	static constexpr T c0 = one / (EulerState<T, D>::gamma - one);

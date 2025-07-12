@@ -75,7 +75,7 @@
 		return *this;                                         \
 	}
 
-#define VALARRAY_BINARY1(_class, name, op)                                        \
+#define VALARRAY_BINARY(_class, name, op)                                        \
 	template<typename Ea, typename Eb>                                           \
 	struct name##Expression: public Expression<T, name##Expression<Ea, Eb>> {       \
 		using base_type = Expression<T, name##Expression<Ea, Eb>>;\
@@ -92,8 +92,9 @@
 		typename std::remove_reference<Eb>::type expr2_;                                                               \
 	};                                                                           \
 	template<typename Derived1>                                                  \
-	auto operator op (Expression<T, Derived1> const& expr2) const {                       \
+	auto operator op (Expression<T, Derived1> const& expr) const {                       \
 		auto const expr1 = toExpression(*this); 								 \
+		auto const expr2 = toExpression(expr); 								     \
 		return name##Expression(expr1, ((Derived1 const&) expr2));                                   \
 	}                                                                            \
 	auto operator op (Valarray<T> const& varr) const {                                \
@@ -106,16 +107,12 @@
 		auto const expr2 = toExpression(val); 								     \
 		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
+	friend auto operator op (T const& val, _class const& obj) {                                           \
+		auto const expr1 = toExpression(val); 								     \
+		auto const expr2 = toExpression(obj); 								 \
+		return name##Expression(expr1, expr2);                                   \
+	}                                                                            \
 
-#define VALARRAY_BINARY2(name, op)                                        \
-	template<typename T, typename Derived> \
-	auto operator op (T const& val, Expression<T, Derived> const& obj) {                                           \
-		return  ((Derived const&) obj) op val;\
-	}                                                                            \
-	template<typename T> \
-	auto operator op (T const& val, Valarray<T> const& obj) {                                           \
-		return obj op val;\
-	}                                                                            \
 
 #define VALARRAY_BINARY_FUNCTION2(name, func)                                    \
 	template<typename Ea, typename Eb>                                           \
@@ -144,15 +141,15 @@
 	}                                                                            \
 	template<typename T, typename Derived>\
 	auto name (Expression<T, Derived> const& arg1, Valarray<T> const& arg2) {                                  \
-		auto const expr1 = toExpression((Derived const&) arg1); 									 \
+		auto const expr1 = toExpression(arg1); 									 \
 		auto const expr2 = toExpression(arg2);                                   \
 		return name##Expression((Derived const&) expr1, expr2);                                   \
 	}                                                                            \
 	template<typename T, typename Derived>\
 	auto name (Valarray<T> const& arg1, Expression<T, Derived> const& arg2) {                                  \
 		auto const expr1 = toExpression(arg1); 									 \
-		auto const expr2 = toExpression((Derived const&) arg2);                                   \
-		return name##Expression(expr1, (Derived const&) expr2);                                   \
+		auto const expr2 = toExpression(arg2);                                   \
+		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
 	template<typename T>\
 	auto name (Valarray<T> const& arg1, Valarray<T> const& arg2) {                                  \
@@ -164,13 +161,13 @@
 	auto name (Expression<T, Derived> const& arg1, T const& arg2) {                                  \
 		auto const expr1 = toExpression(arg1); 									 \
 		auto const expr2 = toExpression(arg2);                                   \
-		return name##Expression((Derived const&) expr1, expr2);                                   \
+		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
 	template<typename T, typename Derived>\
 	auto name (T const& arg1, Expression<T, Derived>  const& arg2) {                                  \
 		auto const expr1 = toExpression(arg1); 									 \
 		auto const expr2 = toExpression(arg2);                                   \
-		return name##Expression(expr1, (Derived const&) expr2);                                   \
+		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
 	template<typename T>\
 	auto name (T const& arg1, Valarray<T>  const& arg2) {                                  \
@@ -219,8 +216,8 @@
 		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
 	friend auto operator op (T const& val, _class const& obj) {                                           \
-		auto const expr1 = toExpression(obj); 								 \
-		auto const expr2 = toExpression(val); 								     \
+		auto const expr1 = toExpression(val); 								     \
+		auto const expr2 = toExpression(obj); 								 \
 		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
 
@@ -241,11 +238,10 @@
 		}                                                                      	\
 		return *this;                                                          	\
 	}                                                                          	\
-	Valarray<T>& operator op##= (T const& _src) {                                 	\
-		auto const src = toExpression(_src);                                   	\
+	Valarray<T>& operator op##= (T const& src) {                                 	\
 		size_t const count = size();                                           	\
 		for(size_t i = 0; i != count; i++) {                                   	\
-			(*ptr_)[i] op##= src[i];                                              	\
+			(*ptr_)[i] op##= src;                                              	\
 		}                                                                      	\
 		return *this;                                                          	\
 	}                                                                          	\
@@ -256,7 +252,7 @@
 		using base_type = Expression<T, name##Expression<E>>;\
 		name##Expression(E const& e) : expr_(e) {                                 \
 		}                                                                         \
-		T access(size_t index) const {                                   \
+		auto access(size_t index) const {                                   \
 			return op expr_[index];                                               \
 		}                                                                         \
 		size_t count() const {      \
@@ -403,18 +399,18 @@ struct Valarray {
 	VALARRAY_COMPOUND_ASSIGNMENT(^)
 	VALARRAY_COMPOUND_ASSIGNMENT(>>)
 	VALARRAY_COMPOUND_ASSIGNMENT(<<)
-	VALARRAY_BINARY1(Valarray, Add, +)
-	VALARRAY_BINARY1(Valarray, Subtract, -)
-	VALARRAY_BINARY1(Valarray, Multiply, *)
-	VALARRAY_BINARY1(Valarray, Divide, /)
-	VALARRAY_BINARY1(Valarray, Modulus, %)
-	VALARRAY_BINARY1(Valarray, LogicalAnd, &&)
-	VALARRAY_BINARY1(Valarray, LogicalOr, ||)
-	VALARRAY_BINARY1(Valarray, BitwiseAnd, &)
-	VALARRAY_BINARY1(Valarray, BitwiseOr, |)
-	VALARRAY_BINARY1(Valarray, BitwiseXor, ^)
-	VALARRAY_BINARY1(Valarray, ShiftRight, >>)
-	VALARRAY_BINARY1(Valarray, ShiftLeft, <<)
+	VALARRAY_BINARY(Valarray, Add, +)
+	VALARRAY_BINARY(Valarray, Subtract, -)
+	VALARRAY_BINARY(Valarray, Multiply, *)
+	VALARRAY_BINARY(Valarray, Divide, /)
+	VALARRAY_BINARY(Valarray, Modulus, %)
+	VALARRAY_BINARY(Valarray, LogicalAnd, &&)
+	VALARRAY_BINARY(Valarray, LogicalOr, ||)
+	VALARRAY_BINARY(Valarray, BitwiseAnd, &)
+	VALARRAY_BINARY(Valarray, BitwiseOr, |)
+	VALARRAY_BINARY(Valarray, BitwiseXor, ^)
+	VALARRAY_BINARY(Valarray, ShiftRight, >>)
+	VALARRAY_BINARY(Valarray, ShiftLeft, <<)
 	VALARRAY_COMPARE(Valarray, Equal, ==)
 	VALARRAY_COMPARE(Valarray, NotEqual, !=)
 	VALARRAY_COMPARE(Valarray, Greater, >)
@@ -629,18 +625,18 @@ struct Expression {
 	auto operator[](size_t) const;
 	size_t size() const;
 	template<typename T2>
-	Valarray<T2> cast() const;VALARRAY_BINARY1(Derived, Add, +)
-	VALARRAY_BINARY1(Derived, Subtract, -)
-	VALARRAY_BINARY1(Derived, Multiply, *)
-	VALARRAY_BINARY1(Derived, Divide, /)
-	VALARRAY_BINARY1(Derived, Modulus, %)
-	VALARRAY_BINARY1(Derived, LogicalAnd, &&)
-	VALARRAY_BINARY1(Derived, LogicalOr, ||)
-	VALARRAY_BINARY1(Derived, BitwiseAnd, &)
-	VALARRAY_BINARY1(Derived, BitwiseOr, |)
-	VALARRAY_BINARY1(Derived, BitwiseXor, ^)
-	VALARRAY_BINARY1(Derived, ShiftRight, >>)
-	VALARRAY_BINARY1(Derived, ShiftLeft, <<)
+	Valarray<T2> cast() const;VALARRAY_BINARY(Derived, Add, +)
+	VALARRAY_BINARY(Derived, Subtract, -)
+	VALARRAY_BINARY(Derived, Multiply, *)
+	VALARRAY_BINARY(Derived, Divide, /)
+	VALARRAY_BINARY(Derived, Modulus, %)
+	VALARRAY_BINARY(Derived, LogicalAnd, &&)
+	VALARRAY_BINARY(Derived, LogicalOr, ||)
+	VALARRAY_BINARY(Derived, BitwiseAnd, &)
+	VALARRAY_BINARY(Derived, BitwiseOr, |)
+	VALARRAY_BINARY(Derived, BitwiseXor, ^)
+	VALARRAY_BINARY(Derived, ShiftRight, >>)
+	VALARRAY_BINARY(Derived, ShiftLeft, <<)
 	VALARRAY_COMPARE(Derived, Equal, ==)
 	VALARRAY_COMPARE(Derived, NotEqual, !=)
 	VALARRAY_COMPARE(Derived, Greater, >)
@@ -1167,18 +1163,6 @@ VALARRAY_BINARY_FUNCTION1(max)
 VALARRAY_BINARY_FUNCTION1(min)
 VALARRAY_UNARY_FUNCTION1(abs)
 VALARRAY_UNARY_FUNCTION1(sqrt)
-VALARRAY_BINARY2(Add, +)
-VALARRAY_BINARY2(Subtract, -)
-VALARRAY_BINARY2(Multiply, *)
-VALARRAY_BINARY2(Divide, /)
-VALARRAY_BINARY2(Modulus, %)
-VALARRAY_BINARY2(LogicalAnd, &&)
-VALARRAY_BINARY2(LogicalOr, ||)
-VALARRAY_BINARY2(BitwiseAnd, &)
-VALARRAY_BINARY2(BitwiseOr, |)
-VALARRAY_BINARY2(BitwiseXor, ^)
-VALARRAY_BINARY2(ShiftRight, >>)
-VALARRAY_BINARY2(ShiftLeft, <<)
 
 template<typename T>
 auto toString(Valarray<T> const &values) {
