@@ -2,13 +2,36 @@ cmake_minimum_required(VERSION 3.18)
 
 project(astrotiger CXX CUDA)
 
+# ------------------------------------------------------------------------------
+# FLAGS
+# ------------------------------------------------------------------------------
 set(ALL_FLAGS -std=c++23 -Wall -Wno-comma-subscript -I${PROJECT_SOURCE_DIR}/include)
 set(CXX_FLAGS  ${ALL_FLAGS} -march=native)
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native)
 
+# ------------------------------------------------------------------------------
+# DEPENDENCIES
+# ------------------------------------------------------------------------------
 find_package(HDF5 REQUIRED COMPONENTS C CXX)
 find_package(HPX  REQUIRED)
 
+# ------------------------------------------------------------------------------
+# GOOGLE TEST SETUP
+# ------------------------------------------------------------------------------
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+include(GoogleTest)
+
+# ------------------------------------------------------------------------------
+# SOURCES
+# ------------------------------------------------------------------------------
 set(astrotiger_src
   src/main.cpp
   src/Constants.cpp
@@ -48,6 +71,9 @@ set(astrotiger_header
   include/Zobrist.hpp
 )
 
+# ------------------------------------------------------------------------------
+# CODEGEN
+# ------------------------------------------------------------------------------
 add_executable(codegen
   src/codegen.cpp
   src/permutation.cpp
@@ -62,26 +88,25 @@ target_include_directories(codegen PRIVATE
 )
 
 target_link_libraries(codegen PUBLIC
-     stdc++_libbacktrace
+  stdc++_libbacktrace
 )
 
 target_compile_options(codegen PUBLIC
-   $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native -O0 -g -fno-omit-frame-pointer>>
-   $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native -O2>>
+  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native -O0 -g -fno-omit-frame-pointer>>
+  $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native -O2>>
 )
 
 target_link_options(codegen PUBLIC
-   $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native -rdynamic>>
-   $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native>>
-   $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:-pg ${CXX_FLAGS} -march=native>>
+  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native -rdynamic>>
+  $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -march=native>>
+  $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:-pg ${CXX_FLAGS} -march=native>>
 )
 
-set(GENERATED_SOURCE_DIR
-    ${CMAKE_BINARY_DIR}/generated_source
-)
-
+# ------------------------------------------------------------------------------
+# GENERATED CODE
+# ------------------------------------------------------------------------------
+set(GENERATED_SOURCE_DIR ${CMAKE_BINARY_DIR}/generated_source)
 file(MAKE_DIRECTORY ${GENERATED_SOURCE_DIR})
-
 set(GENERATED_DG_TRANSFORMS "${GENERATED_SOURCE_DIR}/dgTransforms.hpp")
 
 add_custom_command(
@@ -107,39 +132,72 @@ file(GLOB_RECURSE GENERATED_SOURCES
   "${GENERATED_SOURCE_DIR}/*.cpp"
 )
 
+# ------------------------------------------------------------------------------
+# ASTROTIGER EXECUTABLE
+# ------------------------------------------------------------------------------
 add_hpx_executable(
-   astrotiger
-   DEPENDENCIES
-      HDF5::HDF5
-      stdc++_libbacktrace
-    SOURCES
-      ${astrotiger_src}
-      ${GENERATED_SOURCES}
-   HEADERS
-      ${astrotiger_header}
+  astrotiger
+  DEPENDENCIES
+    HDF5::HDF5
+    stdc++_libbacktrace
+  SOURCES
+    ${astrotiger_src}
+    ${GENERATED_SOURCES}
+  HEADERS
+    ${astrotiger_header}
 )
 
 add_dependencies(astrotiger generate_code)
 
 target_include_directories(astrotiger
-   PUBLIC
-      ${PROJECT_SOURCE_DIR}/include
-      ${GENERATED_SOURCE_DIR}
+  PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+    ${GENERATED_SOURCE_DIR}
 )
 
 set_property(TARGET astrotiger PROPERTY CUDA_ARCHITECTURES native)
 set_property(TARGET astrotiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 target_compile_options(astrotiger PUBLIC
-   $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O3>>
-   $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O0 -g -fno-omit-frame-pointer>>
-   $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -g -pg -DNDEBUG>>
-   $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} -G>>
-   $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} --use_fast_math -DNDEBUG Xcompiler=-Ofast>>
-   $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} -Xcompiler=-g -pg -DNDEBUG>>
+  $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O3>>
+  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O0 -g -fno-omit-frame-pointer -fsanitize=address>>
+  $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -g -pg -DNDEBUG>>
+  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} -G>>
+  $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} --use_fast_math -DNDEBUG Xcompiler=-Ofast>>
+  $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} -Xcompiler=-g -pg -DNDEBUG>>
 )
 
 target_link_options(astrotiger PUBLIC
-   $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -rdynamic>>
+  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -rdynamic -fsanitize=address>>
 )
 
+# ------------------------------------------------------------------------------
+# UNIT TESTS
+# ------------------------------------------------------------------------------
+add_executable(valarray_tests
+  tests/valarray_tests.cpp
+  tests/valarray_stress_tests.cpp
+  src/Valarray.cpp
+)
+
+add_dependencies(valarray_tests generate_code)
+
+target_include_directories(valarray_tests PRIVATE
+  ${PROJECT_SOURCE_DIR}/include
+  ${GENERATED_SOURCE_DIR}
+)
+
+target_compile_options(valarray_tests PRIVATE ${CXX_FLAGS})
+target_link_libraries(valarray_tests PRIVATE gtest_main)
+target_link_options(valarray_tests PRIVATE)
+
+gtest_discover_tests(valarray_tests
+  DISCOVERY_TIMEOUT 60
+  PROPERTIES LABELS "unit"
+)
+
+# Optional: Add a `check` target to build and run tests in one go
+add_custom_target(check
+  DEPENDS valarray_tests 
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+)

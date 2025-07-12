@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cmath>
+#include <concepts>
+#include <cstddef>
 #include <filesystem>
 #include <numeric>
 #include <string>
@@ -133,58 +135,40 @@ template<typename V>
 inline V safeDiv(V const &num, V const &den) {
 	using T = ElementType<V>::type;
 	constexpr T tiny = T(sqrt(std::numeric_limits<T>::min()));
-    return num / (den + copysign(tiny, den));
+	return num / (den + copysign(tiny, den));
 }
 
 template<typename TypeA, typename TypeX, typename TypeC>
-TypeX clamp(TypeA const& a, TypeX const& x, TypeC const& c) {
+TypeX clamp(TypeA const &a, TypeX const &x, TypeC const &c) {
 	return max(a, min(c, x));
 }
 
 template<typename T, size_t N>
-constexpr std::array<T, N> makeFilledArray(T const& value) {
-    std::array<T, N> arr{};
-    arr.fill(value);
-    return arr;
+constexpr std::array<T, N> makeFilledArray(T const &value) {
+	std::array<T, N> arr { };
+	arr.fill(value);
+	return arr;
 }
 
-constexpr auto allSevens = makeFilledArray<int, 4>(7);    // {7,7,7,7}
 
 void installFpeHandler();
 
 void toFile(std::string const &content, std::filesystem::path const &filePath);
 
-//template<typename T1, typename T2, typename = void>
-//struct Multiplies {
-//	static constexpr bool value = false;
-//};
-//
-//template<typename T1, typename T2>
-//struct Multiplies<T1, T2, std::void_t<decltype(std::declval<T1>() * std::declval<T2>())>>  {
-//	static constexpr bool value = true;
-//};
-//
-//template<typename T, auto D>
-//std::array<std::array<T, D>, D> gramSchmidt(std::array<T, D> v) {
-//	using U = typename ElementType<T>::type;
-//	constexpr U half = U(1) / U(2);
-//	std::array<std::array<T, D>, D> u;
-//	std::array<T, D> k;
-//	std::iota(k.begin(), k.end(), T(0));
-//	auto const theta = dot(v, v);
-//	for(int d  = 0; d < int(D - 1); d++) {
-//		v[d] *= theta;
-//	}
-//	v.back() = (U(1) - theta) + theta * v.back();
-//	u[0] = v;
-//	for (int n = 0; n < D; n++) {
-//		auto &un = u[n];
-//		auto const u0 = un;
-//		for (int m = 0; m < n; m++) {
-//			un -= u[m][k[n]] * u[m];
-//		}
-//		un = normalize(un);
-//	}
-//	return u;
-//}
-//
+
+template<typename T>
+concept HasSize =
+requires(T const& t) {
+	{t.size()}-> std::convertible_to<size_t>;
+};
+
+template<typename T>
+auto allocateLike(T const &arg) requires HasSize<T> {
+	return T(arg.size());
+}
+
+template<typename T>
+auto allocateLike(T const &arg) requires (!HasSize<T>) {
+	return arg;
+}
+

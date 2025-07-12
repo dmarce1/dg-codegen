@@ -1,58 +1,62 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <iostream>
 #include <memory>
 #include <numeric>
+#include <sstream>
+#include <string>
 #include <type_traits>
 #include <vector>
+
 #include "Util.hpp"
 
 #define INDIRECTARRAY_COMPOUND_ASSIGNMENT(op)           \
-	IndirectArray& operator op (auto const& _src) {     \
+	IndirectArray& operator op##= (auto const& _src) {     \
 		auto const src = toExpression(_src);            \
 		size_t k = 0;                                   \
 		for(size_t j = 0; j != indices_->size(); j++) { \
-			(*indices_)[j] op src[k];                   \
-			k++;                                        \
+			(*ptr_)[(*indices_)[j]] op##= src[j];                   \
 		}                                               \
 		return *this;                                   \
 	}
 
 #define GSLICEARRAY_COMPOUND_ASSIGNMENT(op)           \
-	GSliceArray& operator op (auto const& _src) {     \
-		auto const src = toExpression(_src);          \
-		auto const& strides = slc_.stride();          \
-		auto const& sizes = slc_.size();              \
-		size_t const ndim = sizes.size();             \
-		Valarray<size_t> indices(size_t(0), ndim);    \
-		size_t j = 0, k = slc_.start();               \
-		do {                                          \
-			(*ptr_)[j] op src[k];                     \
-			int dim = ndim - 1;                       \
-			while (++indices[dim] == sizes[dim]) {    \
-				indices[dim] = 0;                     \
-				k -= (sizes[dim] - 1) * strides[dim]; \
-				dim--;                                \
-			}                                         \
-			if( dim >= 0 ) {                          \
-				k += strides[dim];                    \
-				j++;                                  \
-			} else {                                  \
-				break;                                \
-			}                                         \
-		} while(true);                                \
-		return *this;                                 \
-	}
+	GSliceArray& operator op##= (auto const& _src) {     \
+		auto const src = toExpression(_src);\
+		auto const &strides = slc_.stride();\
+		auto const &sizes = slc_.size();\
+		size_t totalSize = sizes[0];\
+		int const ndim = sizes.size();\
+		for (int i = 1; i < ndim; i++) {\
+			totalSize *= sizes[i];\
+		}\
+		Valarray<size_t> indices(size_t(0), ndim);\
+		size_t k = slc_.start();\
+		(*ptr_)[k] op##= src[0];\
+		for (size_t j = 1; j < totalSize; j++) {\
+			int dim = ndim - 1;\
+			while (++indices[dim] == sizes[dim]) {\
+				indices[dim] = 0;\
+				k -= (sizes[dim] - 1) * strides[dim];\
+				dim--;\
+			}\
+			k += strides[dim];\
+			(*ptr_)[k] op##= src[j];\
+		}\
+		return *this; \
+	}\
 
-#define MASKARRAY_COMPOUND_ASSIGNMENT(op)       \
-	MaskArray& operator op (auto const& _src) { \
+#define MASKARRAY_COMPOUND_ASSIGNMENT(op)\
+	MaskArray& operator op##= (auto const& _src) { \
 		auto const src = toExpression(_src);    \
 		size_t const cnt = ptr_.size();         \
 		size_t k = 0;                           \
 		for(size_t j = 0; j != cnt; j++) {      \
 			if((*mask_)[j]) {                   \
-				(*ptr_)[j] op src[k];           \
+				(*ptr_)[j] op##= src[k];           \
 				k++;                            \
 			}                                   \
 		}                                       \
@@ -60,13 +64,13 @@
 	}
 
 #define SLICEARRAY_COMPOUND_ASSIGNMENT(op)                    \
-	SliceArray& operator op (auto const& _src) {              \
+	SliceArray& operator op##= (auto const& _src) {              \
 		auto const src = toExpression(_src);                  \
 		size_t const beg = slc_.start();                      \
 		size_t const str = slc_.stride();                     \
 		size_t const cnt = slc_.size();                       \
 		for(size_t j = 0, k = beg; j != cnt; j++, k += str) { \
-			(*ptr_)[j] op src[k];                             \
+			(*ptr_)[k] op##= src[j];                             \
 		}                                                     \
 		return *this;                                         \
 	}
@@ -80,26 +84,24 @@
 		auto access(size_t index) const {                                        \
 			return expr1_[index] op expr2_[index];                               \
 		}                                                                        \
-		size_t size() const {\
+		size_t count() const {\
 			return std::max(expr1_.size(), expr2_.size()); \
 		}\
 	private:                                                                     \
-		Ea expr1_;                                                               \
-		Eb expr2_;                                                               \
+		typename std::remove_reference<Ea>::type expr1_;                                                               \
+		typename std::remove_reference<Eb>::type expr2_;                                                               \
 	};                                                                           \
-	template<typename T1, typename Derived1>                                                  \
-	auto operator op (Expression<T1, Derived1> const& expr2) const {                       \
+	template<typename Derived1>                                                  \
+	auto operator op (Expression<T, Derived1> const& expr2) const {                       \
 		auto const expr1 = toExpression(*this); 								 \
-		return name##Expression(expr1, expr2);                                   \
+		return name##Expression(expr1, ((Derived1 const&) expr2));                                   \
 	}                                                                            \
-	template<typename T1>                                                        \
-	auto operator op (Valarray<T1> const& varr) const {                                \
+	auto operator op (Valarray<T> const& varr) const {                                \
 		auto const expr1 = toExpression(*this); 								 \
 		auto const expr2 = toExpression(varr); 								     \
 		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
-	template<typename T1>                                                        \
-	auto operator op (T1 const& val) const {                                           \
+	auto operator op (T const& val) const {                                           \
 		auto const expr1 = toExpression(*this); 								 \
 		auto const expr2 = toExpression(val); 								     \
 		return name##Expression(expr1, expr2);                                   \
@@ -108,7 +110,7 @@
 #define VALARRAY_BINARY2(name, op)                                        \
 	template<typename T, typename Derived> \
 	auto operator op (T const& val, Expression<T, Derived> const& obj) {                                           \
-		return obj op val;\
+		return  ((Derived const&) obj) op val;\
 	}                                                                            \
 	template<typename T> \
 	auto operator op (T const& val, Valarray<T> const& obj) {                                           \
@@ -126,30 +128,31 @@
 			using std::max; \
 			return func(expr1_[index], expr2_[index]);                           \
 		}                                                                        \
-		size_t size() const {\
-			return std::max(expr1_.size(), expr2_.size()); \
+		size_t count() const {\
+			size_t const count = std::max(expr1_.size(), expr2_.size());\
+			return count; \
 		}\
 	private:                                                                     \
-		Ea expr1_;                                                               \
-		Eb expr2_;                                                               \
+		typename std::remove_reference<Ea>::type expr1_;                                                               \
+		typename std::remove_reference<Eb>::type expr2_;                                                               \
 	};                                                                           \
-	template<typename T, typename Derived>\
-	auto name (Expression<T, Derived> const& arg1, Expression<T, Derived> const& arg2) {                                  \
+	template<typename T, typename Derived1, typename Derived2>\
+	auto name (Expression<T, Derived1> const& arg1, Expression<T, Derived2> const& arg2) {                                  \
 		auto const expr1 = toExpression(arg1); 									 \
 		auto const expr2 = toExpression(arg2);                                   \
 		return name##Expression(expr1, expr2);                                   \
 	}                                                                            \
 	template<typename T, typename Derived>\
 	auto name (Expression<T, Derived> const& arg1, Valarray<T> const& arg2) {                                  \
-		auto const expr1 = toExpression(arg1); 									 \
+		auto const expr1 = toExpression((Derived const&) arg1); 									 \
 		auto const expr2 = toExpression(arg2);                                   \
-		return name##Expression(expr1, expr2);                                   \
+		return name##Expression((Derived const&) expr1, expr2);                                   \
 	}                                                                            \
 	template<typename T, typename Derived>\
 	auto name (Valarray<T> const& arg1, Expression<T, Derived> const& arg2) {                                  \
 		auto const expr1 = toExpression(arg1); 									 \
-		auto const expr2 = toExpression(arg2);                                   \
-		return name##Expression(expr1, expr2);                                   \
+		auto const expr2 = toExpression((Derived const&) arg2);                                   \
+		return name##Expression(expr1, (Derived const&) expr2);                                   \
 	}                                                                            \
 	template<typename T>\
 	auto name (Valarray<T> const& arg1, Valarray<T> const& arg2) {                                  \
@@ -161,13 +164,13 @@
 	auto name (Expression<T, Derived> const& arg1, T const& arg2) {                                  \
 		auto const expr1 = toExpression(arg1); 									 \
 		auto const expr2 = toExpression(arg2);                                   \
-		return name##Expression(expr1, expr2);                                   \
+		return name##Expression((Derived const&) expr1, expr2);                                   \
 	}                                                                            \
 	template<typename T, typename Derived>\
 	auto name (T const& arg1, Expression<T, Derived>  const& arg2) {                                  \
 		auto const expr1 = toExpression(arg1); 									 \
 		auto const expr2 = toExpression(arg2);                                   \
-		return name##Expression(expr1, expr2);                                   \
+		return name##Expression(expr1, (Derived const&) expr2);                                   \
 	}                                                                            \
 	template<typename T>\
 	auto name (T const& arg1, Valarray<T>  const& arg2) {                                  \
@@ -193,17 +196,17 @@
 		auto access(size_t index) const {                                       \
 			return expr1_[index] op expr2_[index];                              \
 		}                                                                       \
-		size_t size() const {\
+		size_t count() const {\
 			return std::max(expr1_.size(), expr2_.size()); \
 		}\
 	private:                                                                    \
-		Ea expr1_;                                                              \
-		Eb expr2_;                                                              \
+		typename std::remove_reference<Ea>::type expr1_;                                                               \
+		typename std::remove_reference<Eb>::type expr2_;                                                               \
 	};                                                                          \
 	template<typename Derived1>                                                  \
 	auto operator op (Expression<T, Derived1> const& expr2)const  {                       \
 		auto const expr1 = toExpression(*this); 								 \
-		return name##Expression(expr1, expr2);                                   \
+		return name##Expression(expr1, (Derived1 const&) expr2);                                   \
 	}                                                                            \
 	auto operator op (Valarray<T> const& varr) const  {                                \
 		auto const expr1 = toExpression(*this); 								 \
@@ -222,27 +225,27 @@
 	}                                                                            \
 
 #define VALARRAY_COMPOUND_ASSIGNMENT(op)                                       	\
-	Valarray<T>& operator op (Valarray<T> const& _src) {                                 	\
-		auto const src = toExpression(_src);                                   	\
-		size_t const count = size();                                           	\
+	Valarray<T>& operator op##= (Valarray<T> const& _src) {                                 	\
+		auto const src = ValarrayExpression<T>(_src);                                   	\
+		size_t const count = src.size();                                       	\
 		for(size_t i = 0; i != count; i++) {                                   	\
-			(*ptr_)[i] op src[i];                                              	\
+			(*ptr_)[i] op##= src[i];                                              	\
 		}                                                                      	\
 		return *this;  \
 	}\
 	template<typename Derived> \
-	Valarray<T>& operator op (Expression<T, Derived> const& src) {                                 	\
-		size_t const count = size();                                           	\
+	Valarray<T>& operator op##= (Expression<T, Derived> const& src) {                                 	\
+		size_t const count = src.size();                                           	\
 		for(size_t i = 0; i != count; i++) {                                   	\
-			(*ptr_)[i] op src[i];                                              	\
+			(*ptr_)[i] op##= src[i];                                              	\
 		}                                                                      	\
 		return *this;                                                          	\
 	}                                                                          	\
-	Valarray<T>& operator op (T const& _src) {                                 	\
+	Valarray<T>& operator op##= (T const& _src) {                                 	\
 		auto const src = toExpression(_src);                                   	\
 		size_t const count = size();                                           	\
 		for(size_t i = 0; i != count; i++) {                                   	\
-			(*ptr_)[i] op src[i];                                              	\
+			(*ptr_)[i] op##= src[i];                                              	\
 		}                                                                      	\
 		return *this;                                                          	\
 	}                                                                          	\
@@ -256,11 +259,11 @@
 		T access(size_t index) const {                                   \
 			return op expr_[index];                                               \
 		}                                                                         \
-		size_t size() const {      \
+		size_t count() const {      \
 			return expr_.size(); \
 		}\
 	private:                                                                      \
-		E expr_;                                                                  \
+		typename std::remove_reference<E>::type expr_;                                                               \
 	};                                                                            \
 	auto operator op () const {                                           \
 		auto const expr = toExpression(*this); 								 \
@@ -276,11 +279,11 @@
 		auto access(size_t index) const {                                   \
 			return func (expr_[index]);                                           \
 		}                                                                         \
-		size_t size() const {      \
+		size_t count() const {      \
 			return expr_.size(); \
 		}\
 	private:                                                                      \
-		E expr_;                                                                  \
+		typename std::remove_reference<E>::type expr_;                                                               \
 	};                                                                            \
 	template<typename T1, typename Derived> \
 	auto name (Expression<T1, Derived> const& arg) {                                                   \
@@ -357,6 +360,7 @@ struct Valarray {
 	template<typename U>
 	Valarray(Expression<T, U> const&);
 	virtual ~Valarray();
+	Valarray& operator=(const Valarray&);
 	Valarray& operator=(Valarray&&);
 	Valarray& operator=(std::initializer_list<T>);
 	Valarray& operator=(GSliceArray<T> const&);
@@ -384,17 +388,21 @@ struct Valarray {
 	const_iterator begin() const;
 	const_iterator end() const;
 	template<typename T1>
-	Valarray<T1> cast() const;VALARRAY_COMPOUND_ASSIGNMENT(=)
-	VALARRAY_COMPOUND_ASSIGNMENT(+=)
-	VALARRAY_COMPOUND_ASSIGNMENT(-=)
-	VALARRAY_COMPOUND_ASSIGNMENT(*=)
-	VALARRAY_COMPOUND_ASSIGNMENT(/=)
-	VALARRAY_COMPOUND_ASSIGNMENT(%=)
-	VALARRAY_COMPOUND_ASSIGNMENT(&=)
-	VALARRAY_COMPOUND_ASSIGNMENT(|=)
-	VALARRAY_COMPOUND_ASSIGNMENT(^=)
-	VALARRAY_COMPOUND_ASSIGNMENT(>>=)
-	VALARRAY_COMPOUND_ASSIGNMENT(<<=)
+	Valarray<T1> cast() const;
+	template<typename Derived>
+	Valarray<T>& operator=(Expression<T, Derived> const&);
+	Valarray<T>& operator=(T const&);
+	/**/
+	VALARRAY_COMPOUND_ASSIGNMENT(+)
+	VALARRAY_COMPOUND_ASSIGNMENT(-)
+	VALARRAY_COMPOUND_ASSIGNMENT(*)
+	VALARRAY_COMPOUND_ASSIGNMENT(/)
+	VALARRAY_COMPOUND_ASSIGNMENT(%)
+	VALARRAY_COMPOUND_ASSIGNMENT(&)
+	VALARRAY_COMPOUND_ASSIGNMENT(|)
+	VALARRAY_COMPOUND_ASSIGNMENT(^)
+	VALARRAY_COMPOUND_ASSIGNMENT(>>)
+	VALARRAY_COMPOUND_ASSIGNMENT(<<)
 	VALARRAY_BINARY1(Valarray, Add, +)
 	VALARRAY_BINARY1(Valarray, Subtract, -)
 	VALARRAY_BINARY1(Valarray, Multiply, *)
@@ -421,6 +429,36 @@ struct Valarray {
 private:
 	std::shared_ptr<std::vector<T>> ptr_;
 };
+
+template<typename T>
+Valarray<T>& Valarray<T>::operator=(Valarray<T> const &src) {
+	size_t const count = src.size();
+	ptr_ = std::make_shared<std::vector<T>>(std::vector<T>(count));
+	for (size_t i = 0; i != count; i++) {
+		(*ptr_)[i] = src[i];
+	}
+	return *this;
+}
+
+template<typename T>
+template<typename Derived>
+Valarray<T>& Valarray<T>::operator=(Expression<T, Derived> const &src) {
+	size_t const count = src.size();
+	ptr_ = std::make_shared<std::vector<T>>(count);
+	for (size_t i = 0; i != count; i++) {
+		(*ptr_)[i] = src[i];
+	}
+	return *this;
+}
+
+template<typename T>
+Valarray<T>& Valarray<T>::operator=(T const &val) {
+	size_t const count = size();
+	for (size_t i = 0; i != count; i++) {
+		(*ptr_)[i] = val;
+	}
+	return *this;
+}
 
 struct Slice {
 	Slice() = default;
@@ -451,23 +489,23 @@ private:
 
 template<typename T>
 class SliceArray {
-	SliceArray(Valarray<T> const&, Slice const&);
+	SliceArray(std::shared_ptr<std::vector<T>> const&, Slice const&);
 	size_t size() const;
 public:
 	SliceArray() = default;
 	SliceArray(SliceArray const&) = default;
 	friend class Valarray<T> ;
-	SLICEARRAY_COMPOUND_ASSIGNMENT(=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(+=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(-=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(*=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(/=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(%=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(&=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(|=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(^=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(>>=)
-	SLICEARRAY_COMPOUND_ASSIGNMENT(<<=)
+	SliceArray& operator=(auto const&);
+	SLICEARRAY_COMPOUND_ASSIGNMENT(+)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(-)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(*)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(/)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(%)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(&)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(|)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(^)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(>>)
+	SLICEARRAY_COMPOUND_ASSIGNMENT(<<)
 private:
 	std::shared_ptr<std::vector<T>> ptr_;
 	Slice slc_;
@@ -481,17 +519,17 @@ public:
 	GSliceArray() = default;
 	GSliceArray(GSliceArray const&) = default;
 	friend class Valarray<T> ;
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(+=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(-=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(*=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(/=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(%=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(&=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(|=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(^=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(>>=)
-	GSLICEARRAY_COMPOUND_ASSIGNMENT(<<=)
+	GSliceArray& operator=(auto const&);
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(+)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(-)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(*)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(/)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(%)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(&)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(|)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(^)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(>>)
+	GSLICEARRAY_COMPOUND_ASSIGNMENT(<<)
 private:
 	std::shared_ptr<std::vector<T>> ptr_;
 	GSlice slc_;
@@ -505,22 +543,22 @@ public:
 	MaskArray() = default;
 	MaskArray(MaskArray<T> const&) = default;
 	friend class Valarray<T> ;
+	MaskArray& operator =(auto const&);
 	MASKARRAY_COMPOUND_ASSIGNMENT(=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(+=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(-=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(*=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(/=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(%=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(&=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(|=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(^=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(>>=)
-	MASKARRAY_COMPOUND_ASSIGNMENT(<<=)
+	MASKARRAY_COMPOUND_ASSIGNMENT(+)
+	MASKARRAY_COMPOUND_ASSIGNMENT(-)
+	MASKARRAY_COMPOUND_ASSIGNMENT(*)
+	MASKARRAY_COMPOUND_ASSIGNMENT(/)
+	MASKARRAY_COMPOUND_ASSIGNMENT(%)
+	MASKARRAY_COMPOUND_ASSIGNMENT(&)
+	MASKARRAY_COMPOUND_ASSIGNMENT(|)
+	MASKARRAY_COMPOUND_ASSIGNMENT(^)
+	MASKARRAY_COMPOUND_ASSIGNMENT(>>)
+	MASKARRAY_COMPOUND_ASSIGNMENT(<<)
 private:
 	std::shared_ptr<std::vector<T>> ptr_;
 	std::shared_ptr<std::vector<bool>> mask_;
 };
-
 template<typename T>
 class IndirectArray {
 	IndirectArray(Valarray<T> const&, Valarray<size_t> const&);
@@ -529,17 +567,17 @@ public:
 	IndirectArray() = default;
 	IndirectArray(IndirectArray<T> const&) = default;
 	friend class Valarray<T> ;
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(+=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(-=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(*=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(/=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(%=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(&=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(|=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(^=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(>>=)
-	INDIRECTARRAY_COMPOUND_ASSIGNMENT(<<=)
+	IndirectArray& operator=(auto const&);
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(+)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(-)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(*)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(/)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(%)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(&)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(|)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(^)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(>>)
+	INDIRECTARRAY_COMPOUND_ASSIGNMENT(<<)
 private:
 	std::shared_ptr<std::vector<T>> ptr_;
 	std::shared_ptr<std::vector<size_t>> indices_;
@@ -553,10 +591,15 @@ size_t IndirectArray<T>::size() const {
 template<typename T>
 struct ValarrayExpression: public Expression<T, ValarrayExpression<T>> {
 	using base_type = Expression<T, ValarrayExpression<T>>;
+	ValarrayExpression() = delete;
+	ValarrayExpression(ValarrayExpression<T> const&) = default;
+	ValarrayExpression(ValarrayExpression<T>&&) = delete;
+	ValarrayExpression& operator=(ValarrayExpression<T> const&) = delete;
+	ValarrayExpression& operator=(ValarrayExpression<T>&&) = delete;
 	ValarrayExpression(Valarray<T> const&);
 	virtual ~ValarrayExpression();
 	T access(size_t) const;
-	size_t size() const;
+	size_t count() const;
 private:
 	std::shared_ptr<std::vector<T>> ptr_;
 };
@@ -567,10 +610,10 @@ struct ScalarExpression: public Expression<T, ScalarExpression<T>> {
 	T access(size_t) const;
 	ScalarExpression(T const&);
 	virtual ~ScalarExpression();
-	size_t size() const;
+	size_t count() const;
 	operator T() const;
 private:
-	T value_;
+	std::remove_reference_t<T> value_;
 };
 
 template<typename T, typename Derived>
@@ -580,6 +623,7 @@ struct Expression {
 	using const_reference = std::vector<T>::const_reference;
 	using pointer = std::vector<T>::pointer;
 	using reference = std::vector<T>::reference;
+	using derived_type = Derived;
 	Expression();
 	virtual ~Expression();
 	auto operator[](size_t) const;
@@ -607,8 +651,6 @@ struct Expression {
 	VALARRAY_UNARY(Derived, Negative, -)
 	VALARRAY_UNARY(Derived, LogicalNot, !)
 	VALARRAY_UNARY(Derived, BitwiseNot, ~)
-private:
-	Derived const &derived_;
 };
 
 template<typename T>
@@ -650,8 +692,8 @@ MaskArray<T>::MaskArray(Valarray<T> const &ptr, Valarray<bool> const &mask) :
 }
 
 template<typename T>
-SliceArray<T>::SliceArray(Valarray<T> const &varray, Slice const &slc) :
-		ptr_(varray.ptr_), slc_(slc) {
+SliceArray<T>::SliceArray(std::shared_ptr<std::vector<T>> const &varray, Slice const &slc) :
+		ptr_(varray), slc_(slc) {
 }
 
 template<typename T>
@@ -670,22 +712,23 @@ Valarray<T>::Valarray(size_t count) :
 
 template<typename T>
 Valarray<T>::Valarray(const_reference val, size_t count) :
-		ptr_(new std::vector<T>(count, val)) {
+		ptr_(std::make_shared<std::vector<T>>(count, val)) {
 }
 
 template<typename T>
 Valarray<T>::Valarray(const_pointer ptr, size_t count) :
-		ptr_(new std::vector<T>(ptr, ptr + count)) {
+		ptr_(std::make_shared<std::vector<T>>(ptr, ptr + count)) {
 }
 
 template<typename T>
 Valarray<T>::Valarray(const Valarray &other) :
-		ptr_(new std::vector<T>(other.ptr_->begin(), other.ptr_->end())) {
+		ptr_(std::make_shared<std::vector<T>>(other.ptr_->begin(), other.ptr_->end())) {
 }
 
 template<typename T>
 Valarray<T>::Valarray(Valarray &&other) :
-		ptr_(new std::vector<T>(std::move(*(other.ptr_)))) {
+		ptr_(nullptr) {
+	*this = other;
 }
 
 template<typename T>
@@ -732,7 +775,7 @@ Valarray<T>::~Valarray() {
 
 template<typename T>
 Valarray<T>& Valarray<T>::operator=(IndirectArray<T> const &src) {
-	ptr_->resize(src.size());
+	ptr_ = std::make_shared<std::vector<T>>(src.size());
 	size_t k = 0;
 	for (size_t j = 0; j != src.indices_->size(); j++) {
 		(*this)[j] = (*src.ptr_)[k];
@@ -743,34 +786,31 @@ Valarray<T>& Valarray<T>::operator=(IndirectArray<T> const &src) {
 
 template<typename T>
 Valarray<T>& Valarray<T>::operator=(GSliceArray<T> const &src) {
-	ptr_->resize(src.size());
+	size_t count = src.size();
+	ptr_ = std::make_shared<std::vector<T>>(count);
 	auto const &strides = src.slc_.stride();
 	auto const &sizes = src.slc_.size();
 	size_t const ndim = sizes.size();
 	Valarray<size_t> indices(size_t(0), ndim);
-	size_t j = 0, k = src.slc_.start();
-	do {
-		(*this)[j] = (*src.ptr_)[k];
+	size_t k = src.slc_.start();
+	(*this)[0] = (*src.ptr_)[k];
+	for( size_t  j = 1; j < count; j++) {
 		int dim = ndim - 1;
 		while (++indices[dim] == sizes[dim]) {
 			indices[dim] = 0;
 			k -= (sizes[dim] - 1) * strides[dim];
 			dim--;
 		}
-		if (dim >= 0) {
-			k += strides[dim];
-			j++;
-		} else {
-			break;
-		}
-	} while (true);
+		k += strides[dim];
+		(*this)[j] = (*src.ptr_)[k];
+	}
 	return *this;
 }
 
 template<typename T>
 Valarray<T>& Valarray<T>::operator=(MaskArray<T> const &src) {
-	size_t const cnt = ptr_.size();
-	ptr_->resize(cnt);
+	size_t const cnt = src.size();
+	ptr_ = std::make_shared<std::vector<T>>(src.size());
 	size_t k = 0;
 	for (size_t j = 0; j != cnt; j++) {
 		if ((*this)[j]) {
@@ -783,12 +823,79 @@ Valarray<T>& Valarray<T>::operator=(MaskArray<T> const &src) {
 
 template<typename T>
 Valarray<T>& Valarray<T>::operator=(SliceArray<T> const &src) {
-	ptr_->resize(src.size());
+	ptr_ = std::make_shared<std::vector<T>>(src.size());
 	size_t const beg = src.slc_.start();
 	size_t const str = src.slc_.stride();
 	size_t const cnt = src.slc_.size();
 	for (size_t j = 0, k = beg; j != cnt; j++, k += str) {
 		(*this)[j] = (*src.ptr_)[k];
+	}
+	return *this;
+}
+
+template<typename T>
+SliceArray<T>& SliceArray<T>::operator=(auto const &_src) {
+	auto const src = toExpression(_src);
+	size_t const count = src.size();
+//	ptr_ = std::make_shared<std::vector<T>>(std::vector<T>(count));
+	size_t const beg = slc_.start();
+	size_t const str = slc_.stride();
+	size_t const cnt = slc_.size();
+	for (size_t j = 0, k = beg; j != cnt; j++, k += str) {
+		(*ptr_)[k] = src[j];
+	}
+	return *this;
+}
+
+template<typename T>
+GSliceArray<T>& GSliceArray<T>::operator=(auto const &_src) {
+	auto const src = toExpression(_src);
+	auto const &strides = slc_.stride();
+	auto const &sizes = slc_.size();
+	size_t count = sizes[0];
+	int const ndim = sizes.size();
+	for (int i = 1; i < ndim; i++) {
+		count *= sizes[i];
+	}
+//	ptr_ = std::make_shared<std::vector<T>>(std::vector<T>(count));
+	Valarray<size_t> indices(size_t(0), ndim);
+	size_t k = slc_.start();
+	(*ptr_)[k] = src[0];
+	for (size_t j = 1; j < count; j++) {
+		int dim = ndim - 1;
+		while (++indices[dim] == sizes[dim]) {
+			indices[dim] = 0;
+			k -= (sizes[dim] - 1) * strides[dim];
+			dim--;
+		}
+		k += strides[dim];
+		(*ptr_)[k] = src[j];
+	}
+	return *this;
+}
+
+template<typename T>
+MaskArray<T>& MaskArray<T>::operator=(auto const &_src) {
+	auto const src = toExpression(_src);
+	size_t const count = ptr_.size();
+//	ptr_ = std::make_shared<std::vector<T>>(std::vector<T>(count));
+	size_t k = 0;
+	for (size_t j = 0; j != count; j++) {
+		if ((*mask_)[j]) {
+			(*ptr_)[j] = src[k];
+			k++;
+		}
+	}
+	return *this;
+}
+
+template<typename T>
+IndirectArray<T>& IndirectArray<T>::operator=(auto const &_src) {
+	auto const src = toExpression(_src);
+	size_t const count = src.size();
+//	ptr_ = std::make_shared<std::vector<T>>(std::vector<T>(count));
+	for (size_t j = 0; j != count; j++) {
+		(*ptr_)[(*indices_)[j]] = src[j];
 	}
 	return *this;
 }
@@ -807,7 +914,8 @@ Valarray<T>& Valarray<T>::operator=(SliceArray<T> const &src) {
 
 template<typename T>
 Valarray<T>& Valarray<T>::operator=(Valarray &&other) {
-	ptr_ = std::move(other.ptr_);
+	ptr_ = other.ptr_;
+	other.ptr_ = nullptr;
 	return *this;
 }
 
@@ -855,7 +963,7 @@ MaskArray<T> Valarray<T>::operator[](Valarray<bool> const &mask) const {
 
 template<typename T>
 void Valarray<T>::swap(Valarray<T> &&other) {
-	other.swap(ptr_);
+	std::swap(other.ptr_, ptr_);
 }
 
 template<typename T>
@@ -930,8 +1038,8 @@ template<typename T1>
 template<typename T2>
 Valarray<T2> Valarray<T1>::cast() const {
 	size_t const count = ptr_->size();
-	Valarray<T2> results;
-	for (int i = 0; i < count; i++) {
+	Valarray<T2> results(count);
+	for (size_t i = 0; i < count; i++) {
 		results[i] = T2((*this)[i]);
 	}
 	return results;
@@ -962,7 +1070,8 @@ T ValarrayExpression<T>::access(size_t index) const {
 }
 
 template<typename T>
-size_t ValarrayExpression<T>::size() const {
+size_t ValarrayExpression<T>::count() const {
+	//assert((long) ptr_->size() > 0);
 	return ptr_->size();
 }
 
@@ -981,31 +1090,31 @@ T ScalarExpression<T>::access(size_t index) const {
 }
 
 template<typename T>
-size_t ScalarExpression<T>::size() const {
+size_t ScalarExpression<T>::count() const {
 	return 1;
 }
 
 template<typename T>
-auto toExpression(T const& obj) {
-    if constexpr (IsExpression<T>::value) {
-        return obj;                          // already an expression
-    } else if constexpr (IsValarray<T>::value) {
-        return ValarrayExpression<typename T::value_type>(obj);
-    } else {
-        return ScalarExpression<T>(obj);
-    }
+auto toExpression(T const &obj) {
+	if constexpr (IsExpression<T>::value) {
+		return (typename T::derived_type const&) obj;
+	} else if constexpr (IsValarray<T>::value) {
+		return ValarrayExpression<typename T::value_type>(obj);
+	} else {
+		using Type = typename std::remove_reference<T>::type;
+		return ScalarExpression<Type>(obj);
+	}
 }
 
 template<typename T, typename Derived>
-Expression<T, Derived>::Expression() :
-		derived_(*static_cast<Derived*>(this)) {
+Expression<T, Derived>::Expression() {
 }
 
 template<typename T1, typename Derived>
 template<typename T2>
 Valarray<T2> Expression<T1, Derived>::cast() const {
 	size_t const count = size();
-	Valarray<T2> results;
+	Valarray<T2> results(count);
 	for (size_t i = 0; i < count; i++) {
 		results[i] = T2((*this)[i]);
 	}
@@ -1018,12 +1127,12 @@ Expression<T, Derived>::~Expression() {
 
 template<typename T, typename Derived>
 auto Expression<T, Derived>::operator[](size_t index) const {
-	return derived_.access(index);
+	return static_cast<derived_type const*>(this)->access(index);
 }
 
 template<typename T, typename Derived>
 size_t Expression<T, Derived>::size() const {
-	return derived_.size();
+	return static_cast<derived_type const*>(this)->count();
 }
 
 template<typename T>
@@ -1046,7 +1155,7 @@ template<typename T>
 size_t GSliceArray<T>::size() const {
 	auto const &sizes = slc_.size();
 	if (sizes.size()) {
-		constexpr std::multiplies<T> multOp;
+		constexpr std::multiplies<size_t> multOp;
 		return std::accumulate(sizes.begin(), sizes.end(), size_t(1), multOp);
 	} else {
 		return 0;
@@ -1070,4 +1179,18 @@ VALARRAY_BINARY2(BitwiseOr, |)
 VALARRAY_BINARY2(BitwiseXor, ^)
 VALARRAY_BINARY2(ShiftRight, >>)
 VALARRAY_BINARY2(ShiftLeft, <<)
+
+template<typename T>
+auto toString(Valarray<T> const &values) {
+	std::ostringstream oss { };
+	oss << '[';
+	for (size_t i = 0; i != values.size(); i++) {
+		oss << values[i];
+		if (i + 1 != values.size()) {
+			oss << ", ";
+		}
+	}
+	oss << ']';
+	return oss.str();
+}
 

@@ -400,7 +400,8 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 			}
 			code += ";\n";
 		} else {
-			code += "U(0.0);\n";
+			code += "allocateLike(input[0]);\n";
+			code += indent + v[n] + " = U(0);\n";
 		}
 		//	std::cerr << "\n";
 		std::string const str = "+ -";

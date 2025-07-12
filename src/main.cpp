@@ -22,13 +22,24 @@ int hpx_main(int argc, char *argv[]) {
 	enableFPE();
 	processOptions(argc, argv);
 	printf("\nPrologue complete\n");
-	constexpr int P = 4;
+	constexpr int P = 1;
 	constexpr int D = 2;
-	constexpr int N = 128;
+	constexpr int N = 64;
 	using T = double;
+//	Valarray<T> a(1.0, N);
+//	Valarray<T> b(1.0, N);
+//	Valarray<T> d(1.0, N);
+//	Valarray<T> e(1.0, N);
+//	Valarray<T> c(1.0, N);
+//	SquareMatrix<double, 4> A( { { 0.000000, -1.290994, 0.000000, 1.290994 }, { 1.000000, 0.000000, 0.000000, 0.000000 }, { 0.000000, 1.000000, 1.000000,
+//			1.000000 }, { 0.000000, 2.500000, 0.000000, 2.500000 } });
+//	auto B = matrixInverse(A);
+//	auto tmp1 =  (a + b);
+//	auto tmp2 = 2.0 * tmp1;
+//	c = tmp2;
 	using RK = RungeKutta<T, P>::type;
 	RK const rk;
-	HyperGrid<T, D, N, P, RK, EulerStateHLLC> grid;
+	HyperGrid<T, D, N, P, RK, EulerStateHLL> grid;
 	grid.initialize(initSodShockTube<T, D>);
 	grid.output("X", 0, Real(0.0));
 	grid.applyLimiter();

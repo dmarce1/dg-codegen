@@ -14,8 +14,7 @@ struct CanDoArithmetic<std::array<T, N>> {
 	static constexpr bool value = true;
 };
 
-
-template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+template<typename T, typename std::enable_if<CanDoArithmetic<T>::value, int>::type = 0>
 inline constexpr T& operator+=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -24,7 +23,7 @@ inline constexpr T& operator+=(T &A, T const &B) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+template<typename T, typename std::enable_if<CanDoArithmetic<T>::value, int>::type = 0>
 inline constexpr T& operator-=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -33,7 +32,7 @@ inline constexpr T& operator-=(T &A, T const &B) {
 	return A;
 }
 
-template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+template<typename T, typename std::enable_if<CanDoArithmetic<T>::value, int>::type = 0>
 inline constexpr T& operator*=(T &A, T const &B) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -109,7 +108,7 @@ inline constexpr T operator%(T const &A, T const &B) {
 	return C;
 }
 
-template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
+template<typename T, typename std::enable_if<CanDoArithmetic<T>::value, int>::type = 0>
 inline constexpr T& operator*=(T &A, typename T::value_type const &b) {
 	int const cnt = A.size();
 	for (int i = 0; i < cnt; i++) {
@@ -147,7 +146,7 @@ inline constexpr T operator/(T const &A, typename T::value_type const &b) {
 }
 
 template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
-inline constexpr auto dot(T const& a, T const& b) {
+inline constexpr auto dot(T const &a, T const &b) {
 	typename T::value_type sum = a[0] * b[0];
 	for (int d = 1; d < (int) a.size(); d++) {
 		sum += a[d] * b[d];
@@ -155,14 +154,13 @@ inline constexpr auto dot(T const& a, T const& b) {
 	return sum;
 }
 
-
 template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
-inline constexpr auto norm(T const& a) {
+inline constexpr auto norm(T const &a) {
 	return sqrt(dot(a, a));
 }
 
 template<typename T, std::enable_if_t<CanDoArithmetic<T>::value, int> = 0>
-inline constexpr auto normalize(T const& a) {
+inline constexpr auto normalize(T const &a) {
 	using U = typename ElementType<T>::type;
-	return a / (norm(a) + (U(2 * std::numeric_limits<U>::min())));
+	return a / (norm(a) + (U(2 * std::numeric_limits < U > ::min())));
 }

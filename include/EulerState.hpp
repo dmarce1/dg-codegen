@@ -71,11 +71,14 @@ struct EulerState: public std::array<T, 2 + D> {
 	}
 	std::array<T, NF> eigenvalues(int dim) const {
 		std::array<T, NF> lambda;
-		using std::sqrt;
+		//using std::sqrt;
 		T const irho = one / rho;
 		T const v = S[dim] * irho;
-		T const ek = half * irho * dot(S, S);
-		T const ei = max(eg - ek, zero);
+		T ek = half * irho * S[0] * S[0];
+		for(int d2 = 1; d2 < D; d2++) {
+			ek += half * irho* S[d2] * S[d2];
+		}
+		T const ei = eg - ek;
 		T const p = gamm1 * ei;
 		T const a = sqrt(gamma * p * irho);
 		std::fill(lambda.begin(), lambda.end(), v);
@@ -88,13 +91,25 @@ struct EulerState: public std::array<T, 2 + D> {
 		eigensys_type rc;
 		auto& eigenvalues = rc.first;
 		auto& eigenvectors = rc.second;
+		for(int r = 0; r < NF; r++) {
+			eigenvalues[r] = allocateLike((*this)[0]);
+			for(int c = 0; c < NF; c++) {
+				eigenvectors(r, c) = allocateLike((*this)[0]);
+			}
+		}
 		T const irho = one / rho;
-		std::array<T, D> u = S * irho;
+		std::array<T, D> u;
+		for(int d2 = 0; d2 < D; d2++) {
+			u[d2] = S[d2] * irho;
+		}
 		if(dim != D - 1) {
 			std::swap(u[dim], u[D - 1]);
 		}
-		T const ek = half * dot(u, u);
-		T const ei = max(zero, eg * irho - ek);
+		T ek = half * u[0] * u[0];
+		for(int d2 = 1; d2 < D; d2++) {
+			ek += half * u[d2] * u[d2];
+		}
+		T const ei = eg * irho - ek;
 		T const p = gamm1 * rho * ei;
 		T const a = sqrt(gamma * p * irho);
 		T const h = (p + eg) * irho;
@@ -187,9 +202,15 @@ struct EulerState: public std::array<T, 2 + D> {
 	EulerState flux(int d1) const {
 		EulerState F;
 		T const irho = one / rho;
-		auto const v = S * irho;
-		T const ek = half * dot(v, S);
-		T const ei = max(zero, eg - ek);
+		std::array<T, D> v;
+		for(int d2 = 0; d2 < D; d2++) {
+			v[d2] = S[d2] * irho;
+		}
+		T ek = half * v[0] * S[0];
+		for(int d2 = 1; d2 < D; d2++) {
+			ek += half * v[d2] * S[d2];
+		}
+		T const ei = eg - ek;
 		T const p = gamm1 * ei;
 		T const u = v[d1];
 		F.rho = S[d1];
@@ -206,10 +227,15 @@ struct EulerState: public std::array<T, 2 + D> {
 		T const irhoL = one / uL.rho;
 		T const vR = irhoR * uR.S[dim];
 		T const vL = irhoL * uL.S[dim];
-		T const ekR = half * irhoR * dot(uR.S, uR.S);
-		T const ekL = half * irhoL * dot(uL.S, uL.S);
-		T const eiR = max(zero, uR.eg - ekR);
-		T const eiL = max(zero, uL.eg - ekL);
+		T ekR, ekL;
+		ekR = half * irhoR * uR.S[0] * uR.S[0];
+		ekL = half * irhoL * uL.S[0] * uL.S[0];
+		for(int d2 = 1; d2 < D; d2++) {
+			ekR += half * irhoR[d2] * uR.S[d2] * uR.S[d2];
+			ekL += half * irhoL[d2] * uL.S[d2] * uL.S[d2];
+		}
+		T const eiR = uR.eg - ekR;
+		T const eiL = uL.eg - ekL;
 		T const pR = gamm1 * eiR;
 		T const pL = gamm1 * eiL;
 		T const aR = sqrt(gamma * pR * irhoR);
@@ -347,16 +373,21 @@ struct CanDoArithmetic<EulerState<T, D>> {
 template<typename T, int D>
 EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	using EleType = typename ElementType<T>::type;
+	static constexpr EleType zero = EleType(0.0);
+	static constexpr EleType half = EleType(0.5);
 	static constexpr EleType one = EleType(1);
 	/*********************************************************/
 	static constexpr T rhoL = one;
-	static constexpr T pL = one;
-	static constexpr T rhoR = T(0.125);
-	static constexpr T pR = T(0.1);
+	static constexpr T rhoR = half;
+	static constexpr T pL = 0.05;
+	static constexpr T pR = 0.05;
+	static constexpr T vL = one;
+	static constexpr T vR = one;
+//	static constexpr T pR = T(0.1);
 	/*********************************************************/
 	static constexpr T c0 = one / (EulerState<T, D>::gamma - one);
-	static constexpr T eL = c0 * pL;
-	static constexpr T eR = c0 * pR;
+	static constexpr T eL = c0 * pL + half * rhoL * sqr(vL);
+	static constexpr T eR = c0 * pR + half * rhoR * sqr(vR);
 	EulerState<T, D> u;
 	T const r = x[0];
 	//T const r = T(1.0/2.0) * (x[0] - x[1] + T(1));
@@ -365,9 +396,11 @@ EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	if (r < 0.25 || 0.75 < r) {
 		u.setDensity(rhoL);
 		u.setEnergy(eL);
+		u.setMomentum(0, vL * rhoL);
 	} else {
 		u.setDensity(rhoR);
 		u.setEnergy(eR);
+		u.setMomentum(0, vR * rhoR);
 	}
 	return u;
 }

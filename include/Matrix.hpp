@@ -20,9 +20,6 @@ using SquareMatrix = Matrix<Type, Ndim, Ndim>;
 template<typename Type, int Ndim>
 struct DiagonalMatrix;
 
-template<typename T, int D>
-struct SymmetricMatrix;
-
 template<typename T>
 struct IsMatrix {
 	static constexpr bool value = false;
@@ -39,11 +36,6 @@ struct IsMatrix<SquareMatrix<T, N>> {
 };
 
 template<typename T, int N>
-struct IsMatrix<SymmetricMatrix<T, N>> {
-	static constexpr bool value = true;
-};
-
-template<typename T, int N>
 struct IsMatrix<DiagonalMatrix<T, N>> {
 	static constexpr bool value = true;
 };
@@ -55,11 +47,6 @@ struct IsSquareMatrix {
 
 template<typename T, int N>
 struct IsSquareMatrix<SquareMatrix<T, N>> {
-	static constexpr bool value = true;
-};
-
-template<typename T, int N>
-struct IsSquareMatrix<SymmetricMatrix<T, N>> {
 	static constexpr bool value = true;
 };
 
@@ -312,8 +299,8 @@ struct Matrix<Type, RowCount, 1> {
 		return B;
 	}
 	constexpr Matrix operator/(Type const &a) const {
-		static constexpr Type one = Type(1);
 		Matrix B;
+		typename ElementType<Type>::type const one(1);
 		Type const aInv = one / a;
 		for (std::size_t k = 0; k < size(); k++)
 			B.values[k] = aInv * values[k];
@@ -459,7 +446,7 @@ struct Matrix<Type, 1, 1> {
 		return B;
 	}
 	constexpr Matrix operator/(Type const &a) const {
-		static constexpr Type one = Type(1);
+		typename ElementType<Type>::type const one(1);
 		Matrix B;
 		B.value = (one / a) * value;
 		return B;
@@ -501,139 +488,14 @@ private:
 	Type value;
 };
 
-template<typename T, int D>
-SymmetricMatrix<T, D> matrixSymmetrize(SquareMatrix<T, D> const &A);
-
-template<typename T, int D>
-struct SymmetricMatrix: public std::array<T, ((D * D + D) >> 1)> {
-	using base_type = std::array<T, ((D * D + D) >> 1)>;
-
-	SymmetricMatrix() = default;
-	SymmetricMatrix(SymmetricMatrix const&) = default;
-	SymmetricMatrix(SymmetricMatrix&&) = default;
-	SymmetricMatrix& operator=(SymmetricMatrix const&) = default;
-	SymmetricMatrix& operator=(SymmetricMatrix&&) = default;
-
-	static constexpr std::size_t rowCount() {
-		return D;
-	}
-	static constexpr std::size_t columnCount() {
-		return D;
-	}
-
-	SymmetricMatrix(T init) {
-		std::fill(base_type::begin(), base_type::end(), init);
-	}
-
-	SymmetricMatrix(std::initializer_list<std::initializer_list<T>> init) {
-		*this = matrixSymmetrize(SquareMatrix<T, D>(init));
-	}
-
-	T& operator()(int n, int k) {
-		return base_type::operator[](index(n, k));
-	}
-	T const& operator()(int n, int k) const {
-		return base_type::operator[](index(n, k));
-	}
-
-	operator SquareMatrix<T, D>() const {
-		SquareMatrix<T, D> M;
-		for (int p = 0; p < D; p++) {
-			for (int q = p; q < D; q++) {
-				auto v = base_type::operator[](((p * p + p) >> 1) + q);
-				M(p, q) = M(q, p) = v;
-			}
-		}
-		return M;
-	}
-
-	static constexpr SymmetricMatrix identity() {
-		SymmetricMatrix I;
-		for (int n = 0; n < D; n++) {
-			for (int m = 0; m <= n; m++) {
-				I(n, m) = T(n == m);
-			}
-		}
-		return I;
-	}
-
-	static constexpr SymmetricMatrix zero() {
-		SymmetricMatrix Z;
-		std::fill(Z.begin(), Z.end(), T(0));
-		return Z;
-	}
-
-	SymmetricMatrix& operator+=(SymmetricMatrix const &A) {
-		*this = *this + A;
-		return *this;
-	}
-	SymmetricMatrix& operator-=(SymmetricMatrix const &A) {
-		*this = *this - A;
-		return *this;
-	}
-	SymmetricMatrix& operator*=(T const &a) {
-		*this = *this * a;
-		return *this;
-	}
-
-	friend SymmetricMatrix operator+(SymmetricMatrix const &A, SymmetricMatrix const &B) {
-		SymmetricMatrix C;
-		for (std::size_t i = 0; i < A.size(); i++) {
-			C.base_type::operator[](i) = A.base_type::operator[](i) + B.base_type::operator[](i);
-		}
-		return C;
-	}
-
-	friend SymmetricMatrix operator-(SymmetricMatrix const &A, SymmetricMatrix const &B) {
-		SymmetricMatrix C;
-		for (std::size_t i = 0; i < A.size(); i++) {
-			C.base_type::operator[](i) = A.base_type::operator[](i) - B.base_type::operator[](i);
-		}
-		return C;
-	}
-
-	friend SymmetricMatrix operator*(SymmetricMatrix const &A, T b) {
-		SymmetricMatrix C;
-		for (std::size_t i = 0; i < A.size(); i++) {
-			C.base_type::operator[](i) = A.base_type::operator[](i) * b;
-		}
-		return C;
-	}
-
-	friend SymmetricMatrix operator*(T a, SymmetricMatrix const &B) {
-		return B * a;
-	}
-
-	friend SymmetricMatrix operator/(SymmetricMatrix const &A, T b) {
-		return A * (T(1) / b);
-	}
-
-private:
-	static constexpr int index(int n, int k) {
-		int p = std::max(n, k), q = std::min(n, k);
-		return ((p * p + p) >> 1) + q;
-	}
-};
-
-template<typename T, int D>
-SymmetricMatrix<T, D> matrixSymmetrize(SquareMatrix<T, D> const &A) {
-	SymmetricMatrix<T, D> B;
-	for (int n = 0; n < D; n++) {
-		B(n, n) = A(n, n);
-		for (int m = 0; m < n; m++) {
-			B(n, m) = T(0.5) * (A(n, m) + A(m, n));
-		}
-	}
-	return B;
-}
 
 template<typename T, int N, int M, int L>
 Matrix<T, N, L> operator*(Matrix<T, N, M> const &A, Matrix<T, M, L> const &B) {
 	Matrix<T, N, L> C;
 	for (int n = 0; n < N; n++) {
 		for (int l = 0; l < L; l++) {
-			C(n, l) = T(0);
-			for (int m = 0; m < M; m++) {
+			C(n, l) = A(n, 0) * B(0, l);
+			for (int m = 1; m < M; m++) {
 				C(n, l) += A(n, m) * B(m, l);
 			}
 		}
@@ -646,8 +508,8 @@ SquareMatrix<Type, Ndim> operator*=(SquareMatrix<Type, Ndim> &A, SquareMatrix<Ty
 	SquareMatrix<Type, Ndim> B = A;
 	for (int i = 0; i < Ndim; i++) {
 		for (int j = 0; j < Ndim; j++) {
-			A(i, j) = Type(0);
-			for (int k = 0; k < Ndim; k++) {
+			A(i, j) = B(i, 0) * C(0, j);
+			for (int k = 1; k < Ndim; k++) {
 				A(i, j) += B(i, k) * C(k, j);
 			}
 		}
@@ -673,14 +535,6 @@ Matrix<Type, R, 1> matrixColumn(Matrix<Type, R, C> const &A, int c) {
 	return col;
 }
 
-template<typename Type, int N>
-Matrix<Type, N, 1> matrixColumn(SymmetricMatrix<Type, N> const &A, int c) {
-	Matrix<Type, N, 1> col;
-	for (int r = 0; r < N; r++) {
-		col(r, 0) = A(r, c);
-	}
-	return col;
-}
 
 template<typename T, int N>
 T matrixInverseAndDeterminant(SquareMatrix<T, N> &A) {
@@ -730,8 +584,8 @@ T matrixInverseAndDeterminant(SquareMatrix<T, N> &A) {
 
 template<typename Type, int Ndim>
 Type matrixTrace(SquareMatrix<Type, Ndim> const &A) {
-	Type sum = Type(0);
-	for (int i = 0; i < Ndim; i++) {
+	Type sum = A(0, 0);
+	for (int i = 1; i < Ndim; i++) {
 		sum += A(i, i);
 	}
 	return sum;
@@ -800,11 +654,10 @@ constexpr SquareMatrix<T, N> matrixCofactor(SquareMatrix<T, N> const &A) {
 template<typename T, int N>
 constexpr T matrixDeterminant(SquareMatrix<T, N> const &A) {
 	if constexpr (N > 1) {
-		T cof = matrixCofactor(A, 0, 0);
 		T sum = A(0, 0) * matrixCofactor(A, 0, 0);
 		for (int c = 1; c < N; c++) {
-			cof = matrixCofactor(A, 0, c);
-			auto const tmp = A(0, c) * cof;
+			T cof = matrixCofactor(A, 0, c);
+			T const tmp = A(0, c) * cof;
 			sum += tmp;
 		}
 		return sum;
@@ -820,102 +673,9 @@ constexpr SquareMatrix<T, N> matrixAdjoint(SquareMatrix<T, N> const &A) {
 
 template<typename T, int N>
 constexpr auto matrixInverse(SquareMatrix<T, N> const &A) {
-	auto const det = matrixDeterminant(A);
+	T const det = matrixDeterminant(A);
 	auto const adj = matrixAdjoint(A);
 	return adj / det;
-}
-
-template<typename T, int N>
-auto matrixInverse(SymmetricMatrix<T, N> const &A) {
-	return matrixAdjoint(A) / matrixDeterminant(A);
-}
-
-template<typename T, int N>
-SymmetricMatrix<T, N - 1> subMatrix(SymmetricMatrix<T, N> const &A, int d) {
-	SymmetricMatrix<T, N - 1> M;
-	for (int i = 0; i < d; i++) {
-		for (int j = 0; j <= i; j++) {
-			M(i, j) = A(i, j);
-		}
-	}
-	for (int i = d; i < N - 1; i++) {
-		for (int j = 0; j < d; j++)
-			M(i, j) = A(i + 1, j);
-		for (int j = d; j <= i; j++)
-			M(i, j) = A(i + 1, j + 1);
-	}
-	return M;
-}
-
-template<typename T, int N>
-SymmetricMatrix<T, N> matrixCofactor(SymmetricMatrix<T, N> const &A) {
-	SymmetricMatrix<T, N> C;
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j <= i; j++) {
-			C(i, j) = matrixCofactor(A, i, j);
-		}
-	}
-	return C;
-}
-
-template<typename T, int N>
-T matrixDeterminant(SymmetricMatrix<T, N> const &A) {
-	if constexpr (N > 1) {
-		T sum = T(0);
-		for (int c = 0; c < N; c++) {
-			sum += A(0, c) * matrixCofactor(A, 0, c);
-		}
-		return sum;
-	} else {
-		return A(0, 0);
-	}
-}
-
-template<typename T, int N>
-SymmetricMatrix<T, N> matrixAdjoint(SymmetricMatrix<T, N> const &A) {
-	return matrixCofactor(A);
-}
-
-template<typename T, int N, int M>
-SquareMatrix<T, N> operator*(SymmetricMatrix<T, N> const &A, Matrix<T, N, M> const &B) {
-	SquareMatrix<T, N> C;
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < M; j++) {
-			C(i, j) = T(0);
-			for (int k = 0; k < N; k++) {
-				C(i, j) += A(i, k) * B(k, j);
-			}
-		}
-	}
-	return C;
-}
-
-template<typename T, int N, int M>
-SquareMatrix<T, N> operator*(Matrix<T, N, M> const &A, SymmetricMatrix<T, M> const &B) {
-	SquareMatrix<T, N> C;
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < M; j++) {
-			C(i, j) = T(0);
-			for (int k = 0; k < M; k++) {
-				C(i, j) += A(i, k) * B(k, j);
-			}
-		}
-	}
-	return C;
-}
-
-template<typename T, int N>
-SquareMatrix<T, N> operator*(SymmetricMatrix<T, N> const &A, SymmetricMatrix<T, N> const &B) {
-	SquareMatrix<T, N> C;
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < N; j++) {
-			C(i, j) = T(0);
-			for (int k = 0; k < N; k++) {
-				C(i, j) += A(i, k) * B(k, j);
-			}
-		}
-	}
-	return C;
 }
 
 template<typename Type, int P, int Q, int M, int N>
