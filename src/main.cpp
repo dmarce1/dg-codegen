@@ -4,7 +4,6 @@
 #include <type_traits>
 #include <vector>
 #include <hpx/hpx_init.hpp>
-#include "Valarray.hpp"
 #include "dgTransforms.hpp"
 #include "Options.hpp"
 #include "MultiIndex.hpp"
@@ -16,30 +15,17 @@
 void testRadiation();
 
 int hpx_main(int argc, char *argv[]) {
-	Valarray<double> v1;
-	Valarray<double> v2;
 	printf("\nStarting\n");
 	enableFPE();
 	processOptions(argc, argv);
 	printf("\nPrologue complete\n");
 	constexpr int P = 3;
 	constexpr int D = 2;
-	constexpr int N = 128;
-	using T = Real;
-//	Valarray<T> a(1.0, N);
-//	Valarray<T> b(1.0, N);
-//	Valarray<T> d(1.0, N);
-//	Valarray<T> e(1.0, N);
-//	Valarray<T> c(1.0, N);
-//	SquareMatrix<double, 4> A( { { 0.000000, -1.290994, 0.000000, 1.290994 }, { 1.000000, 0.000000, 0.000000, 0.000000 }, { 0.000000, 1.000000, 1.000000,
-//			1.000000 }, { 0.000000, 2.500000, 0.000000, 2.500000 } });
-//	auto B = matrixInverse(A);
-//	auto tmp1 =  (a + b);
-//	auto tmp2 = 2.0 * tmp1;
-//	c = tmp2;
+	constexpr int N = 64;
+	using T = double;
 	using RK = RungeKutta<T, P>::type;
 	RK const rk;
-	HyperGrid<T, D, N, P, RK, EulerStateHLL> grid;
+	HyperGrid<T, D, N, P, RK, EulerStateHLLC> grid;
 	grid.initialize(initSodShockTube<T, D>);
 	grid.applyLimiter();
 	grid.output("X", 0, Real(0.0));

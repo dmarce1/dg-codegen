@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Valarray.hpp>
 #include "ContainerArithmetic.hpp"
 #include "Matrix.hpp"
 #include "Util.hpp"
@@ -166,6 +165,7 @@ struct EulerState: public std::array<T, 2 + D> {
 		return F;
 	}
 	friend EulerState solveRiemannProblem(const EulerState &uL, const EulerState &uR, int dim) {
+		using namespace Math;
 		EulerState F;
 		T const irhoR = one / uR.rho;
 		T const irhoL = one / uL.rho;
@@ -192,17 +192,17 @@ struct EulerState: public std::array<T, 2 + D> {
 				F[fi] = (fL[fi] + fR[fi] - sStar * (uR[fi] - uL[fi])) * half;
 			}
 		} else if constexpr(riemannSolver == RiemannSolver::HLL) {
-			T const sL = min(zero, min(vL - aL, vR - aR));
-			T const sR = max(zero, max(vL + aL, vR + aR));
+			T const sL = min(zero, min(T(vL - aL), T(vR - aR)));
+			T const sR = max(zero, max(T(vL + aL), T(vR + aR)));
 			T const w = EleType(1) / (sR - sL);
 			for(int fi = 0; fi < NF; fi++) {
 				F[fi] = w * (sR * fL[fi] - sL * fR[fi] + sL * sR * (uR[fi] - uL[fi]));
 			}
 		} else/*if constexpr(riemannSolver == RiemannSolver::HLLC)*/{
 			EulerState fStar, uK, fK;
-			T const pStar = max(zero, half * (pR + pL - quarter * (vR - vL) * (aR + aL) * (uR.rho + uL.rho)));
-			T const qL = sqrt(one + gamp1o2gam * max(zero, pStar / pL - one));
-			T const qR = sqrt(one + gamp1o2gam * max(zero, pStar / pR - one));
+			T const pStar = max(zero, T(half * (pR + pL - quarter * (vR - vL) * (aR + aL) * (uR.rho + uL.rho))));
+			T const qL = sqrt(one + gamp1o2gam * max(zero, T(pStar / pL - one)));
+			T const qR = sqrt(one + gamp1o2gam * max(zero, T(pStar / pR - one)));
 			T const sL = vL - qL * aL;
 			T const sR = vR + qR * aR;
 			T const num = pR - pL + vL * uL.rho * (sL - vL) - vR * uR.rho * (sR - vR);
@@ -224,7 +224,7 @@ struct EulerState: public std::array<T, 2 + D> {
 			fStar[dim] += tmp;
 			fStar.back() += sStar * tmp;
 			T const sStarK = sStar * sK;
-			T const wD = (one - copysign(one, sStar * sK)) * half;
+			T const wD = (half - copysign(half, T(half * sStar * sK)));
 			for(int fi = 0; fi < NF; fi++) {
 				F[fi] = wD * fStar[fi] + (one - wD) * fK[fi];
 			}
@@ -246,23 +246,26 @@ struct EulerState: public std::array<T, 2 + D> {
 		T const dRho = rho1 - rho0;
 		T const E0 = u0.eg;
 		T const E1 = uh.eg;
-		T const dE = E1 - E0;
-		T const maskRho = (dRho < zero).template cast<EleType>();
-		T const thetaRho = maskRho * (safeDiv(T(epsRho - rho0), dRho) - one) + one;
+		auto const dE = E1 - E0;
+		auto const maskRho = dRho < zero;
+		T thetaRho = safeDiv(T(epsRho - rho0), dRho);
+		thetaRho[!maskRho] = one;
 		T const a = dE * dRho - half * dot(dS, dS);
 		T const b = E0 * dRho + dE * rho0 - dot(s0, dS);
 		T const c = E0 * rho0 - half * dot(s0, s0);
 		T const g1 = a + b + c;
-		auto const needP = (g1 < zero).template cast<EleType>();
-		auto const skipP = one - needP;
-		T const disc = max(zero, needP * (b * b - four * a * c));
+		auto const needP = (g1 < zero);
+		auto const skipP = !needP;
+		T disc = b * b - four * a * c;
+		disc[skipP || (disc < zero)] = zero;
 		T const sqrtDisc = sqrt(disc);
-		auto const maskLin = needP * (abs(a) < tiny).template cast<EleType>();;
-		auto const maskQuad = needP - maskLin;
 		T const thetaLin = -safeDiv(c, b);
 		T const denom = -b - copysign(sqrtDisc, b);
 		T const thetaQuad = two * safeDiv(c, denom);
-		T const thetaP = skipP * one + maskLin * thetaLin + maskQuad * thetaQuad;
+		T thetaP = thetaQuad;
+		auto const linFlag = (abs(a) < tiny) && needP;
+		thetaP[linFlag] = thetaLin[linFlag];
+		thetaP[skipP] = one;
 		T const theta = clamp(zero, T(min(thetaRho, thetaP)), one);
 		return theta;
 	}

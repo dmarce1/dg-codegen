@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <numeric>
 #include <string>
+#include <valarray>
 
 #define THROW(msg)                                                                                      \
     throw std::runtime_error(static_cast<std::ostringstream&&>(                                         \
@@ -131,6 +132,100 @@ struct ElementType<T, std::void_t<typename T::value_type>> {
 	using type = typename ElementType<typename T::value_type>::type;
 };
 
+
+template<typename T, size_t N>
+constexpr std::array<T, N> makeFilledArray(T const &value) {
+	std::array<T, N> arr { };
+	arr.fill(value);
+	return arr;
+}
+
+void installFpeHandler();
+
+void toFile(std::string const &content, std::filesystem::path const &filePath);
+
+template<typename T>
+concept HasSize =
+requires(T const& t) {
+	{	t.size()}-> std::convertible_to<size_t>;
+};
+
+template<typename T>
+auto allocateLike(T const &arg)
+requires HasSize<T> {
+	return T(arg.size());
+}
+
+template<typename T>
+auto allocateLike(T const &arg)
+requires (!HasSize<T>) {
+	return arg;
+}
+
+template<typename T>
+std::valarray<T> max(std::valarray<T> x, std::valarray<T> const &y) {
+	std::valarray<bool> const mask = y > x;
+	x[mask] = std::valarray<T>(y[mask]);
+	return x;
+}
+
+template<typename T>
+std::valarray<T> max(std::valarray<T> x, T const &y) {
+	std::valarray<bool> const mask = y > x;
+	x[mask] = std::valarray<T>(y, x.size())[mask];
+	return x;
+}
+
+template<typename T>
+std::valarray<T> max(T const &x, std::valarray<T> y) {
+	std::valarray<bool> const mask = y < x;
+	y[mask] = std::valarray<T>(x, y.size())[mask];
+	return y;
+}
+
+template<typename T>
+std::valarray<T> min(std::valarray<T> x, std::valarray<T> const &y) {
+	std::valarray<bool> const mask = y < x;
+	x[mask] = std::valarray<T>(y[mask]);
+	return x;
+}
+
+template<typename T>
+std::valarray<T> min(std::valarray<T> x, T const &y) {
+	std::valarray<bool> const mask = y < x;
+	x[mask] = std::valarray<T>(y, x.size())[mask];
+	return x;
+}
+
+template<typename T>
+std::valarray<T> min(T const &x, std::valarray<T> y) {
+	std::valarray<bool> const mask = y > x;
+	y[mask] = std::valarray<T>(x, y.size())[mask];
+	return y;
+}
+
+template<typename T>
+std::valarray<T> copysign(std::valarray<T> x, std::valarray<T> const &y) {
+	x = std::abs(x);
+	std::valarray<bool> const neg = y < T(0);
+	x[neg] = -std::valarray<T>(x[neg]);
+	return x;
+}
+
+template<typename T>
+std::valarray<T> copysign(std::valarray<T> x, T const &y) {
+	x = std::abs(x);
+	return (y < T(0)) ? -x : x;
+}
+
+template<typename T>
+std::valarray<T> copysign(T const &x, std::valarray<T> y) {
+	std::valarray<bool> const neg = y < T(0);
+	y = std::abs(x);
+	y[neg] = -std::valarray<T>(y[neg]);
+	return y;
+}
+
 template<typename V>
 inline V safeDiv(V const &num, V const &den) {
 	using T = ElementType<V>::type;
@@ -140,35 +235,8 @@ inline V safeDiv(V const &num, V const &den) {
 
 template<typename TypeA, typename TypeX, typename TypeC>
 TypeX clamp(TypeA const &a, TypeX const &x, TypeC const &c) {
-	return max(a, min(c, x));
-}
-
-template<typename T, size_t N>
-constexpr std::array<T, N> makeFilledArray(T const &value) {
-	std::array<T, N> arr { };
-	arr.fill(value);
-	return arr;
-}
-
-
-void installFpeHandler();
-
-void toFile(std::string const &content, std::filesystem::path const &filePath);
-
-
-template<typename T>
-concept HasSize =
-requires(T const& t) {
-	{t.size()}-> std::convertible_to<size_t>;
-};
-
-template<typename T>
-auto allocateLike(T const &arg) requires HasSize<T> {
-	return T(arg.size());
-}
-
-template<typename T>
-auto allocateLike(T const &arg) requires (!HasSize<T>) {
-	return arg;
+	using namespace Math;
+	auto const tmp = min(c, x);
+	return max(a, tmp);
 }
 

@@ -17,10 +17,10 @@
 
 #include "Matrix.hpp"
 #include "Util.hpp"
-#include "Valarray.hpp"
+#include <valarray>
 
 template<typename T, int D, int N, int P, template<typename, int> typename S>
-void writeHdf5(std::string filename, T const &h, S<std::array<Valarray<T>, binco(D + P - 1, D)>, D> const &fieldData,
+void writeHdf5(std::string filename, T const &h, S<std::array<std::valarray<T>, binco(D + P - 1, D)>, D> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
 	constexpr Range<int, D> Box { repeat<D>(0), repeat<D>(N) };
 	using hindex_t = MultiIndex<Box>;
@@ -72,7 +72,7 @@ void writeHdf5(std::string filename, T const &h, S<std::array<Valarray<T>, binco
 			dataspace_id = H5Screate_simple(D, dims.data(), NULL);
 			dataset_id = H5Dcreate(file_id, name.c_str(), H5T_data_type, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 			auto const &field = fieldData[fi][Q];
-			reverseMultiIndexData<Box>(field.begin(), field.end(), buffer.data());
+			reverseMultiIndexData<Box>(std::begin(field), std::end(field), buffer.data());
 			H5Dwrite(dataset_id, H5T_data_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer.data());
 			H5Dclose(dataset_id);
 			H5Sclose(dataspace_id);
