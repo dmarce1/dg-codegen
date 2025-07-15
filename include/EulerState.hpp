@@ -320,26 +320,21 @@ struct CanDoArithmetic<EulerState<T, D>> {
 template<typename T, int D>
 EulerState<T, D> initSodShockTube(std::array<T, D> x) {
 	using EleType = typename ElementType<T>::type;
-	static constexpr EleType zero = EleType(0.0);
 	static constexpr EleType half = EleType(0.5);
-	static constexpr EleType one = EleType(1);
 	/*********************************************************/
 	static constexpr T rhoL = EleType(1.000);
-	static constexpr T rhoR = EleType(0.125);
 	static constexpr T pL = EleType(1.000);
-	static constexpr T pR = EleType(0.100);
 	static constexpr T vL = EleType(0.000);
+	static constexpr T rhoR = EleType(0.125);
+	static constexpr T pR = EleType(0.100);
 	static constexpr T vR = EleType(0.000);
-//	static constexpr T pR = T(0.1);
 	/*********************************************************/
-	static constexpr T c0 = one / (EulerState<T, D>::gamma - one);
+	static constexpr T c0 = EulerState<T, D>::igamm1;
 	static constexpr T eL = c0 * pL + half * rhoL * sqr(vL);
 	static constexpr T eR = c0 * pR + half * rhoR * sqr(vR);
 	EulerState<T, D> u;
 	T const r = x[0];
-	//T const r = T(1.0/2.0) * (x[0] - x[1] + T(1));
 	u.setMomentum(zeroArray<T, D>());
-//	printf( "%e %e %e \n", r, x[0],  x[1]);
 	if (r < 0.25 || 0.75 < r) {
 		u.setDensity(rhoL);
 		u.setEnergy(eL);

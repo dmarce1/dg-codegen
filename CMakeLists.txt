@@ -50,7 +50,7 @@ set(astrotiger_header
   include/Definitions.hpp
   include/EulerState.hpp
   include/Hdf5.hpp
-  include/HyperGrid.hpp
+  include/HyperSubgrid.hpp
   include/Indent.hpp
   include/Legendre.hpp
   include/Matrix.hpp

@@ -4,10 +4,10 @@
 #include <type_traits>
 #include <vector>
 #include <hpx/hpx_init.hpp>
+#include "HyperSubgrid.hpp"
 #include "dgTransforms.hpp"
 #include "Options.hpp"
 #include "MultiIndex.hpp"
-#include "HyperGrid.hpp"
 #include "EulerState.hpp"
 #include "Real.hpp"
 #include "RungeKutta.hpp"
@@ -25,7 +25,7 @@ int hpx_main(int argc, char *argv[]) {
 	using T = double;
 	using RK = RungeKutta<T, P>::type;
 	RK const rk;
-	HyperGrid<T, D, N, P, RK, EulerStateHLLC> grid;
+	HyperSubgrid<T, D, N, P, RK, EulerStateHLLC> grid;
 	grid.initialize(initSodShockTube<T, D>);
 	grid.applyLimiter();
 	grid.output("X", 0, Real(0.0));

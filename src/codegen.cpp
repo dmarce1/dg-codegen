@@ -10,7 +10,85 @@
 #include <set>
 #include <vector>
 #include <utility>
+#include <string>
+#include <regex>
+#include <map>
+#include <set>
+#include <sstream>
+#include <iostream>
+#include <string>
+#include <regex>
+#include <sstream>
+#include <iostream>
 
+int elementCount(std::string const &input, std::string const &arrayName) {
+	std::regex accessRegex(R"(\b)" + arrayName + R"(\[(\d+)\])");
+
+	std::set<int> usedIndices;
+	std::istringstream iss(input);
+	std::string line;
+	std::vector<std::string> lines;
+
+	while (std::getline(iss, line)) {
+		lines.push_back(line);
+		if (line.find(arrayName + "[") != std::string::npos && line.find("std::array") == std::string::npos) {
+			for (std::sregex_iterator it(line.begin(), line.end(), accessRegex), end; it != end; ++it) {
+				usedIndices.insert(std::stoi((*it)[1]));
+			}
+		}
+	}
+	return usedIndices.size();
+}
+
+std::string renumberArrayIndices(std::string const &input, std::string const &arrayName) {
+	std::regex accessRegex(R"(\b)" + arrayName + R"(\[(\d+)\])");
+
+	std::set<int> usedIndices;
+	std::istringstream iss(input);
+	std::string line;
+	std::vector<std::string> lines;
+
+	while (std::getline(iss, line)) {
+		lines.push_back(line);
+		if (line.find(arrayName + "[") != std::string::npos && line.find("std::array") == std::string::npos) {
+			for (std::sregex_iterator it(line.begin(), line.end(), accessRegex), end; it != end; ++it) {
+				usedIndices.insert(std::stoi((*it)[1]));
+			}
+		}
+	}
+
+	// Step 2: build remapping table
+	std::map<int, int> remap;
+	int newIndex = 0;
+	for (int oldIndex : usedIndices) {
+		remap[oldIndex] = newIndex++;
+	}
+
+	// Step 3: apply substitution manually
+	std::ostringstream result;
+	for (auto const &l : lines) {
+		if (l.find(arrayName + "[") != std::string::npos && l.find("std::array") == std::string::npos) {
+
+			std::string rebuilt;
+			std::sregex_iterator it(l.begin(), l.end(), accessRegex), end;
+			size_t lastPos = 0;
+
+			for (; it != end; ++it) {
+				rebuilt.append(l.begin() + lastPos, (*it)[0].first);
+				int oldIdx = std::stoi((*it)[1].str());
+				rebuilt.append(arrayName + "[" + std::to_string(remap[oldIdx]) + "]");
+				lastPos = (*it)[0].second - l.begin();
+			}
+
+			rebuilt.append(l.begin() + lastPos, l.end());
+			result << rebuilt << '\n';
+		} else {
+			result << l << '\n';
+		}
+	}
+
+	return result.str();
+}
 constexpr auto tiny = std::numeric_limits<double>::epsilon();
 
 template<typename T>
@@ -52,7 +130,7 @@ struct Constants {
 	std::string getCode() const {
 		std::ostringstream code;
 		std::ostringstream line;
-		for (int i = 0; i < values_.size(); i++) {
+		for (size_t i = 0; i < values_.size(); i++) {
 			code << indent + "static U const " + name_ + std::to_string(i) + " = ";
 			code << "U(" << std::setprecision(std::numeric_limits<double>::max_digits10 - 1) << std::scientific << values_[i] << ");\n";
 		}
@@ -313,22 +391,22 @@ Matrix transformMatrix1D(TransformDirection transformDirection, int modeCount, i
 	return transform;
 }
 
-std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const &A, std::vector<std::string> const &x) {
+std::string matrixVectorProduct(std::vector<std::string> &v, Matrix const &A, std::vector<std::string> const &x) {
 	std::string code;
-	int const M = x.size();
-	int const N = A.size();
+	size_t const M = x.size();
+	size_t const N = A.size();
+//	std::cout << matrixToString(A) << "\n";
 	if (v.size() != N) {
 		std::cout << matrixToString(A) << "\n";
-		printf("---- %i %i %i %i\n", v.size(), A.size(), A[0].size(), x.size());
+		printf("---- %li %li %li %li\n", v.size(), A.size(), A[0].size(), x.size());
 	}
-	assert((int ) v.size() == N);
-	assert((int ) A[0].size() == M);
+	assert(v.size() == N);
+	assert(A[0].size() == M);
 
-	for (int n = 0; n < N; n++) {
+	for (size_t n = 0; n < N; n++) {
 		if (v[n] == "") {
 			continue;
 		}
-		code += std::string(indent);
 		struct Less {
 			bool operator()(Real a, Real b) const {
 				if (std::abs(a - b) < tiny) {
@@ -340,24 +418,26 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 		};
 		std::map<Real, std::vector<std::pair<signed char, std::string>>, Less> terms;
 		std::set<Real, Less> coefficients;
-		for (int m = 0; m < M; m++) {
-			Real const C = A[n][m];
-			if (std::abs(C) < tiny) {
-				continue;
+		for (size_t m = 0; m < M; m++) {
+			if (x[m] != "") {
+				Real const C = A[n][m];
+				if (std::abs(C) < tiny) {
+					continue;
+				}
+				if (C > Real(0)) {
+					terms[std::abs(C)].push_back( { +1, x[m] });
+				} else {
+					terms[std::abs(C)].push_back( { -1, x[m] });
+				}
+				coefficients.insert(std::abs(C));
 			}
-			if (C > Real(0)) {
-				terms[std::abs(C)].push_back( { +1, x[m] });
-			} else {
-				terms[std::abs(C)].push_back( { -1, x[m] });
-			}
-			coefficients.insert(std::abs(C));
 		}
-		code += v[n] + " = ";
 		if (coefficients.size()) {
+//			code += std::string(indent);
+			code += indent + v[n] + " = ";
 			bool first1 = true;
 			for (auto it = coefficients.begin(); it != coefficients.end(); it++) {
 				Real const C = *it;
-				//		std::cerr << std::to_string(C) << " ";
 				auto const &theseTerms = terms[C];
 				if (first1) {
 					first1 = false;
@@ -400,8 +480,9 @@ std::string matrixVectorProduct(std::vector<std::string> const &v, Matrix const 
 			}
 			code += ";\n";
 		} else {
-			code += "allocateLike(input[0]);\n";
-			code += indent + v[n] + " = U(0);\n";
+			v[n] = "";
+//			code += "allocateLike(input[0]);\n";
+//			code += indent + v[n] + " = U(0);\n";
 		}
 		//	std::cerr << "\n";
 		std::string const str = "+ -";
@@ -443,8 +524,8 @@ Matrix traceMatrix(int D, int modeCount, int traceFace, bool inverse = false) {
 	int const traceDim = traceFace >> 1;
 	int const traceSign = 2 * (traceFace & 1) - 1;
 	std::vector<std::vector<int>> from, to;
-	int bigSize = binco(modeCount + D - 1, D);
-	int smallSize = binco(modeCount + D - 2, D - 1);
+	size_t bigSize = binco(modeCount + D - 1, D);
+	size_t smallSize = binco(modeCount + D - 2, D - 1);
 	for (int targetDeg = 0; targetDeg < modeCount; targetDeg++) {
 		for (int i = 0; i < ipow(modeCount, D); i++) {
 			int deg = 0;
@@ -477,8 +558,8 @@ Matrix traceMatrix(int D, int modeCount, int traceFace, bool inverse = false) {
 	assert(to.size() == smallSize);
 	assert(from.size() == bigSize);
 	Matrix P = createMatrix(smallSize, bigSize);
-	for (int n = 0; n < smallSize; n++) {
-		for (int m = 0; m < bigSize; m++) {
+	for (size_t n = 0; n < smallSize; n++) {
+		for (size_t m = 0; m < bigSize; m++) {
 			bool flag = true;
 			for (int d = 0; d < D - 1; d++) {
 				if ((to[n][d] != from[m][d + int(d >= traceDim)])) {
@@ -627,7 +708,7 @@ Matrix massMatrix(int dimensionCount, int N, bool inverse) {
 		}
 	}
 	if (inverse) {
-		for (int m = 0; m < M.size(); m++) {
+		for (size_t m = 0; m < M.size(); m++) {
 			for (auto &value : M[m]) {
 				if (std::abs(value) > tiny) {
 					value = Real(1) / value;
@@ -647,7 +728,85 @@ std::string tag(int D, int O) {
 	return std::string("_") + std::to_string(D) + "D_O" + std::to_string(O);
 }
 
-std::string generate(int dimensionCount, int modeCount) {
+std::string generateAnalyze(int dimCount, int modeCount, int derivDim = -1) {
+	std::string hppCode;
+	int nodeCount = modeCount;
+	int const nodeCount3d = ipow(nodeCount, dimCount);
+	int const modeCount3d = binco(modeCount + dimCount - 1, dimCount);
+	std::vector<Matrix> factors;
+	std::vector<std::string> inputs, outputs;
+	auto const genArray = [](std::string typeName, int count) {
+		return std::string("std::array<") + typeName + ", " + std::to_string(count) + ">";
+	};
+	hppCode += "\n";
+	inputs = decltype(inputs)();
+	outputs = decltype(outputs)();
+	std::string functionTag = tag(dimCount, modeCount);
+	std::string functionName = "dgAnalyze" + ((derivDim >= 0) ? (std::string("Deriv") + std::to_string(derivDim)) : std::string("")) + functionTag;
+	int inCount = nodeCount3d;
+	int outCount = modeCount3d;
+	factors.clear();
+	hppCode += "template<typename T>\n";
+	outputs = generateVariableNames("input", inCount);
+	hppCode += "std::array<T, triangleSize<" + std::to_string(dimCount) + ", " + std::to_string(modeCount - int(derivDim >= 0)) + ">> ";
+	hppCode += functionName;
+	hppCode += "(std::array<T, squareSize<" + std::to_string(dimCount) + ", " + std::to_string(modeCount) + ">> const& input) {\n";
+	std::string deferredCode;
+	std::vector<int> arraySizes;
+	arraySizes = std::vector<int>(1, inCount);
+	factors.clear();
+
+	for (int dim = 0; dim < dimCount; dim++) {
+		factors.push_back(transformMatrix(dimCount, modeCount, TransformDirection::forward, dim, (dim == derivDim) ? derivDim : -1));
+	}
+	std::reverse(factors.begin(), factors.end());
+	factors.push_back(massMatrix(dimCount, modeCount, true));
+	for (int dim = 0; dim < dimCount; dim++) {
+		auto const sz = factors[dim].size();
+		arraySizes.push_back(sz);
+	}
+	indent++;
+	hppCode += indent + "using U = typename ElementType<T>::type;\n";
+	int bufferOffset;
+	bufferOffset = 0;
+	for (int dim = 0; dim <= dimCount; dim++) {
+		auto const &A = factors[dim];
+		inputs = std::move(outputs);
+		if (dim != dimCount) {
+			outputs = generateVariableNames("buffer", A.size(), bufferOffset);
+			if (bufferOffset == 0) {
+				bufferOffset = A.size();
+			} else {
+				bufferOffset = 0;
+			}
+		} else {
+			outputs = generateVariableNames("output", outCount);
+		}
+		//	indent--;
+		deferredCode += matrixVectorProduct(outputs, A, inputs);
+		//	indent++;
+	}
+	auto const mInv = massMatrix(dimCount, modeCount, true);
+
+	hppCode += std::string(getConstant.getCode());
+	getConstant.reset();
+	if (derivDim >= 0) {
+		deferredCode = renumberArrayIndices(deferredCode, "buffer");
+		deferredCode = renumberArrayIndices(deferredCode, "output");
+	}
+	int const bufferSize = elementCount(deferredCode, "buffer");
+	int const outputSize = elementCount(deferredCode, "output");
+	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
+	hppCode += indent + genArray("T", outputSize) + " output;\n";
+	hppCode += deferredCode;
+	deferredCode.clear();
+	hppCode += indent + "return output;\n";
+	indent--;
+	hppCode += indent + "}\n\n";
+	return hppCode;
+}
+
+std::string generateSynthesize(int dimensionCount, int modeCount) {
 	std::string hppCode;
 	int nodeCount = modeCount;
 	int const nodeCount3d = ipow(nodeCount, dimensionCount);
@@ -660,40 +819,24 @@ std::string generate(int dimensionCount, int modeCount) {
 	hppCode += "\n";
 	inputs = decltype(inputs)();
 	outputs = decltype(outputs)();
-	bool isAnalyze;
-	isAnalyze = true;
 	std::string functionTag = tag(dimensionCount, modeCount);
 	std::string functionName = "dgAnalyze" + functionTag;
-	int inCount = nodeCount3d;
-	int outCount = modeCount3d;
-SYNTHESIZE:
+	int outCount = nodeCount3d;
+	int inCount = modeCount3d;
 	factors.clear();
-	if (!isAnalyze) {
-		functionName = "dgSynthesize" + functionTag;
-	}
+	functionName = "dgSynthesize" + functionTag;
 	hppCode += "template<typename T>\n";
 	outputs = generateVariableNames("input", inCount);
-	if (isAnalyze) {
-		hppCode += "std::array<T, triangleSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">> ";
-		hppCode += functionName;
-		hppCode += "(std::array<T, squareSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">> const& input) {\n";
-	} else {
-		hppCode += "std::array<T, squareSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">> ";
-		hppCode += functionName;
-		hppCode += "(std::array<T, triangleSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">> const& input) {\n";
-	}
+	hppCode += "std::array<T, squareSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">> ";
+	hppCode += functionName;
+	hppCode += "(std::array<T, triangleSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">> const& input) {\n";
 	std::string deferredCode;
 	indent++;
 	std::vector<int> arraySizes;
 	arraySizes = std::vector<int>(1, inCount);
 	factors.clear();
-	auto direction = isAnalyze ? TransformDirection::forward : TransformDirection::backward;
 	for (int transformDimension = 0; transformDimension < dimensionCount; transformDimension++) {
-		factors.push_back(transformMatrix(dimensionCount, modeCount, direction, transformDimension));
-//		std::cout << matrixToString(factors.back()) << std::endl;
-	}
-	if (isAnalyze) {
-		std::reverse(factors.begin(), factors.end());
+		factors.push_back(transformMatrix(dimensionCount, modeCount, TransformDirection::backward, transformDimension));
 	}
 	for (int transformDimension = 0; transformDimension < dimensionCount; transformDimension++) {
 		auto const sz = factors[transformDimension].size();
@@ -707,7 +850,7 @@ SYNTHESIZE:
 		currentSize += arraySizes[i + 2];
 		bufferSize = std::max(bufferSize, currentSize);
 	}
-	if (isAnalyze || modeCount > 1) {
+	if (modeCount > 1) {
 		hppCode += indent + "using U = typename ElementType<T>::type;\n";
 	}
 	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
@@ -736,12 +879,6 @@ SYNTHESIZE:
 	hppCode += indent + "return output;\n";
 	indent--;
 	hppCode += indent + "}\n\n";
-	if (isAnalyze) {
-		isAnalyze = false;
-		std::swap(inCount, outCount);
-		goto SYNTHESIZE;
-	}
-
 	return hppCode;
 }
 
@@ -911,7 +1048,6 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 	code1 += tag(dimensionCount, modeCount);
 	code1 += "(int face, " + arrayType2 + " const& input) {\n";
 	indent++;
-	//code2 += indent + "using U = typename ElementType<T>::type;\n";
 	code2 += indent + arrayType1 + " output;\n";
 	code2 += std::string(indent);
 	for (int face = 0; face < 2 * dimensionCount; face++) {
@@ -924,7 +1060,16 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 		}
 		code2 += " {\n";
 		indent++;
-		auto A = traceMatrix(dimensionCount, modeCount, face, inverse);
+		Matrix A;
+		if (inverse) {
+			auto Tr = traceMatrix(dimensionCount, modeCount, face, inverse);
+			auto const Mhi = massMatrix(dimensionCount, modeCount, true);
+			auto const Mlo = massMatrix(dimensionCount - 1, modeCount, false);
+			A = (dimensionCount > 1 ) ? matrixMultiply(Tr, Mlo) : Tr;
+			A = matrixMultiply(Mhi, A);
+		} else {
+			A = traceMatrix(dimensionCount, modeCount, face, inverse);
+		}
 		code2 += matrixVectorProduct(outputs, A, inputs);
 		indent--;
 		code2 += indent + "}";
@@ -934,6 +1079,7 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 			code2 += "\n";
 		}
 	}
+	code1 += indent + "using U = typename ElementType<T>::type;\n";
 	hppCode += code1 + std::string(getConstant.getCode()) + code2;
 	getConstant.reset();
 	hppCode += indent + "return output;\n";
@@ -960,17 +1106,28 @@ int main(int, char*[]) {
 	hppCode += indent + "template<int D, int O>\n";
 	hppCode += indent + "constexpr int squareSize = ipow(O, D);\n";
 	hppCode += indent + "\n";
+	int const maxOrder = 4;
 	for (int dim = 1; dim <= 3; dim++) {
-		for (int order = 1; order <= 5; order++) {
-			hppCode += generate(dim, order);
-			hppCode += genMassMatrix(dim, order);
-			hppCode += genStiffnessMatrix(dim, order);
+		for (int order = 1; order <= maxOrder; order++) {
+			hppCode += generateAnalyze(dim, order);
+			for (int derivDim = 0; derivDim < dim; derivDim++) {
+				hppCode += generateAnalyze(dim, order, derivDim);
+			}
+			hppCode += generateSynthesize(dim, order);
+			//	hppCode += genMassMatrix(dim, order);
+			//hppCode += genStiffnessMatrix(dim, order);
 			hppCode += genTrace(dim, order, false);
 			hppCode += genTrace(dim, order, true);
 //			hppCode += generateGaussLobattoSynthesize(dim, order);
 		}
 	}
-	for (int iter = 0; iter <= 5; iter++) {
+	for (int iter = 0; iter <= 6; iter++) {
+		if (iter == 2) {
+			continue;
+		}
+		if (iter == 3) {
+			continue;
+		}
 		hppCode += indent + "\n";
 //		if (iter == 1) {
 //			hppCode += indent + "template<typename T, int D, int O, Quadrature Q = Quadrature::gaussLegendre>\n";
@@ -1000,6 +1157,10 @@ int main(int, char*[]) {
 			varname = "face, ";
 			fname = "dgTraceInverse";
 			hppCode += "auto " + fname + "(int face, std::array<T, triangleSize<D - 1, O>> const& input) {\n";
+		} else if (iter == 6) {
+			varname = "dim, ";
+			fname = "dgAnalyzeDerivative";
+			hppCode += "auto " + fname + "(int dim, std::array<T, squareSize<D, O>> const& input) {\n";
 		}
 		indent++;
 		for (int dim = 1; dim <= 3; dim++) {
@@ -1008,22 +1169,29 @@ int main(int, char*[]) {
 			}
 			hppCode += "if constexpr(D == " + std::to_string(dim) + ") {\n";
 			indent++;
-			for (int order = 1; order <= 4; order++) {
+			for (int order = 1; order <= maxOrder; order++) {
 				if (order == 1) {
 					hppCode += std::string(indent);
 				}
 				hppCode += "if constexpr(O == " + std::to_string(order) + ") {\n";
 				indent++;
-				if (fname == "dgSynthesize") {
-//					hppCode += indent + "if constexpr(Q == Quadrature::gaussLobatto) {\n";
-//					indent++;
-//					hppCode += indent + "return " + fname + "GaussLobatto" + tag(dim, order) + "(" + varname + "input);\n";
-//					indent--;
-//					hppCode += indent + "} else /*if constexpr(Q == Quadrature::gaussLegendre)*/ {\n";
-//					indent++;
-					hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
-//					indent--;
-//					hppCode += indent + "}\n";
+				if (iter == 6) {
+					if (dim > 1) {
+						hppCode += indent + "switch(dim) {\n";
+						for (int dim2 = 0; dim2 < dim; dim2++) {
+							if (dim2 != dim - 1) {
+								hppCode += indent + "case " + std::to_string(dim2) + ":\n";
+							} else {
+								hppCode += indent + "default:\n";
+							}
+							indent++;
+							hppCode += indent + "return dgAnalyzeDeriv" + std::to_string(dim2) + tag(dim, order) + "(input);\n";
+							indent--;
+						}
+						hppCode += indent + "}\n";
+					} else {
+						hppCode += indent + "return dgAnalyzeDeriv0" + tag(dim, order) + "(input);\n";
+					}
 				} else {
 					hppCode += indent + "return " + fname + tag(dim, order) + "(" + varname + "input);\n";
 				}

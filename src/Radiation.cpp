@@ -1,7 +1,7 @@
+#include "HyperSubgrid.hpp"
 #include "RadiationState.hpp"
 #include "Constants.hpp"
 #include "EulerState.hpp"
-#include "HyperGrid.hpp"
 #include "Real.hpp"
 #include "RungeKutta.hpp"
 #include <array>

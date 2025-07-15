@@ -2,7 +2,10 @@
 
 #include <type_traits>
 #include <array>
+#include <cmath>
 #include <utility>
+
+#include "Util.hpp"
 
 template<typename T>
 struct CanDoArithmetic {
