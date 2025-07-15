@@ -89,7 +89,6 @@ std::string renumberArrayIndices(std::string const &input, std::string const &ar
 
 	return result.str();
 }
-constexpr auto tiny = std::numeric_limits<double>::epsilon();
 
 template<typename T>
 std::vector<int> sortWithPermutation(std::vector<T> &vec, std::function<bool(T const&, T const&)> const &less) {
@@ -110,6 +109,7 @@ std::vector<int> sortWithPermutation(std::vector<T> &vec, std::function<bool(T c
 }
 
 using Real = long double;
+constexpr auto tiny = 4 * std::numeric_limits<Real>::epsilon();
 
 static Indent indent { };
 
@@ -132,7 +132,7 @@ struct Constants {
 		std::ostringstream line;
 		for (size_t i = 0; i < values_.size(); i++) {
 			code << indent + "static U const " + name_ + std::to_string(i) + " = ";
-			code << "U(" << std::setprecision(std::numeric_limits<double>::max_digits10 - 1) << std::scientific << values_[i] << ");\n";
+			code << "U(" << std::setprecision(15) << std::scientific << values_[i] << ");\n";
 		}
 		return code.str();
 	}
@@ -143,8 +143,13 @@ struct Constants {
 		type_ = type;
 	}
 private:
-	std::map<double, int, std::less<double>> indexes_;
-	std::vector<double> values_;
+	struct lesst {
+		bool operator()(Real a, Real b) const {
+			return b - a > tiny;
+		}
+	};
+	std::map<Real, int, lesst> indexes_;
+	std::vector<Real> values_;
 	std::string type_;
 	std::string name_ = "C";
 	int nextIndex_ = 0;
@@ -157,7 +162,7 @@ Matrix createMatrix(int N, int M = -1) {
 	if (M < 0) {
 		M = N;
 	}
-	return std::vector<std::vector<Real>>(N, std::vector<Real>(M, 0.0));
+	return std::vector<std::vector<Real>>(N, std::vector<Real>(M, 0.0L));
 }
 
 Matrix identityMatrix(int N) {
@@ -182,7 +187,7 @@ Matrix matrixTranspose(Matrix const &A) {
 Matrix matrixMultiply(Matrix const &A, Matrix const &B) {
 	int rows = A.size(), cols = B[0].size(), inner = A[0].size();
 	assert(A[0].size() == B.size());
-	Matrix C(rows, std::vector<Real>(cols, 0.0));
+	Matrix C(rows, std::vector<Real>(cols, 0.0L));
 	for (int i = 0; i < rows; ++i) {
 		for (int k = 0; k < inner; ++k) {
 			for (int j = 0; j < cols; ++j) {
@@ -205,8 +210,8 @@ Matrix matrixInverse(Matrix const &A) {
 	for (int i = 0; i < N; ++i) {
 		//	std::cout << matrixToString(A) << "\n";
 		int pivot = i;
-		if (B[i][i] < std::sqrt(std::numeric_limits<double>::epsilon())) {
-			int maxB = B[i][i];
+		if (B[i][i] < std::sqrt(std::numeric_limits<Real>::epsilon())) {
+			Real maxB = B[i][i];
 			for (int row = i + 1; row < N; ++row) {
 				if (std::abs(B[row][i]) > std::abs(maxB)) {
 					maxB = B[row][i];
@@ -282,7 +287,7 @@ std::string matrixToString(Matrix const &A) {
 	std::string str;
 	for (int n = 0; n < (int) A.size(); n++) {
 		for (int m = 0; m < (int) A[n].size(); m++) {
-			asprintf(&ptr, "%6.3f ", (double) A[n][m]);
+			asprintf(&ptr, "%6.3f ", (Real) A[n][m]);
 			str += ptr;
 			free(ptr);
 		}
@@ -332,7 +337,7 @@ std::vector<QuadraturePoint> gaussQuadrature(int nodeCount, Quadrature quadratur
 				rootEquation = legendreP(nodeCount, point.position);
 				rootEquationDerivative = legendreP(nodeCount, point.position, 1) * std::sin(theta);
 				newTheta = theta + rootEquation / rootEquationDerivative;
-			} while (double(newTheta) != std::nextafter(double(theta), double(newTheta)));
+			} while (std::abs(theta - newTheta) > tiny);
 			point.weight = Real(2) / (sqr(legendreP(nodeCount, point.position, 1)) * (Real(1) - sqr(point.position)));
 			results.push_back(point);
 		}
@@ -352,7 +357,7 @@ std::vector<QuadraturePoint> gaussQuadrature(int nodeCount, Quadrature quadratur
 				rootEquation = legendreP(nodeCount - 1, point.position, 1);
 				rootEquationDerivative = legendreP(nodeCount - 1, point.position, 2) * std::sin(theta);
 				newTheta = theta + rootEquation / rootEquationDerivative;
-			} while (double(newTheta) != std::nextafter(double(theta), double(newTheta)));
+			} while (Real(newTheta) != std::nextafter(Real(theta), Real(newTheta)));
 			point.weight = baseWeight / sqr(legendreP(nodeCount - 1, point.position));
 			results.push_back(point);
 		}
@@ -444,7 +449,7 @@ std::string matrixVectorProduct(std::vector<std::string> &v, Matrix const &A, st
 				} else {
 					code += " + ";
 				}
-				bool const isOne = std::abs(C - Real(1)) < tiny;
+				bool const isOne = std::abs(C - Real(1)) < 4 * tiny;
 				if (theseTerms.size() > 1) {
 					if (!isOne) {
 						code += getConstant(C) + " * (";
@@ -759,8 +764,9 @@ std::string generateAnalyze(int dimCount, int modeCount, int derivDim = -1) {
 	for (int dim = 0; dim < dimCount; dim++) {
 		factors.push_back(transformMatrix(dimCount, modeCount, TransformDirection::forward, dim, (dim == derivDim) ? derivDim : -1));
 	}
+	factors[0] = matrixMultiply(massMatrix(dimCount, modeCount, true), factors[0]);
 	std::reverse(factors.begin(), factors.end());
-	factors.push_back(massMatrix(dimCount, modeCount, true));
+	//factors.push_back(massMatrix(dimCount, modeCount, true));
 	for (int dim = 0; dim < dimCount; dim++) {
 		auto const sz = factors[dim].size();
 		arraySizes.push_back(sz);
@@ -769,10 +775,10 @@ std::string generateAnalyze(int dimCount, int modeCount, int derivDim = -1) {
 	hppCode += indent + "using U = typename ElementType<T>::type;\n";
 	int bufferOffset;
 	bufferOffset = 0;
-	for (int dim = 0; dim <= dimCount; dim++) {
+	for (int dim = 0; dim < dimCount; dim++) {
 		auto const &A = factors[dim];
 		inputs = std::move(outputs);
-		if (dim != dimCount) {
+		if (dim + 1 != dimCount) {
 			outputs = generateVariableNames("buffer", A.size(), bufferOffset);
 			if (bufferOffset == 0) {
 				bufferOffset = A.size();
@@ -1065,7 +1071,7 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 			auto Tr = traceMatrix(dimensionCount, modeCount, face, inverse);
 			auto const Mhi = massMatrix(dimensionCount, modeCount, true);
 			auto const Mlo = massMatrix(dimensionCount - 1, modeCount, false);
-			A = (dimensionCount > 1 ) ? matrixMultiply(Tr, Mlo) : Tr;
+			A = (dimensionCount > 1) ? matrixMultiply(Tr, Mlo) : Tr;
 			A = matrixMultiply(Mhi, A);
 		} else {
 			A = traceMatrix(dimensionCount, modeCount, face, inverse);
@@ -1257,9 +1263,9 @@ int main(int, char*[]) {
 				for (int d = 0; d < dim; d++) {
 					char *ptr;
 					if (std::abs(Q[I[d]].position) < 1e-14) {
-						Q[I[d]].position = 0.0;
+						Q[I[d]].position = 0.0L;
 					}
-					asprintf(&ptr, "T(%24.17e)", double(Q[I[d]].position));
+					asprintf(&ptr, "T(%24.17e)", Real(Q[I[d]].position));
 					hppCode += ptr;
 					free(ptr);
 					if (d + 1 < dim) {
