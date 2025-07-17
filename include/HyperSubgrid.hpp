@@ -2,9 +2,9 @@
 #include "ContainerArithmetic.hpp"
 #include "Hdf5.hpp"
 #include "EulerState.hpp"
+#include "Face.hpp"
 #include "Matrix.hpp"
 #include "MultiIndex.hpp"
-#include "Quadrature.hpp"
 #include "dgTransforms.hpp"
 
 #include <hpx/future.hpp>
@@ -29,41 +29,14 @@ inline constexpr Type minmod(Type const &a, Type const &b) {
 	return Type(sgn * mag);
 }
 
-using Face = int;
-
-constexpr Face makeFace(int dim, int dir) {
-	return Face(2 * dim + ((dir + 1) >> 1));
-}
-
-constexpr Face begFace() {
-	return Face(0);
-}
-
-constexpr int faceSize(int dimCount) {
-	return 2 * dimCount;
-}
-
-constexpr Face flipFace(Face face) {
-	face ^= 1;
-	return face;
-}
-
-constexpr int faceDim(Face face) {
-	return face >> 1;
-}
-
-constexpr int faceDir(Face face) {
-	return ((face & 1) << 1) - 1;
-}
-
-template<typename Type, int dimensionCount, int interiorWidth, int modeCount, template<typename, int> typename State>
+template<typename Type, int dimensionCount, int interiorWidth, int modeCount, template<typename > typename State>
 struct LimiterWorkspace {
 	static constexpr int modeVolume = binco(modeCount + dimensionCount - 1, dimensionCount);
 	static constexpr int modeSurface = binco(modeCount + dimensionCount - 2, dimensionCount - 1);
 	static constexpr int nodeVolume = ipow(modeCount, dimensionCount);
 	static constexpr int nodeSurface = ipow(modeCount, dimensionCount - 1);
 	static constexpr int interiorVolume = ipow(interiorWidth, dimensionCount);
-	static constexpr int fieldCount = State<Type, dimensionCount>::fieldCount();
+	static constexpr int fieldCount = State<Type>::fieldCount();
 	static hpx::mutex mutex;
 	static std::stack<std::unique_ptr<LimiterWorkspace>> workspaces;
 	static std::unique_ptr<LimiterWorkspace> getWorkspace() {
@@ -100,39 +73,48 @@ struct LimiterWorkspace {
 	LimiterWorkspace(LimiterWorkspace&&) = default;
 	LimiterWorkspace& operator=(LimiterWorkspace const&) = delete;
 	LimiterWorkspace& operator=(LimiterWorkspace&&) = default;
-	State<std::array<std::array<std::valarray<Type>, dimensionCount>, modeVolume>, dimensionCount> alpha;
+	State<std::array<std::array<std::valarray<Type>, dimensionCount>, modeVolume>> alpha;
 	std::array<SquareMatrix<std::valarray<Type>, fieldCount>, dimensionCount> leftEigenvectors;
 	std::array<SquareMatrix<std::valarray<Type>, fieldCount>, dimensionCount> rightEigenvectors;
-	State<std::valarray<Type>, dimensionCount> loState;
-	State<std::valarray<Type>, dimensionCount> hiState;
-	State<std::valarray<Type>, dimensionCount> meanState;
-	State<std::valarray<Type>, dimensionCount> slopeState;
+	State<std::valarray<Type>> loState;
+	State<std::valarray<Type>> hiState;
+	State<std::valarray<Type>> meanState;
+	State<std::valarray<Type>> slopeState;
 	std::array<std::bitset<modeCount>, dimensionCount> wasLimited;
 	std::valarray<Type> theta;
 	std::valarray<Type> &thisAlpha;
 	std::array<std::valarray<Type>, nodeSurface> surfaceNodes;
 	std::array<std::valarray<Type>, nodeVolume> volumeNodes;
-	std::array<State<std::valarray<Type>, dimensionCount>, nodeSurface> surfaceState;
-	std::array<State<std::valarray<Type>, dimensionCount>, nodeVolume> volumeState;
+	std::array<State<std::valarray<Type>>, nodeSurface> surfaceState;
+	std::array<State<std::valarray<Type>>, nodeVolume> volumeState;
 	std::array<std::valarray<Type>, modeVolume> modes;
+	State<std::valarray<Type>> invState;
 };
 
-template<typename Type, int dimensionCount, int interiorWidth, int modeCount, template<typename, int> typename State>
+template<typename Type, int dimensionCount, int interiorWidth, int modeCount, template<typename > typename State>
 hpx::mutex LimiterWorkspace<Type, dimensionCount, interiorWidth, modeCount, State>::mutex { };
 
-template<typename Type, int dimensionCount, int interiorWidth, int modeCount, template<typename, int> typename State>
+template<typename Type, int dimensionCount, int interiorWidth, int modeCount, template<typename > typename State>
 std::stack<std::unique_ptr<LimiterWorkspace<Type, dimensionCount, interiorWidth, modeCount, State>>> LimiterWorkspace<Type, dimensionCount, interiorWidth,
 		modeCount, State>::workspaces { };
 
-template<typename Type, int dimensionCount, int interiorWidth, int modeCount, typename RungeKutta, template<typename, int> typename State>
-class HyperSubgrid {
+template<typename Type_, int dimensionCount_, int interiorWidth_, int modeCount_, typename RungeKutta_, template<typename, int> typename State_>
+struct HyperSubgrid {
+	using Type = Type_;
+	using RungeKutta = RungeKutta_;
+	template<typename T>
+	using State = State_<T, dimensionCount_>;
+	static constexpr int dimensionCount = dimensionCount_;
+	static constexpr int interiorWidth = interiorWidth_;
+	static constexpr int modeCount = modeCount_;
+private:
 	static constexpr Type zero = Type(0);
 	static constexpr Type one = Type(1);
 	static constexpr Type two = Type(2);
 	static constexpr Type half = one / two;
-	static constexpr int faceCount = faceSize(dimensionCount);
+	static constexpr int faceCount = Face<dimensionCount>::count();
 	static constexpr int exteriorWidth = interiorWidth + 2;
-	static constexpr int fieldCount = State<Type, dimensionCount>::fieldCount();
+	static constexpr int fieldCount = State<Type>::fieldCount();
 	static constexpr int rkStageCount = RungeKutta::stageCount();
 	static constexpr int modeVolume = binco(modeCount + dimensionCount - 1, dimensionCount);
 	static constexpr int modeSurface = binco(modeCount + dimensionCount - 2, dimensionCount - 1);
@@ -151,9 +133,10 @@ class HyperSubgrid {
 	static constexpr auto surfaceTrace = dgTrace<std::valarray<Type>, dimensionCount, modeCount>;
 	static constexpr auto surfaceTraceInverse = dgTraceInverse<std::valarray<Type>, dimensionCount, modeCount>;
 
-	using Subgrid = State<std::array<std::valarray<Type>, modeVolume>, dimensionCount>;
+	using Subgrid = State<std::array<std::valarray<Type>, modeVolume>>;
 	using BndHandle = std::function<hpx::future<Subgrid>()>;
 	using LimiterWorkspaceType = LimiterWorkspace<Type, dimensionCount, interiorWidth, modeCount, State>;
+	using FaceType = Face<dimensionCount>;
 
 	static std::valarray<size_t> const& interiorSizes() {
 		static std::valarray<size_t> const a(interiorWidth, dimensionCount);
@@ -170,12 +153,12 @@ class HyperSubgrid {
 		}();
 		return a;
 	}
-	static std::valarray<size_t> const& singlePaddedSizes(Face face) {
+	static std::valarray<size_t> const& singlePaddedSizes(Face<dimensionCount> face) {
 		static auto const a = []() {
 			std::array<std::valarray<size_t>, faceCount> v;
-			for (Face face = 0; face < faceCount; face++) {
+			for (FaceType face = FaceType::begin(); face != FaceType::end(); face++) {
 				v[face] = interiorSizes();
-				v[face][faceDim(face)]++;
+				v[face][face.dimension()]++;
 			}
 			return v;
 		}();
@@ -192,11 +175,10 @@ class HyperSubgrid {
 		}();
 		return a[dim];
 	}
-	;
-	static std::valarray<size_t> const& singlePaddedStrides(Face face) {
+	static std::valarray<size_t> const& singlePaddedStrides(FaceType face) {
 		static auto const a = []() {
 			std::array<std::valarray<size_t>, faceCount> v;
-			for (Face face = 0; face < faceCount; face++) {
+			for (FaceType face = FaceType::begin(); face != FaceType::end(); face++) {
 				v[face] = std::valarray<size_t>(dimensionCount);
 				v[face][dimensionCount - 1] = 1;
 				for (int dim = dimensionCount - 1; dim > 0; dim--) {
@@ -226,7 +208,7 @@ class HyperSubgrid {
 		static auto const a = []() {
 			std::array<std::gslice, dimensionCount> v;
 			for (int dim = 0; dim < dimensionCount; dim++) {
-				v[dim] = std::gslice(singlePaddedStrides(makeFace(dim, +1))[dim], interiorSizes(), singlePaddedStrides(makeFace(dim, +1)));
+				v[dim] = std::gslice(singlePaddedStrides(FaceType(dim, +1))[dim], interiorSizes(), singlePaddedStrides(FaceType(dim, +1)));
 			}
 			return v;
 		}();
@@ -236,7 +218,7 @@ class HyperSubgrid {
 		static auto const a = []() {
 			std::array<std::gslice, dimensionCount> v;
 			for (int dim = 0; dim < dimensionCount; dim++) {
-				v[dim] = std::gslice(0, interiorSizes(), singlePaddedStrides(makeFace(dim, -1)));
+				v[dim] = std::gslice(0, interiorSizes(), singlePaddedStrides(FaceType(dim, -1)));
 			}
 			return v;
 		}();
@@ -258,7 +240,6 @@ class HyperSubgrid {
 	std::array<Subgrid, rkStageCount> stageStates;
 	std::array<std::valarray<Type>, dimensionCount> position;
 	std::array<BndHandle, faceCount> bndHandles;
-
 public:
 	HyperSubgrid(Type const &xNint = Type(1)) {
 		cellWidth = (xNint / Type(interiorWidth));
@@ -276,16 +257,16 @@ public:
 				position[dim][slice] = x;
 			}
 		}
-		for (Face face = 0; face < faceCount; face++) {
-			bndHandles[face] = this->getBoundaryHandle(flipFace(face));
+		for (FaceType face = FaceType::begin(); face != FaceType::end(); face++) {
+			bndHandles[face] = this->getBoundaryHandle(face.flip());
 		}
 	}
-	Subgrid createSinglePaddedSubgrid(Face face) {
+	Subgrid createSinglePaddedSubgrid(FaceType face) {
 		Subgrid gState = createSubgrid(singlePaddedVolume);
 		hpx::future<Subgrid> bndFuture = bndHandles[face]();
-		size_t const dim = faceDim(face);
-		size_t const bndStart = (faceDir(face) > 0) ? (interiorSizes()[dim] * singlePaddedStrides(face)[dim]) : size_t(0);
-		size_t const intStart = (faceDir(face) < 0) ? singlePaddedStrides(face)[dim] : size_t(0);
+		size_t const dim = face.dimension();
+		size_t const bndStart = (face.direction() > 0) ? (interiorSizes()[dim] * singlePaddedStrides(face)[dim]) : size_t(0);
+		size_t const intStart = (face.direction() < 0) ? singlePaddedStrides(face)[dim] : size_t(0);
 		auto bndSizes = interiorSizes();
 		bndSizes[dim] = 1;
 		auto const intSlice = std::gslice(intStart, interiorSizes(), singlePaddedStrides(face));
@@ -305,8 +286,8 @@ public:
 	}
 	Subgrid createDoublePaddedSubgrid(int dim) {
 		Subgrid gState = createSubgrid(doublePaddedVolume);
-		hpx::future<Subgrid> bndFuture1 = bndHandles[makeFace(dim, -1)]();
-		hpx::future<Subgrid> bndFuture2 = bndHandles[makeFace(dim, +1)]();
+		hpx::future<Subgrid> bndFuture1 = bndHandles[FaceType(dim, -1)]();
+		hpx::future<Subgrid> bndFuture2 = bndHandles[FaceType(dim, +1)]();
 		auto bndSizes = interiorSizes();
 		bndSizes[dim] = 1;
 		auto const intSlice = std::gslice(doublePaddedStrides(dim)[dim], interiorSizes(), doublePaddedStrides(dim));
@@ -327,11 +308,10 @@ public:
 		}
 		return gState;
 	}
-	void initialize(std::function<State<Type, dimensionCount>(std::array<Type, dimensionCount> const&)> const &initialState) {
+	void initialize(std::function<State<Type>(std::array<Type, dimensionCount> const&)> const &initialState) {
 		Type const halfCellWidth = Type(0.5) * cellWidth;
-		State<std::array<std::valarray<Type>, nodeVolume>, dimensionCount> nodalValues =
-				makeFilledArray<std::array<std::valarray<Type>, nodeVolume>, fieldCount>(
-						makeFilledArray<std::valarray<Type>, nodeVolume>(std::valarray<Type>(interiorVolume)));
+		State<std::array<std::valarray<Type>, nodeVolume>> nodalValues = makeFilledArray<std::array<std::valarray<Type>, nodeVolume>, fieldCount>(
+				makeFilledArray<std::valarray<Type>, nodeVolume>(std::valarray<Type>(interiorVolume)));
 		for (int node = 0; node < nodeVolume; node++) {
 			auto quadraturePoint = getQuadraturePoint<Type, dimensionCount, modeCount>(node);
 			auto thisPosition = position;
@@ -355,16 +335,16 @@ public:
 	}
 	void output(const char *filenameBase, int timeStepNumber, Type const &time) {
 		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
-		writeHdf5<Type, dimensionCount, interiorWidth, modeCount, State>(filename, cellWidth, np1State, State<Type, dimensionCount>::getFieldNames());
+		writeHdf5<Type, dimensionCount, interiorWidth, modeCount, State>(filename, cellWidth, np1State, State<Type>::getFieldNames());
 		writeList("X.visit", "!NBLOCKS 1\n", filename + ".xmf");
 	}
-	BndHandle getBoundaryHandle(Face face) const {
+	BndHandle getBoundaryHandle(FaceType face) const {
 		return BndHandle([this, face]() {
 			return hpx::async([this, face]() {
-				auto const dim = faceDim(face);
+				auto const dim = face.dimension();
 				auto sizes = interiorSizes();
 				sizes[dim] = 1;
-				size_t const start = (faceDir(face) < 0) ? size_t(0) : ((interiorSizes()[dim] - 1) * interiorStrides()[dim]);
+				size_t const start = (face.direction() < 0) ? size_t(0) : ((interiorSizes()[dim] - 1) * interiorStrides()[dim]);
 				std::gslice slice(start, sizes, interiorStrides());
 				Subgrid bndState = createSubgrid(boundaryVolume);
 				for (int field = 0; field < fieldCount; field++) {
@@ -379,7 +359,7 @@ public:
 	Type beginStep() {
 		using std::max;
 		std::array<Type, dimensionCount> maximumEigenvalue;
-		std::array<State<std::valarray<Type>, dimensionCount>, nodeVolume> stateAtNodes;
+		std::array<State<std::valarray<Type>>, nodeVolume> stateAtNodes;
 		nState = np1State;
 		maximumEigenvalue.fill(Type(0));
 		for (int field = 0; field < fieldCount; field++) {
@@ -446,6 +426,7 @@ public:
 			auto &volumeState = workspace->volumeState;
 			auto &modes = workspace->modes;
 			auto &thisAlpha = workspace->thisAlpha;
+			auto &invState = workspace->invState;
 			for (int field = 0; field < fieldCount; field++) {
 				meanState[field] = np1State[field][0];
 			}
@@ -488,10 +469,8 @@ public:
 							std::valarray<Type> const stateMinus = loState[field][intMinusSlice];
 							slopeState[field] = minmod(std::valarray<Type>(statePlus - stateCentral), std::valarray<Type>(stateCentral - stateMinus));
 						}
-						State<std::valarray<Type>, dimensionCount> initialStateInverse = makeFilledArray<std::valarray<Type>, fieldCount>(
-								std::valarray<Type>(interiorVolume));
 						for (int field = 0; field < fieldCount; field++) {
-							initialStateInverse[field] = Type(1) / (hiState[field] + tiny);
+							invState[field] = Type(1) / (hiState[field] + tiny);
 						}
 						slopeState = leftEigenvectors[dim] * slopeState;
 						hiState = leftEigenvectors[dim] * hiState;
@@ -503,8 +482,7 @@ public:
 						for (int field = 0; field < fieldCount; field++) {
 							auto &ref = alpha[field][hiMode][dim];
 							ref = max(ref,
-									std::valarray<Type>(
-											max(std::valarray<Type>(zero, interiorVolume), std::valarray<Type>(hiState[field] * initialStateInverse[field]))));
+									std::valarray<Type>(max(std::valarray<Type>(zero, interiorVolume), std::valarray<Type>(hiState[field] * invState[field]))));
 						}
 						wasLimited[dim][hiMode] = true;
 					}
@@ -528,7 +506,7 @@ public:
 			for (int field = 0; field < fieldCount; field++) {
 				meanState[field] = np1State[field][0];
 			}
-			for (Face face = 0; face < faceCount; face++) {
+			for (FaceType face = FaceType::begin(); face != FaceType::end(); face++) {
 				for (int field = 0; field < fieldCount; field++) {
 					for (int mode = 0; mode < modeVolume; mode++) {
 						modes[mode] = np1State[field][mode];
@@ -562,44 +540,91 @@ public:
 			LimiterWorkspaceType::recycleWorkspace(std::move(workspace));
 		}
 	}
+	struct FluxWorkspace {
+		static hpx::mutex mutex;
+		static std::stack<std::unique_ptr<FluxWorkspace>> workspaces;
+		static std::unique_ptr<FluxWorkspace> getWorkspace() {
+			std::unique_ptr<FluxWorkspace> pointer;
+			std::lock_guard<hpx::mutex> lock(mutex);
+			if (workspaces.empty()) {
+				pointer = std::make_unique<FluxWorkspace>();
+				workspaces.push(std::move(pointer));
+			}
+			pointer = std::move(workspaces.top());
+			workspaces.pop();
+			return pointer;
+
+		}
+		static void recycleWorkspace(std::unique_ptr<FluxWorkspace> &&pointer) {
+			std::lock_guard<hpx::mutex> lock(mutex);
+			workspaces.push(std::move(pointer));
+		}
+		State<std::valarray<Type>> tmp;
+		State<std::array<std::valarray<Type>, nodeSurface>> nodalFlux;
+		State<std::array<std::valarray<Type>, nodeVolume>> volumeFlux;
+		std::array<std::valarray<Type>, modeSurface> pModalFaceFlux;
+		std::array<std::valarray<Type>, modeSurface> mModalFaceFlux;
+		std::array<std::valarray<Type>, modeSurface> modalFlux;
+		std::array<std::valarray<Type>, nodeSurface> left;
+		std::array<std::valarray<Type>, nodeSurface> right;
+		std::array<std::valarray<Type>, modeVolume> pModalVolumeFlux;
+		std::array<std::valarray<Type>, modeVolume> mModalVolumeFlux;
+		std::array<std::valarray<Type>, modeVolume> volumeModes;
+		std::array<std::valarray<Type>, nodeVolume> volumeNodes;
+		std::array<std::valarray<Type>, binco(modeCount + dimensionCount - 2, dimensionCount)> source;
+		std::array<State<std::valarray<Type>>, nodeSurface> lState;
+		std::array<State<std::valarray<Type>>, nodeSurface> rState;
+		std::array<State<std::valarray<Type>>, nodeVolume> volumeState;
+		Subgrid lModes;
+		Subgrid rModes;
+	};
 	Subgrid computeTimeDerivative(Type timeStepSize, Subgrid &stageState) {
+		auto workspace = FluxWorkspace::getWorkspace();
+		auto &pModalFaceFlux = workspace->pModalFaceFlux;
+		auto &mModalFaceFlux = workspace->mModalFaceFlux;
+		auto &pModalVolumeFlux = workspace->pModalVolumeFlux;
+		auto &mModalVolumeFlux = workspace->mModalVolumeFlux;
+		auto &nodalFlux = workspace->nodalFlux;
+		auto &modalFlux = workspace->modalFlux;
+		auto &lState = workspace->lState;
+		auto &rState = workspace->rState;
+		auto &left = workspace->left;
+		auto &right = workspace->right;
+		auto &tmpState = workspace->tmp;
+		auto &volumeNodes = workspace->volumeNodes;
+		auto &volumeModes = workspace->volumeModes;
+		auto &volumeState = workspace->volumeState;
+		auto &volumeFlux = workspace->volumeFlux;
+		auto &lModes = workspace->lModes;
+		auto &rModes = workspace->rModes;
+		auto &source = workspace->source;
 		Type const lambda = Type(2) * timeStepSize / cellWidth;
 		{
 			for (int dim = 0; dim < dimensionCount; dim++) {
-				std::array<std::valarray<Type>, modeSurface> pModalFaceFlux;
-				std::array<std::valarray<Type>, modeSurface> mModalFaceFlux;
-				std::array<std::valarray<Type>, modeVolume> pModalVolumeFlux;
-				std::array<std::valarray<Type>, modeVolume> mModalVolumeFlux;
-				State<std::array<std::valarray<Type>, nodeSurface>, dimensionCount> nodalFlux = makeFilledArray<std::array<std::valarray<Type>, nodeSurface>,
-						fieldCount>(makeFilledArray<std::valarray<Type>, nodeSurface>(std::valarray<Type>(singlePaddedVolume)));
-				std::array<State<std::valarray<Type>, dimensionCount>, nodeSurface> lState = makeFilledArray<State<std::valarray<Type>, dimensionCount>,
-						nodeSurface>(makeFilledArray<std::valarray<Type>, fieldCount>(std::valarray<Type>(singlePaddedVolume)));
-				std::array<State<std::valarray<Type>, dimensionCount>, nodeSurface> rState = makeFilledArray<State<std::valarray<Type>, dimensionCount>,
-						nodeSurface>(makeFilledArray<std::valarray<Type>, fieldCount>(std::valarray<Type>(singlePaddedVolume)));
-				auto lModes = createSinglePaddedSubgrid(makeFace(dim, -1));
-				auto rModes = createSinglePaddedSubgrid(makeFace(dim, +1));
+				lModes = createSinglePaddedSubgrid(FaceType(dim, -1));
+				rModes = createSinglePaddedSubgrid(FaceType(dim, +1));
 				for (int field = 0; field < fieldCount; field++) {
-					auto const left = surfaceSynthesize(surfaceTrace(makeFace(dim, +1), lModes[field]));
-					auto const right = surfaceSynthesize(surfaceTrace(makeFace(dim, -1), rModes[field]));
+					left = surfaceSynthesize(surfaceTrace(FaceType(dim, +1), lModes[field]));
+					right = surfaceSynthesize(surfaceTrace(FaceType(dim, -1), rModes[field]));
 					for (int node = 0; node < nodeSurface; node++) {
 						lState[node][field] = left[node];
 						rState[node][field] = right[node];
 					}
 				}
 				for (int node = 0; node < nodeSurface; node++) {
-					auto const tmp = solveRiemannProblem(lState[node], rState[node], dim);
+					tmpState = solveRiemannProblem(lState[node], rState[node], dim);
 					for (int field = 0; field < fieldCount; field++) {
-						nodalFlux[field][node] = tmp[field];
+						nodalFlux[field][node] = tmpState[field];
 					}
 				}
 				for (int field = 0; field < fieldCount; field++) {
-					auto const modalFlux = surfaceAnalyze(nodalFlux[field]);
+					modalFlux = surfaceAnalyze(nodalFlux[field]);
 					for (int mode = 0; mode < modeSurface; mode++) {
-						pModalFaceFlux[mode] = modalFlux[mode][fluxPlusSlice(dim)];
-						mModalFaceFlux[mode] = modalFlux[mode][fluxMinusSlice(dim)];
+						pModalFaceFlux[mode] = std::valarray<Type>(modalFlux[mode][fluxPlusSlice(dim)]);
+						mModalFaceFlux[mode] = std::valarray<Type>(modalFlux[mode][fluxMinusSlice(dim)]);
 					}
-					pModalVolumeFlux = surfaceTraceInverse(makeFace(dim, +1), pModalFaceFlux);
-					mModalVolumeFlux = surfaceTraceInverse(makeFace(dim, -1), mModalFaceFlux);
+					pModalVolumeFlux = surfaceTraceInverse(FaceType(dim, +1), pModalFaceFlux);
+					mModalVolumeFlux = surfaceTraceInverse(FaceType(dim, -1), mModalFaceFlux);
 					for (int mode = 0; mode < modeVolume; mode++) {
 						stageState[field][mode] -= lambda * (pModalVolumeFlux[mode] - mModalVolumeFlux[mode]);
 					}
@@ -608,27 +633,24 @@ public:
 		}
 		{
 			for (int dim = 0; dim < dimensionCount; dim++) {
-				std::array<State<std::valarray<Type>, dimensionCount>, nodeVolume> volumeState;
-				State<std::array<std::valarray<Type>, nodeVolume>, dimensionCount> volumeFlux;
 				for (int field = 0; field < fieldCount; field++) {
-					std::array<std::valarray<Type>, modeVolume> volumeModes;
 					for (int mode = 0; mode < modeVolume; mode++) {
 						volumeModes[mode] = np1State[field][mode];
 					}
-					auto const nodes = volumeSynthesize(volumeModes);
+					volumeNodes = volumeSynthesize(volumeModes);
 					for (int node = 0; node < nodeVolume; node++) {
-						volumeState[node][field] = nodes[node];
+						volumeState[node][field] = std::move(volumeNodes[node]);
 					}
 				}
 				for (int node = 0; node < nodeVolume; node++) {
-					auto tmp = volumeState[node].flux(dim);
+					tmpState = volumeState[node].flux(dim);
 					for (int field = 0; field < fieldCount; field++) {
-						volumeFlux[field][node] = tmp[field];
+						volumeFlux[field][node] = std::move(tmpState[field]);
 					}
 				}
 				for (int field = 0; field < fieldCount; field++) {
 					int const loModeVolume = binco(modeCount + dimensionCount - 2, dimensionCount);
-					auto const source = volumeAnalyzeDerivative(dim, volumeFlux[field]);
+					source = volumeAnalyzeDerivative(dim, volumeFlux[field]);
 					for (int loMode = 0; loMode < loModeVolume; loMode++) {
 						auto modeIndices = flatToTriangular<dimensionCount, modeCount - 1>(loMode);
 						modeIndices[dim]++;
@@ -638,7 +660,13 @@ public:
 				}
 			}
 		}
+		FluxWorkspace::recycleWorkspace(std::move(workspace));
 		return stageState;
 	}
 };
 
+template<typename T, int D, int W, int M, typename RK, template<typename, int> typename S>
+hpx::mutex HyperSubgrid<T, D, W, M, RK, S>::FluxWorkspace::mutex;
+
+template<typename T, int D, int W, int M, typename RK, template<typename, int> typename S>
+std::stack<std::unique_ptr<typename HyperSubgrid<T, D, W, M, RK, S>::FluxWorkspace>> HyperSubgrid<T, D, W, M, RK, S>::FluxWorkspace::workspaces;

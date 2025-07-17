@@ -4,6 +4,7 @@
 #include <type_traits>
 #include <vector>
 #include <hpx/hpx_init.hpp>
+#include "Octogrid.hpp"
 #include "HyperSubgrid.hpp"
 #include "dgTransforms.hpp"
 #include "Options.hpp"
@@ -13,19 +14,34 @@
 #include "RungeKutta.hpp"
 
 void testRadiation();
+constexpr int P = 3;
+constexpr int D = 2;
+constexpr int N = 64;
+using T = double;
+using RK = RungeKutta<T, P>::type;
+
+using SubgridType = HyperSubgrid<T, D, N, P, RK, EulerStateHLLC>;
+using OctogridServerType = OctogridServer<SubgridType>;
+using OctogridType = hpx::components::component<OctogridServerType>;
+
+HPX_REGISTER_COMPONENT_MODULE();
+HPX_REGISTER_COMPONENT (OctogridType);
+
+using GetFaceChildrenAction = typename OctogridServerType::refineAction;
+using RefineAction = typename OctogridServerType::getFaceChildrenAction;
+using SetAction = typename OctogridServerType::setAction;
+
+HPX_REGISTER_ACTION(GetFaceChildrenAction, getFaceChildrenAction);
+HPX_REGISTER_ACTION(RefineAction, refineAction);
+HPX_REGISTER_ACTION(SetAction, setAction);
 
 int hpx_main(int argc, char *argv[]) {
 	printf("\nStarting\n");
 	enableFPE();
 	processOptions(argc, argv);
 	printf("\nPrologue complete\n");
-	constexpr int P = 3;
-	constexpr int D = 2;
-	constexpr int N = 64;
-	using T = double;
-	using RK = RungeKutta<T, P>::type;
 	RK const rk;
-	HyperSubgrid<T, D, N, P, RK, EulerStateHLLC> grid;
+	SubgridType grid;
 	grid.initialize(initSodShockTube<T, D>);
 	grid.applyLimiter();
 	grid.output("X", 0, Real(0.0));

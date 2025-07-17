@@ -287,7 +287,9 @@ std::string matrixToString(Matrix const &A) {
 	std::string str;
 	for (int n = 0; n < (int) A.size(); n++) {
 		for (int m = 0; m < (int) A[n].size(); m++) {
-			asprintf(&ptr, "%6.3f ", (Real) A[n][m]);
+			if (asprintf(&ptr, "%6.3Lf ", (Real) A[n][m]) == 0) {
+				assert(false);
+			}
 			str += ptr;
 			free(ptr);
 		}
@@ -772,7 +774,9 @@ std::string generateAnalyze(int dimCount, int modeCount, int derivDim = -1) {
 		arraySizes.push_back(sz);
 	}
 	indent++;
-	hppCode += indent + "using U = typename ElementType<T>::type;\n";
+	if (!((modeCount == 1) && ((derivDim + 1 == dimCount) || ((dimCount == 1) && (derivDim < 0))))) {
+		hppCode += indent + "using U = typename ElementType<T>::type;\n";
+	}
 	int bufferOffset;
 	bufferOffset = 0;
 	for (int dim = 0; dim < dimCount; dim++) {
@@ -802,7 +806,9 @@ std::string generateAnalyze(int dimCount, int modeCount, int derivDim = -1) {
 	}
 	int const bufferSize = elementCount(deferredCode, "buffer");
 	int const outputSize = elementCount(deferredCode, "output");
-	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
+	if (bufferSize) {
+		hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
+	}
 	hppCode += indent + genArray("T", outputSize) + " output;\n";
 	hppCode += deferredCode;
 	deferredCode.clear();
@@ -1085,7 +1091,9 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 			code2 += "\n";
 		}
 	}
-	code1 += indent + "using U = typename ElementType<T>::type;\n";
+	if (inverse) {
+		code1 += indent + "using U = typename ElementType<T>::type;\n";
+	}
 	hppCode += code1 + std::string(getConstant.getCode()) + code2;
 	getConstant.reset();
 	hppCode += indent + "return output;\n";
@@ -1265,7 +1273,9 @@ int main(int, char*[]) {
 					if (std::abs(Q[I[d]].position) < 1e-14) {
 						Q[I[d]].position = 0.0L;
 					}
-					asprintf(&ptr, "T(%24.17e)", Real(Q[I[d]].position));
+					if (asprintf(&ptr, "T(%24.17Le)", Real(Q[I[d]].position)) == 0) {
+						assert(false);
+					}
 					hppCode += ptr;
 					free(ptr);
 					if (d + 1 < dim) {

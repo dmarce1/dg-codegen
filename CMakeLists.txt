@@ -42,39 +42,33 @@ set(astrotiger_src
 )
 
 set(astrotiger_header
-  include/Array.hpp
-  include/Basis.hpp
-  include/Complex.hpp
-  include/Constants.hpp
-  include/ContainerArithmetic.hpp
-  include/Definitions.hpp
-  include/EulerState.hpp
-  include/Hdf5.hpp
-  include/HyperSubgrid.hpp
-  include/Indent.hpp
-  include/Legendre.hpp
-  include/Matrix.hpp
-  include/MultiIndex.hpp
-  include/Octant.hpp
-  include/Options.hpp
-  include/Polynomial.hpp
-  include/Quadrature.hpp
-  include/RadiationState.hpp
-  include/Range.hpp
-  include/Real.hpp
-  include/RungeKutta.hpp
-  include/SparseMatrix.hpp
-  include/TriIndex.hpp
-  include/Util.hpp
-  include/Zobrist.hpp
+   include/Constants.hpp
+   include/ContainerArithmetic.hpp
+   include/Definitions.hpp
+   include/EulerState.hpp
+   include/Face.hpp
+   include/Hdf5.hpp
+   include/HyperSubgrid.hpp
+   include/Indent.hpp
+   include/Matrix.hpp
+   include/MultiIndex.hpp
+   include/Octogrid.hpp
+   include/Options.hpp
+   include/RadiationState.hpp
+   include/Range.hpp
+   include/Real.hpp
+   include/RungeKutta.hpp
+   include/Symbolic.hpp
+   include/TriIndex.hpp
+   include/Util.hpp
 )
+
 
 # ------------------------------------------------------------------------------
 # CODEGEN
 # ------------------------------------------------------------------------------
 add_executable(codegen
   src/codegen.cpp
-  src/permutation.cpp
   src/Util.cpp
   include/Definitions.hpp
   include/Indent.hpp

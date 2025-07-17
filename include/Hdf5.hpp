@@ -19,8 +19,8 @@
 #include "Util.hpp"
 #include <valarray>
 
-template<typename T, int D, int N, int P, template<typename, int> typename S>
-void writeHdf5(std::string filename, T const &h, S<std::array<std::valarray<T>, binco(D + P - 1, D)>, D> const &fieldData,
+template<typename T, int D, int N, int P, template<typename> typename S>
+void writeHdf5(std::string filename, T const &h, S<std::array<std::valarray<T>, binco(D + P - 1, D)>> const &fieldData,
 		std::vector<std::string> const &fieldNames) {
 	constexpr Range<int, D> Box { repeat<D>(0), repeat<D>(N) };
 	using hindex_t = MultiIndex<Box>;
