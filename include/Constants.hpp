@@ -19,7 +19,8 @@ struct Constants {
 	static constexpr double pi = 3.14159265358979323846;
 	double c;
 	double G;
-	double amu;
+	double u;
+	double me;
 	double kB;
 	double h;
 	double hbar;

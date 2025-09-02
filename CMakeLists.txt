@@ -6,7 +6,7 @@ project(astrotiger CXX CUDA)
 # FLAGS
 # ------------------------------------------------------------------------------
 set(ALL_FLAGS -std=c++23 -Wall -Wno-comma-subscript -I${PROJECT_SOURCE_DIR}/include)
-set(CXX_FLAGS  ${ALL_FLAGS} -march=native)
+set(CXX_FLAGS  ${ALL_FLAGS} -fext-numeric-literals -march=native)
 set(CUDA_FLAGS ${ALL_FLAGS} -Xcompiler -march=native)
 
 # ------------------------------------------------------------------------------
@@ -35,25 +35,32 @@ find_package(HPX  REQUIRED)
 set(astrotiger_src
   src/main.cpp
   src/Constants.cpp
+  src/FermiDirac.cpp
   src/Options.cpp
   src/Util.cpp
   src/Radiation.cpp
   src/SodShockTube.cpp
+  src/Symbolic.cpp
 )
 
 set(astrotiger_header
+   include/AutoDifferentiation.hpp
+   include/BiconjugateGradient.hpp
    include/Constants.hpp
    include/ContainerArithmetic.hpp
    include/Definitions.hpp
+   include/DoubleReal.hpp
    include/EulerState.hpp
    include/Face.hpp
    include/Hdf5.hpp
    include/HyperSubgrid.hpp
    include/Indent.hpp
+   include/Integrate.hpp
    include/Matrix.hpp
    include/MultiIndex.hpp
    include/Octogrid.hpp
    include/Options.hpp
+   include/Polynomial.hpp
    include/RadiationState.hpp
    include/Range.hpp
    include/Real.hpp
@@ -68,11 +75,14 @@ set(astrotiger_header
 # CODEGEN
 # ------------------------------------------------------------------------------
 add_executable(codegen
-  src/codegen.cpp
-  src/Util.cpp
-  include/Definitions.hpp
-  include/Indent.hpp
-  include/Util.hpp
+  	src/codegen.cpp
+  	src/stateCodegen.cpp
+  	src/Util.cpp
+  	include/Definitions.hpp
+  	include/Indent.hpp
+  	include/stateCodegen.hpp
+	include/Symbolic.hpp
+ 	include/Util.hpp
 )
 
 target_include_directories(codegen PRIVATE
@@ -80,7 +90,10 @@ target_include_directories(codegen PRIVATE
 )
 
 target_link_libraries(codegen PUBLIC
-  stdc++_libbacktrace
+    gmp
+	stdc++_libbacktrace
+    quadmath    
+    symengine
 )
 
 target_compile_options(codegen PUBLIC
@@ -133,6 +146,9 @@ add_hpx_executable(
   DEPENDENCIES
     HDF5::HDF5
     stdc++_libbacktrace
+    quadmath
+    mpfr
+    gmp  
   SOURCES
     ${astrotiger_src}
     ${GENERATED_SOURCES}
@@ -152,8 +168,8 @@ set_property(TARGET astrotiger PROPERTY CUDA_ARCHITECTURES native)
 set_property(TARGET astrotiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 target_compile_options(astrotiger PUBLIC
-  $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O3 -fopt-info-vec-optimized >>
-  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O0 -g -fno-omit-frame-pointer -fsanitize=address>>
+  $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O3 -g -fopt-info-vec-optimized >>
+  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -O0 -g -fno-omit-frame-pointer>>
   $<$<CONFIG:Profile>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -g -pg -O2 -DNDEBUG>>
   $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} -G>>
   $<$<CONFIG:Release>:$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS} --use_fast_math -DNDEBUG Xcompiler=-Ofast>>
@@ -161,6 +177,6 @@ target_compile_options(astrotiger PUBLIC
 )
 
 target_link_options(astrotiger PUBLIC
-  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -rdynamic -fsanitize=address>>
+  $<$<CONFIG:Debug>:$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS} -rdynamic>>
 )
 

@@ -15,7 +15,10 @@ struct Real {
 	using Type = double;
 	inline constexpr Real() {
 	}
-	inline constexpr explicit Real(double a) {
+	inline constexpr Real(double a) {
+		value = Type(a);
+	}
+	inline constexpr Real(int a) {
 		value = Type(a);
 	}
 	inline constexpr Real& operator=(Real const &a) {

@@ -1,6 +1,8 @@
 #include "Definitions.hpp"
 #include "Indent.hpp"
+#include "stateCodegen.hpp"
 #include "Util.hpp"
+#include "Symbolic.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -109,7 +111,7 @@ std::vector<int> sortWithPermutation(std::vector<T> &vec, std::function<bool(T c
 }
 
 using Real = long double;
-constexpr auto tiny = 4 * std::numeric_limits<Real>::epsilon();
+constexpr auto tiny = 16 * std::numeric_limits<Real>::epsilon();
 
 static Indent indent { };
 
@@ -701,6 +703,52 @@ Matrix stiffnessMatrix(int dimensionCount, int modeCount, int derivDimension) {
 	return S3d;
 }
 
+Matrix taylorMatrix(int dimensionCount, int modeCount, int taylorDim) {
+	auto S = createMatrix(modeCount);
+	auto const rules = gaussQuadrature(modeCount + 1, Quadrature::gaussLegendre);
+	for (int n = 0; n < modeCount; n++) {
+		for (int m = 0; m < modeCount; m++) {
+			S[n][m] = Real(0);
+			for (auto const &rule : rules) {
+				Real const x = rule.position;
+				Real const w = rule.weight;
+				S[n][m] += w * legendreP(n, x, 0) * ipow(x, m) / Real(factorial(m));
+			}
+		}
+	}
+	auto S3d = identityMatrix(1);
+	;
+	for (int dimension = dimensionCount - 1; dimension >= 0; dimension--) {
+		S3d = kroneckerProduct(dimension == taylorDim ? S : identityMatrix(modeCount), S3d);
+	}
+	auto const P1 = permutationMatrix(S3d[0].size(), modeCount, dimensionCount);
+	S3d = matrixMultiply(P1, matrixMultiply(S3d, matrixTranspose(P1)));
+	return S3d;
+}
+
+Matrix derivativeMatrix(int dimensionCount, int modeCount, int derivDimension) {
+	auto S = createMatrix(modeCount);
+	auto const rules = gaussQuadrature(modeCount + 1, Quadrature::gaussLegendre);
+	for (int n = 0; n < modeCount; n++) {
+		for (int m = 0; m < modeCount; m++) {
+			S[n][m] = Real(0);
+			for (auto const &rule : rules) {
+				Real const x = rule.position;
+				Real const w = rule.weight;
+				S[n][m] += w * legendreP(n, x, 1) * legendreP(m, x);
+			}
+		}
+	}
+	auto S3d = identityMatrix(1);
+	;
+	for (int dimension = dimensionCount - 1; dimension >= 0; dimension--) {
+		S3d = kroneckerProduct(dimension == derivDimension ? S : identityMatrix(modeCount), S3d);
+	}
+	auto const P1 = permutationMatrix(S3d[0].size(), modeCount, dimensionCount);
+	S3d = matrixMultiply(P1, matrixMultiply(S3d, matrixTranspose(P1)));
+	return S3d;
+}
+
 Matrix massMatrix(int dimensionCount, int N, bool inverse) {
 	auto M = createMatrix(N);
 	auto const rules = gaussQuadrature(N + 3, Quadrature::gaussLegendre);
@@ -796,7 +844,6 @@ std::string generateAnalyze(int dimCount, int modeCount, int derivDim = -1) {
 		deferredCode += matrixVectorProduct(outputs, A, inputs);
 		//	indent++;
 	}
-	auto const mInv = massMatrix(dimCount, modeCount, true);
 
 	hppCode += std::string(getConstant.getCode());
 	getConstant.reset();
@@ -1041,6 +1088,59 @@ std::string genStiffnessMatrix(int dimensionCount, int modeCount) {
 	hppCode += "}\n";
 	return hppCode;
 }
+
+std::string genTaylorMatrix(int dimensionCount, int modeCount) {
+	std::string hppCode, code1, code2;
+	int const size = binco(modeCount + dimensionCount - 1, dimensionCount);
+	std::string arrayType = "std::array<T, triangleSize<" + std::to_string(dimensionCount) + ", " + std::to_string(modeCount) + ">>";
+	code1 += "\n";
+	code1 += "template<typename T>\n";
+	auto inputs = generateVariableNames("input", size);
+	auto outputs = generateVariableNames("output", size);
+	code1 += indent + arrayType + " ";
+	code1 += "dgTaylor" + tag(dimensionCount, modeCount);
+	code1 += "(int dimension, " + arrayType + " const& input) {\n";
+	indent++;
+	code1 += indent + "using U = typename ElementType<T>::type;\n";
+	code2 += indent + arrayType + " output;\n";
+	if (dimensionCount > 1) {
+		code2 += std::string(indent);
+	}
+	for (int dim = 0; dim < dimensionCount; dim++) {
+		if (dimensionCount > 1) {
+			if (dim == dimensionCount - 1) {
+				code2 += "/*";
+			}
+			code2 += "if(dimension == " + std::to_string(dim) + ")";
+			if (dim == dimensionCount - 1) {
+				code2 += "*/";
+			}
+			code2 += " {\n";
+			indent++;
+		}
+		auto const T = taylorMatrix(dimensionCount, modeCount, dim);
+		auto const M = massMatrix(dimensionCount, modeCount, true);
+		auto const A = matrixMultiply(M, T);
+
+		code2 += matrixVectorProduct(outputs, A, inputs);
+		if (dimensionCount > 1) {
+			indent--;
+			code2 += indent + "}";
+			if (dim + 1 < dimensionCount) {
+				code2 += " else ";
+			} else {
+				code2 += "\n";
+			}
+		}
+	}
+	hppCode += code1 + std::string(getConstant.getCode()) + code2;
+
+	getConstant.reset();
+	hppCode += indent + "return output;\n";
+	indent--;
+	hppCode += "}\n";
+	return hppCode;
+}
 //Matrix traceMatrix(int D, int modeCount, int traceDim, bool inverse = false) {
 
 std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
@@ -1102,6 +1202,54 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 	return hppCode;
 }
 
+int maxDim = 3;
+
+std::string generateA(int dimCount, int modeCount) {
+	using namespace SymEngine;
+	int nodeCount = modeCount;
+	int const inCount = ipow(nodeCount, dimCount);
+	int const outCount = binco(modeCount + dimCount - 1, dimCount);
+	std::vector<Matrix> factors;
+	for (int dim = 0; dim < dimCount; dim++) {
+		factors.push_back(transformMatrix(dimCount, modeCount, TransformDirection::forward, dim));
+	}
+//	factors[0] = matrixMultiply(massMatrix(dimCount, modeCount, true), factors[0]);
+	std::vector<SymbolicExpression> in(inCount);
+	std::vector<SymbolicExpression> out;
+	std::reverse(factors.begin(), factors.end());
+	for (int i = 0; i < inCount; i++) {
+		std::string name = "input[" + std::to_string(i) + "]";
+		in[i] = symbol(name.c_str());
+	}
+	for (int dim = 0; dim < dimCount; dim++) {
+		auto const &A = factors[dim];
+		int const n = A.size();
+		int const m = A[0].size();
+		out.resize(n);
+		for (int i = 0; i < n; i++) {
+			out[i] = real_double(A[i][0]) * in[0];
+			for (int j = 1; j < m; j++) {
+				out[i] += real_double(A[i][j]) * in[j];
+			}
+		}
+		in = std::move(out);
+	}
+	std::string code;
+	vec_pair subexprs;
+	for (int i = 0; i < outCount; i++) {
+		in[i] = expand(zeroSmallConstants(in[i]));
+	}
+	cse(subexprs, out, in);
+	factorPowersFromSubstitutions(subexprs);
+	for (int i = 0; i < int(subexprs.size()); i++) {
+		code += "T const " + toCxxCode(subexprs[i].first) + " = " + toCxxCode(subexprs[i].second) + ";\n";
+	}
+	for (int i = 0; i < outCount; i++) {
+		code += "output[" + std::to_string(i) + "] = " + toCxxCode(out[i]) + ";\n";
+	}
+	return code;
+}
+
 int main(int, char*[]) {
 	std::string hppCode;
 	hppCode += "#pragma once\n";
@@ -1121,18 +1269,23 @@ int main(int, char*[]) {
 	hppCode += indent + "constexpr int squareSize = ipow(O, D);\n";
 	hppCode += indent + "\n";
 	int const maxOrder = 4;
-	for (int dim = 1; dim <= 3; dim++) {
+	for (int dim = 1; dim <= maxDim; dim++) {
 		for (int order = 1; order <= maxOrder; order++) {
+//			if (dim < maxDim) {
 			hppCode += generateAnalyze(dim, order);
 			for (int derivDim = 0; derivDim < dim; derivDim++) {
 				hppCode += generateAnalyze(dim, order, derivDim);
 			}
 			hppCode += generateSynthesize(dim, order);
 			//	hppCode += genMassMatrix(dim, order);
-			//hppCode += genStiffnessMatrix(dim, order);
+			hppCode += genTaylorMatrix(dim, order);
 			hppCode += genTrace(dim, order, false);
 			hppCode += genTrace(dim, order, true);
 //			hppCode += generateGaussLobattoSynthesize(dim, order);
+//			} else {
+			//		hppCode += generateAnalyze(dim, order);
+			//		hppCode += generateSynthesize(dim, order);
+			//	}
 		}
 	}
 	for (int iter = 0; iter <= 6; iter++) {
@@ -1140,7 +1293,7 @@ int main(int, char*[]) {
 			continue;
 		}
 		if (iter == 3) {
-			continue;
+			//	continue;
 		}
 		hppCode += indent + "\n";
 //		if (iter == 1) {
@@ -1150,6 +1303,7 @@ int main(int, char*[]) {
 //		}
 		hppCode += std::string(indent);
 		std::string fname, varname;
+		int maxDim = 3;
 		if (iter == 0) {
 			fname = "dgAnalyze";
 			hppCode += "auto " + fname + "(std::array<T, squareSize<D, O>> const& input) {\n";
@@ -1160,7 +1314,7 @@ int main(int, char*[]) {
 			fname = "dgMassInverse";
 			hppCode += "auto " + fname + "(std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 3) {
-			fname = "dgStiffness";
+			fname = "dgTaylor";
 			varname = "dimension, ";
 			hppCode += "auto " + fname + "(int dimension, std::array<T, triangleSize<D, O>> const& input) {\n";
 		} else if (iter == 4) {
@@ -1177,7 +1331,7 @@ int main(int, char*[]) {
 			hppCode += "auto " + fname + "(int dim, std::array<T, squareSize<D, O>> const& input) {\n";
 		}
 		indent++;
-		for (int dim = 1; dim <= 3; dim++) {
+		for (int dim = 1; dim <= maxDim; dim++) {
 			if (dim == 1) {
 				hppCode += std::string(indent);
 			}
@@ -1211,7 +1365,7 @@ int main(int, char*[]) {
 				}
 				indent--;
 				hppCode += indent + "}";
-				if (order < 4) {
+				if (order < maxOrder) {
 					hppCode += " else ";
 				} else {
 					hppCode += "\n";
@@ -1219,7 +1373,7 @@ int main(int, char*[]) {
 			}
 			indent--;
 			hppCode += indent + "}";
-			if (dim < 3) {
+			if (dim < maxDim) {
 				hppCode += " else ";
 			} else {
 				hppCode += "\n";
@@ -1232,7 +1386,7 @@ int main(int, char*[]) {
 	hppCode += indent + "template<typename T, int D, int O>\n";
 	hppCode += "std::array<T, D> getQuadraturePoint(int flatIndex) {\n";
 	indent++;
-	for (int dim = 1; dim <= 3; dim++) {
+	for (int dim = 1; dim <= maxDim; dim++) {
 		if (dim == 1) {
 			hppCode += std::string(indent);
 		}
@@ -1290,7 +1444,7 @@ int main(int, char*[]) {
 			hppCode += indent + "return map[flatIndex];\n";
 			indent--;
 			hppCode += indent + "}";
-			if (order < 4) {
+			if (order < maxOrder) {
 				hppCode += " else ";
 			} else {
 				hppCode += "\n";
@@ -1298,7 +1452,7 @@ int main(int, char*[]) {
 		}
 		indent--;
 		hppCode += indent + "}";
-		if (dim < 3) {
+		if (dim < maxDim) {
 			hppCode += " else ";
 		} else {
 			hppCode += "\n";
@@ -1311,7 +1465,7 @@ int main(int, char*[]) {
 	hppCode += indent + "template<int D, int O>\n";
 	hppCode += "std::array<int, D> flatToTriangular(int flatIndex) {\n";
 	indent++;
-	for (int dim = 1; dim <= 3; dim++) {
+	for (int dim = 1; dim <= maxDim; dim++) {
 		if (dim == 1) {
 			hppCode += std::string(indent);
 		}
@@ -1365,7 +1519,7 @@ int main(int, char*[]) {
 			hppCode += indent + "return map[flatIndex];\n";
 			indent--;
 			hppCode += indent + "}";
-			if (order < 4) {
+			if (order < maxOrder) {
 				hppCode += " else ";
 			} else {
 				hppCode += "\n";
@@ -1373,7 +1527,7 @@ int main(int, char*[]) {
 		}
 		indent--;
 		hppCode += indent + "}";
-		if (dim < 3) {
+		if (dim < maxDim) {
 			hppCode += " else ";
 		} else {
 			hppCode += "\n";

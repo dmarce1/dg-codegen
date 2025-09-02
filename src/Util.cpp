@@ -54,27 +54,47 @@ void toFile(std::string const &content, std::filesystem::path const &filePath) {
 	ofs << content;
 }
 
+#include <mutex>
 
+static void fpeHandler(int, siginfo_t* info, void*) noexcept {
+    const char* reason = "Unknown FPE";
+    switch (info->si_code) {
+        case FPE_INTDIV: reason = "Integer divide by zero"; break;
+        case FPE_INTOVF: reason = "Integer overflow"; break;
+        case FPE_FLTDIV: reason = "Floating-point divide by zero"; break;
+        case FPE_FLTOVF: reason = "Floating-point overflow"; break;
+        case FPE_FLTUND: reason = "Floating-point underflow"; break;
+        case FPE_FLTRES: reason = "Floating-point inexact result"; break;
+        case FPE_FLTINV: reason = "Invalid floating-point operation"; break;
+        case FPE_FLTSUB: reason = "Subscript out of range"; break;
+    }
 
-#ifndef NDEBUG
+    // Write to stderr using async-signal-safe functions
+    (void)!write(STDERR_FILENO, reason, strlen(reason));
+    (void)!write(STDERR_FILENO, "\n", 1);
 
-void fpeHandler(int, siginfo_t*, void*) {
-	std::cerr << "SIGFPE!\n" << std::stacktrace::current() << std::endl;
-	std::_Exit(1);
+    _Exit(EXIT_FAILURE);
 }
-
 void installFpeHandler() {
-	struct sigaction sa;
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_flags = SA_SIGINFO;
-	sa.sa_sigaction = fpeHandler;
-	sigemptyset(&sa.sa_mask);
-	if (sigaction(SIGFPE, &sa, nullptr) != 0) {
-		perror("sigaction");
-		std::exit(1);
-	}
+	static std::once_flag once;
+	std::call_once(once, [] {
+		struct sigaction sa { };
+		sa.sa_flags = SA_SIGINFO;
+		sa.sa_sigaction = fpeHandler;
+		sigemptyset(&sa.sa_mask);
+		if (sigaction(SIGFPE, &sa, nullptr) != 0) {
+			perror("sigaction");
+			std::exit(1);
+		}
+	});
+}
+
+void enableFpeTrapsThisThread() {
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGFPE);
+	pthread_sigmask(SIG_UNBLOCK, &set, nullptr);
+	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 }
 
 
-
-#endif

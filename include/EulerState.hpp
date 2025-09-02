@@ -35,6 +35,9 @@ struct EulerState: public std::array<T, 2 + D> {
 	static constexpr EleType gamm1 = gamma - one;
 	static constexpr EleType gamp1o2gam = (gamma + one) / (two * gamma);
 	static constexpr EleType igamm1 = one / gamm1;
+	static constexpr int sx_i = 0;
+	static constexpr int rho_i = D;
+	static constexpr int eg_i = D + 1;
 	using base_type = std::array<T, NF>;
 	using value_type = T;
 	using eigensys_type = std::pair<std::array<T, NF>, SquareMatrix<T, NF>>;
@@ -142,7 +145,7 @@ struct EulerState: public std::array<T, 2 + D> {
 		}
 		return rc;
 	}
-	EulerState flux(int d1) const {
+	EulerState flux(int dim) const {
 		EulerState F;
 		T const irho = one / rho;
 		std::array<T, D> v;
@@ -155,13 +158,13 @@ struct EulerState: public std::array<T, 2 + D> {
 		}
 		T const ei = eg - ek;
 		T const p = gamm1 * ei;
-		T const u = v[d1];
-		F.rho = S[d1];
+		T const u = v[dim];
+		F.rho = S[dim];
 		F.eg = u * (eg + p);
 		for(int d2 = 0; d2 < D; d2++) {
 			F.S[d2] = u * S[d2];
 		}
-		F.S[d1] += p;
+		F.S[dim] += p;
 		return F;
 	}
 	friend EulerState solveRiemannProblem(const EulerState &uL, const EulerState &uR, int dim) {

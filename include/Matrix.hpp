@@ -710,10 +710,39 @@ void matrixQRDecomposition(SquareMatrix<T, N> const &A, SquareMatrix<T, N> &Q, S
 			G(i, j) = s;
 			G(j, i) = -s;
 			R = G * R;
-			Q = G * Q;
+			Q *= matrixTranspose(G);
 		}
 	}
 	Q = matrixTranspose(Q);
+}
+
+template<typename T, int N>
+std::array<T, N> matrixEigenvalues(SquareMatrix<T, N> const& A, int maxIters = 1000, T tol = 1e-12) {
+	SquareMatrix<T, N> Ak = A;
+	SquareMatrix<T, N> Q, R;
+	for (int iter = 0; iter < maxIters; ++iter) {
+		matrixQRDecomposition(Ak, Q, R);
+		Ak = R * Q;
+		std::cout << toString(Ak) << "\n";
+		bool converged = true;
+		for (int i = 1; i < N && converged; ++i) {
+			for (int j = 0; j < i; ++j) {
+				if (std::abs(Ak(i, j)) > tol) {
+					printf( "%i %i %e\n", i, j, std::abs(Ak(i, j)));
+					converged = false;
+					break;
+				}
+			}
+		}
+		if (converged) {
+			break;
+		}
+	}
+	std::array<T, N> eigenvalues;
+	for (int i = 0; i < N; ++i) {
+		eigenvalues[i] = Ak(i, i);
+	}
+	return eigenvalues;
 }
 
 template<typename T, int N>

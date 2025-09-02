@@ -234,36 +234,38 @@ private:
 		return grid;
 	}
 
-	Type cellWidth;
-	Subgrid np1State;
-	Subgrid nState;
-	std::array<Subgrid, rkStageCount> stageStates;
-	std::array<std::valarray<Type>, dimensionCount> position;
-	std::array<BndHandle, faceCount> bndHandles;
+	Type cellWidth_;
+	Subgrid np1State_;
+	Subgrid nState_;
+	std::array<Subgrid, rkStageCount> stageStates_;
+	std::array<std::valarray<Type>, dimensionCount> position_;
+	std::array<BndHandle, faceCount> boundaryHandles;
 public:
+	auto localSolve() const {
+	}
 	HyperSubgrid(Type const &xNint = Type(1)) {
-		cellWidth = (xNint / Type(interiorWidth));
-		np1State = createSubgrid(interiorVolume);
-		nState = createSubgrid(interiorVolume);
-		stageStates = makeFilledArray<Subgrid, rkStageCount>(createSubgrid(interiorVolume));
-		position = makeFilledArray<std::valarray<Type>, dimensionCount>(std::valarray<Type>(interiorVolume));
+		cellWidth_ = (xNint / Type(interiorWidth));
+		np1State_ = createSubgrid(interiorVolume);
+		nState_ = createSubgrid(interiorVolume);
+		stageStates_ = makeFilledArray<Subgrid, rkStageCount>(createSubgrid(interiorVolume));
+		position_ = makeFilledArray<std::valarray<Type>, dimensionCount>(std::valarray<Type>(interiorVolume));
 		for (int dim = 0; dim < dimensionCount; dim++) {
 			for (int i = 0; i < interiorWidth; i++) {
 				auto const start = i * interiorStrides()[dim];
 				auto sizes = interiorSizes();
 				sizes[dim] = 1;
-				Type const x = (Type(i) + half) * half * cellWidth;
+				Type const x = (Type(i) + half) * half * cellWidth_;
 				std::gslice slice(start, sizes, interiorStrides());
-				position[dim][slice] = x;
+				position_[dim][slice] = x;
 			}
 		}
 		for (FaceType face = FaceType::begin(); face != FaceType::end(); face++) {
-			bndHandles[face] = this->getBoundaryHandle(face.flip());
+			boundaryHandles[face] = this->getBoundaryHandle(face.flip());
 		}
 	}
 	Subgrid createSinglePaddedSubgrid(FaceType face) {
 		Subgrid gState = createSubgrid(singlePaddedVolume);
-		hpx::future<Subgrid> bndFuture = bndHandles[face]();
+		hpx::future<Subgrid> bndFuture = boundaryHandles[face]();
 		size_t const dim = face.dimension();
 		size_t const bndStart = (face.direction() > 0) ? (interiorSizes()[dim] * singlePaddedStrides(face)[dim]) : size_t(0);
 		size_t const intStart = (face.direction() < 0) ? singlePaddedStrides(face)[dim] : size_t(0);
@@ -273,7 +275,7 @@ public:
 		auto const bndSlice = std::gslice(bndStart, bndSizes, singlePaddedStrides(face));
 		for (int field = 0; field < fieldCount; field++) {
 			for (int mode = 0; mode < modeVolume; mode++) {
-				gState[field][mode][intSlice] = np1State[field][mode];
+				gState[field][mode][intSlice] = np1State_[field][mode];
 			}
 		}
 		auto const bndState = bndFuture.get();
@@ -286,8 +288,8 @@ public:
 	}
 	Subgrid createDoublePaddedSubgrid(int dim) {
 		Subgrid gState = createSubgrid(doublePaddedVolume);
-		hpx::future<Subgrid> bndFuture1 = bndHandles[FaceType(dim, -1)]();
-		hpx::future<Subgrid> bndFuture2 = bndHandles[FaceType(dim, +1)]();
+		hpx::future<Subgrid> bndFuture1 = boundaryHandles[FaceType(dim, -1)]();
+		hpx::future<Subgrid> bndFuture2 = boundaryHandles[FaceType(dim, +1)]();
 		auto bndSizes = interiorSizes();
 		bndSizes[dim] = 1;
 		auto const intSlice = std::gslice(doublePaddedStrides(dim)[dim], interiorSizes(), doublePaddedStrides(dim));
@@ -295,7 +297,7 @@ public:
 		auto const bndSlice2 = std::gslice((interiorSizes()[dim] + 1) * doublePaddedStrides(dim)[dim], bndSizes, doublePaddedStrides(dim));
 		for (int field = 0; field < fieldCount; field++) {
 			for (int mode = 0; mode < modeVolume; mode++) {
-				gState[field][mode][intSlice] = np1State[field][mode];
+				gState[field][mode][intSlice] = np1State_[field][mode];
 			}
 		}
 		auto const bndState1 = bndFuture1.get();
@@ -309,12 +311,12 @@ public:
 		return gState;
 	}
 	void initialize(std::function<State<Type>(std::array<Type, dimensionCount> const&)> const &initialState) {
-		Type const halfCellWidth = Type(0.5) * cellWidth;
+		Type const halfCellWidth = Type(0.5) * cellWidth_;
 		State<std::array<std::valarray<Type>, nodeVolume>> nodalValues = makeFilledArray<std::array<std::valarray<Type>, nodeVolume>, fieldCount>(
 				makeFilledArray<std::valarray<Type>, nodeVolume>(std::valarray<Type>(interiorVolume)));
 		for (int node = 0; node < nodeVolume; node++) {
 			auto quadraturePoint = getQuadraturePoint<Type, dimensionCount, modeCount>(node);
-			auto thisPosition = position;
+			auto thisPosition = position_;
 			for (int dim = 0; dim < dimensionCount; dim++) {
 				thisPosition[dim] += quadraturePoint[dim] * halfCellWidth;
 			}
@@ -330,12 +332,12 @@ public:
 			}
 		}
 		for (int field = 0; field < fieldCount; field++) {
-			np1State[field] = volumeAnalyze(nodalValues[field]);
+			np1State_[field] = volumeAnalyze(nodalValues[field]);
 		}
 	}
 	void output(const char *filenameBase, int timeStepNumber, Type const &time) {
 		std::string filename = std::string(filenameBase) + "." + std::to_string(timeStepNumber) + ".h5";
-		writeHdf5<Type, dimensionCount, interiorWidth, modeCount, State>(filename, cellWidth, np1State, State<Type>::getFieldNames());
+		writeHdf5<Type, dimensionCount, interiorWidth, modeCount, State>(filename, cellWidth_, np1State_, State<Type>::getFieldNames());
 		writeList("X.visit", "!NBLOCKS 1\n", filename + ".xmf");
 	}
 	BndHandle getBoundaryHandle(FaceType face) const {
@@ -349,7 +351,7 @@ public:
 				Subgrid bndState = createSubgrid(boundaryVolume);
 				for (int field = 0; field < fieldCount; field++) {
 					for (int mode = 0; mode < modeVolume; mode++) {
-						bndState[field][mode] = np1State[field][mode][slice];
+						bndState[field][mode] = np1State_[field][mode][slice];
 					}
 				}
 				return bndState;
@@ -360,10 +362,10 @@ public:
 		using std::max;
 		std::array<Type, dimensionCount> maximumEigenvalue;
 		std::array<State<std::valarray<Type>>, nodeVolume> stateAtNodes;
-		nState = np1State;
+		nState_ = np1State_;
 		maximumEigenvalue.fill(Type(0));
 		for (int field = 0; field < fieldCount; field++) {
-			auto const tmp = volumeSynthesize(np1State[field]);
+			auto const tmp = volumeSynthesize(np1State_[field]);
 			for (int node = 0; node < nodeVolume; node++) {
 				stateAtNodes[node][field] = tmp[node];
 			}
@@ -381,28 +383,28 @@ public:
 		for (int dim = 0; dim < dimensionCount; dim++) {
 			maximumEigenvalueSum += maximumEigenvalue[dim];
 		}
-		Type const timeStepSize = (cellWidth * butcherTable.cfl()) / (Type(2 * modeCount - 1) * maximumEigenvalueSum);
+		Type const timeStepSize = (cellWidth_ * butcherTable.cfl()) / (Type(2 * modeCount - 1) * maximumEigenvalueSum);
 		return timeStepSize;
 	}
 	void subStep(Type const &timeStepSize, int stageIndex) {
 		for (int field = 0; field < fieldCount; field++) {
 			for (int mode = 0; mode < modeVolume; mode++) {
-				np1State[field][mode] = nState[field][mode];
+				np1State_[field][mode] = nState_[field][mode];
 				for (int thisStage = 0; thisStage < stageIndex; thisStage++) {
-					np1State[field][mode] += butcherTable.a(stageIndex, thisStage) * stageStates[thisStage][field][mode];
+					np1State_[field][mode] += butcherTable.a(stageIndex, thisStage) * stageStates_[thisStage][field][mode];
 				}
-				stageStates[stageIndex][field][mode] = std::valarray<Type>(Type(0), interiorVolume);
+				stageStates_[stageIndex][field][mode] = std::valarray<Type>(Type(0), interiorVolume);
 			}
 		}
 		applyLimiter();
-		computeTimeDerivative(timeStepSize, stageStates[stageIndex]);
+		computeTimeDerivative(timeStepSize, stageStates_[stageIndex]);
 	}
 	void endStep() {
 		for (int field = 0; field < fieldCount; field++) {
 			for (int mode = 0; mode < modeVolume; mode++) {
-				np1State[field][mode] = nState[field][mode];
+				np1State_[field][mode] = nState_[field][mode];
 				for (int j = 0; j < rkStageCount; j++) {
-					np1State[field][mode] += butcherTable.b(j) * stageStates[j][field][mode];
+					np1State_[field][mode] += butcherTable.b(j) * stageStates_[j][field][mode];
 				}
 			}
 		}
@@ -428,7 +430,7 @@ public:
 			auto &thisAlpha = workspace->thisAlpha;
 			auto &invState = workspace->invState;
 			for (int field = 0; field < fieldCount; field++) {
-				meanState[field] = np1State[field][0];
+				meanState[field] = np1State_[field][0];
 			}
 			for (int dim = 0; dim < dimensionCount; dim++) {
 				rightEigenvectors[dim] = meanState.eigenSystem(dim).second;
@@ -499,17 +501,17 @@ public:
 						}
 					}
 					thisAlpha /= Type(count);
-					np1State[field][mode] *= thisAlpha;
+					np1State_[field][mode] *= thisAlpha;
 				}
 			}
 			theta = Type(1);
 			for (int field = 0; field < fieldCount; field++) {
-				meanState[field] = np1State[field][0];
+				meanState[field] = np1State_[field][0];
 			}
 			for (FaceType face = FaceType::begin(); face != FaceType::end(); face++) {
 				for (int field = 0; field < fieldCount; field++) {
 					for (int mode = 0; mode < modeVolume; mode++) {
-						modes[mode] = np1State[field][mode];
+						modes[mode] = np1State_[field][mode];
 					}
 					surfaceNodes = surfaceSynthesize(surfaceTrace(face, modes));
 					for (int node = 0; node < nodeSurface; node++) {
@@ -522,7 +524,7 @@ public:
 			}
 			for (int field = 0; field < fieldCount; field++) {
 				for (int mode = 0; mode < modeVolume; mode++) {
-					modes[mode] = np1State[field][mode];
+					modes[mode] = np1State_[field][mode];
 				}
 				volumeNodes = volumeSynthesize(modes);
 				for (int node = 0; node < nodeVolume; node++) {
@@ -534,7 +536,7 @@ public:
 			}
 			for (int field = 0; field < fieldCount; field++) {
 				for (int mode = 1; mode < modeVolume; mode++) {
-					np1State[field][mode] *= theta;
+					np1State_[field][mode] *= theta;
 				}
 			}
 			LimiterWorkspaceType::recycleWorkspace(std::move(workspace));
@@ -598,7 +600,7 @@ public:
 		auto &lModes = workspace->lModes;
 		auto &rModes = workspace->rModes;
 		auto &source = workspace->source;
-		Type const lambda = Type(2) * timeStepSize / cellWidth;
+		Type const lambda = Type(2) * timeStepSize / cellWidth_;
 		{
 			for (int dim = 0; dim < dimensionCount; dim++) {
 				lModes = createSinglePaddedSubgrid(FaceType(dim, -1));
@@ -635,7 +637,7 @@ public:
 			for (int dim = 0; dim < dimensionCount; dim++) {
 				for (int field = 0; field < fieldCount; field++) {
 					for (int mode = 0; mode < modeVolume; mode++) {
-						volumeModes[mode] = np1State[field][mode];
+						volumeModes[mode] = np1State_[field][mode];
 					}
 					volumeNodes = volumeSynthesize(volumeModes);
 					for (int node = 0; node < nodeVolume; node++) {

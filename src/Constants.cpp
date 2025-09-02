@@ -94,7 +94,8 @@ Constants getCgsConstants() {
 	Constants constants;
 	constants.c = 2.99792458e10;
 	constants.G = 6.67259e-8;
-	constants.amu = 1.6605402e-24;
+	constants.u = 1.6605402e-24;
+	constants.me = 9.1093837e-28;
 	constants.kB = 1.380658e-16;
 	constants.h = 6.6260755e-27;
 	constants.hbar = constants.h / (2.0 * constants.pi);
@@ -114,7 +115,8 @@ Constants getCodeConstants() {
 	Constants constants;
 	constants.c = cgs.c * units.cm2code() / units.s2code();
 	constants.G = cgs.G * ipow(units.cm2code(), 3) / (units.g2code() * sqr(units.s2code()));
-	constants.amu = cgs.amu * units.g2code();
+	constants.u = cgs.u * units.g2code();
+	constants.me = cgs.me * units.g2code();
 	constants.kB = cgs.kB * units.erg2code() / units.K2code();
 	constants.h = cgs.h * units.erg2code() / units.Hz2code();
 	constants.hbar = constants.h / (2.0 * constants.pi);

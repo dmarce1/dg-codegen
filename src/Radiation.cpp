@@ -346,7 +346,7 @@ struct ImplicitEqs {
 		T const Ek = rho * (sqr(cons.c * Beta_x) + sqr(cons.c * Beta_y)) / T(2);
 		T const Eg = Eg0 - dEr;
 		T const eps = Eg - Ek;
-		T const iCv = (eps > T(0)) ? (mu * cons.amu * (gamma - T(1)) / (cons.kB * rho)) : T(0);
+		T const iCv = (eps > T(0)) ? (mu * cons.u * (gamma - T(1)) / (cons.kB * rho)) : T(0);
 		T const temp = eps * iCv;
 		if (temp < T(0)) {
 			THROW("Invalid temperature");
@@ -461,7 +461,7 @@ struct ImplicitEqs {
 		T const Ek = T(1) / T(2) * rho * (sqr(cons.c * Beta_x) + sqr(cons.c * Beta_y));
 		T const Eg = Eg0 - dEr;
 		T const eps = Eg - Ek;
-		T const iCv = (eps > T(0)) ? (mu * cons.amu * (gamma - T(1)) / (cons.kB * rho)) : T(0);
+		T const iCv = (eps > T(0)) ? (mu * cons.u * (gamma - T(1)) / (cons.kB * rho)) : T(0);
 		T const temp = eps * iCv;
 		if (temp < 0) {
 			THROW("Invalid temperature");
@@ -674,7 +674,7 @@ void testRadiation() {
 			uG[d] = v2[d] * cons.c * rho;
 		}
 		constexpr T gamma = 5.0 / 3.0;
-		T const eint = cons.kB * rho * Tg / ((gamma - 1.0) * mu * cons.amu);
+		T const eint = cons.kB * rho * Tg / ((gamma - 1.0) * mu * cons.u);
 		uG[NDIM] = eint;
 		uG[NDIM] += 0.5 * sqr(uG[0]) / rho;
 		uG[NDIM] += 0.5 * sqr(uG[1]) / rho;
