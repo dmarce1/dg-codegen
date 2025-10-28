@@ -6,7 +6,6 @@
 #include <regex>
 #include <set>
 
-
 int elementCount(std::string const &input, std::string const &arrayName) {
 	std::regex accessRegex(R"(\b)" + arrayName + R"(\[(\d+)\])");
 
@@ -95,7 +94,7 @@ std::vector<int> sortWithPermutation(std::vector<T> &vec, std::function<bool(T c
 }
 
 using Real = long double;
-constexpr auto tiny = 16 * std::numeric_limits<Real>::epsilon();
+constexpr auto tiny = 16 * std::numeric_limits < Real > ::epsilon();
 
 static Indent indent { };
 
@@ -196,7 +195,7 @@ Matrix matrixInverse(Matrix const &A) {
 	for (int i = 0; i < N; ++i) {
 		//	std::cout << matrixToString(A) << "\n";
 		int pivot = i;
-		if (B[i][i] < std::sqrt(std::numeric_limits<Real>::epsilon())) {
+		if (B[i][i] < std::sqrt(std::numeric_limits < Real > ::epsilon())) {
 			Real maxB = B[i][i];
 			for (int row = i + 1; row < N; ++row) {
 				if (std::abs(B[row][i]) > std::abs(maxB)) {
@@ -205,7 +204,7 @@ Matrix matrixInverse(Matrix const &A) {
 				}
 			}
 		}
-		if (std::abs(B[pivot][i]) < std::sqrt(std::numeric_limits<Real>::epsilon())) {
+		if (std::abs(B[pivot][i]) < std::sqrt(std::numeric_limits < Real > ::epsilon())) {
 			throw std::runtime_error("Matrix is singular or nearly singular");
 		}
 		if (pivot != i) {
@@ -807,7 +806,7 @@ std::string generateAnalyze(int dimCount, int modeCount, int derivDim = -1) {
 	}
 	indent++;
 	if (!((modeCount == 1) && ((derivDim + 1 == dimCount) || ((dimCount == 1) && (derivDim < 0))))) {
-		hppCode += indent + "using U = typename ElementType<T>::type;\n";
+		hppCode += indent + "using U = typename detail::unwrap_type<T>::type;\n";
 	}
 	int bufferOffset;
 	bufferOffset = 0;
@@ -894,7 +893,7 @@ std::string generateSynthesize(int dimensionCount, int modeCount) {
 		bufferSize = std::max(bufferSize, currentSize);
 	}
 	if (modeCount > 1) {
-		hppCode += indent + "using U = typename ElementType<T>::type;\n";
+		hppCode += indent + "using U = typename detail::unwrap_type<T>::type;\n";
 	}
 	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
 	int bufferOffset;
@@ -969,7 +968,7 @@ std::string generateGaussLobattoSynthesize(int dimensionCount, int modeCount) {
 		currentSize += arraySizes[i + 2];
 		bufferSize = std::max(bufferSize, currentSize);
 	}
-	hppCode += indent + "using U = typename ElementType<T>::type;\n";
+	hppCode += indent + "using U = typename detail::unwrap_type<T>::type;\n";
 	hppCode += indent + genArray("T", bufferSize) + " buffer;\n";
 	int bufferOffset;
 	bufferOffset = 0;
@@ -1011,7 +1010,7 @@ std::string genMassMatrix(int dimensionCount, int modeCount) {
 	code1 += "dgMassInverse" + tag(dimensionCount, modeCount);
 	code1 += "(" + arrayType + " const& input) {\n";
 	indent++;
-	code1 += indent + "using U = typename ElementType<T>::type;\n";
+	code1 += indent + "using U = typename detail::unwrap_type<T>::type;\n";
 	code2 += indent + arrayType + " output;\n";
 	auto A = massMatrix(dimensionCount, modeCount, true);
 	code2 += matrixVectorProduct(outputs, A, inputs);
@@ -1035,7 +1034,7 @@ std::string genStiffnessMatrix(int dimensionCount, int modeCount) {
 	code1 += "dgStiffness" + tag(dimensionCount, modeCount);
 	code1 += "(int dimension, " + arrayType + " const& input) {\n";
 	indent++;
-	code1 += indent + "using U = typename ElementType<T>::type;\n";
+	code1 += indent + "using U = typename detail::unwrap_type<T>::type;\n";
 	code2 += indent + arrayType + " output;\n";
 	if (dimensionCount > 1) {
 		code2 += std::string(indent);
@@ -1085,7 +1084,9 @@ std::string genTaylorMatrix(int dimensionCount, int modeCount) {
 	code1 += "dgTaylor" + tag(dimensionCount, modeCount);
 	code1 += "(int dimension, " + arrayType + " const& input) {\n";
 	indent++;
-	code1 += indent + "using U = typename ElementType<T>::type;\n";
+	if (!(dimensionCount == 1 && modeCount <= 2)) {
+		code1 += indent + "using U = typename detail::unwrap_type<T>::type;\n";
+	}
 	code2 += indent + arrayType + " output;\n";
 	if (dimensionCount > 1) {
 		code2 += std::string(indent);
@@ -1176,7 +1177,7 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 		}
 	}
 	if (inverse) {
-		code1 += indent + "using U = typename ElementType<T>::type;\n";
+		code1 += indent + "using U = typename detail::unwrap_type<T>::type;\n";
 	}
 	hppCode += code1 + std::string(getConstant.getCode()) + code2;
 	getConstant.reset();
@@ -1188,24 +1189,83 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 
 int maxDim = 3;
 
-
 int main(int, char*[]) {
 	std::string hppCode;
 	hppCode += "#pragma once\n";
 	hppCode += "\n";
-	hppCode += "#include \"Util.hpp\"\n";
 	hppCode += "#include <array>\n";
 	hppCode += "#include <cmath>\n";
+	hppCode += "\n";
+	hppCode += "namespace detail {\n";
+	hppCode += "\n";
+	hppCode += "inline constexpr intmax_t binco(intmax_t n, intmax_t k) {\n"
+			"\tconstexpr intmax_t one(1);\n"
+			"\tintmax_t num = one;\n"
+			"\tintmax_t den = one;\n"
+			"\tfor (intmax_t i = one; i <= k; i++) {\n"
+			"\t\tnum *= n + one - i;\n"
+			"\t\tden *= i;\n"
+			"\t}\n"
+			"\treturn num / den;\n"
+			"}\n"
+			"\n"
+			"template<typename BaseType, typename ExponentType, std::enable_if_t<std::is_integral_v<ExponentType>, int> = 0>\n"
+			"inline constexpr BaseType pow(BaseType x, ExponentType n) {\n"
+			"\tif (n >= ExponentType(0)) {\n"
+			"\t\tBaseType xm = x;\n"
+			"\t\tBaseType xn = BaseType(1);\n"
+			"\t\twhile (n) {\n"
+			"\t\t\tif (n & ExponentType(1)) {\n"
+			"\t\t\t\txn *= xm;\n"
+			"\t\t\t}\n"
+			"\t\t\tn >>= ExponentType(1);\n"
+			"\t\t\tif (n) {\n"
+			"\t\t\t\txm *= xm;\n"
+			"\t\t\t}\n"
+			"\t\t}\n"
+			"\t\treturn xn;\n"
+			"\t} else {\n"
+			"\t\treturn BaseType(1) / pow(x, -n);\n"
+			"\t}\n"
+			"}\n"
+			"\n"
+			"template<auto exponent, typename BaseType = double, std::enable_if_t<std::is_integral_v<decltype(exponent)>, int> = 0>\n"
+			"inline constexpr BaseType pow(BaseType x) {\n"
+			"\treturn pow(x, exponent);\n"
+			"}\n"
+			"\n"
+			"inline constexpr intmax_t factorial(intmax_t n) {\n"
+			"\tconstexpr intmax_t zero(0);\n"
+			"\tconstexpr intmax_t one(1);\n"
+			"\tif (n > zero) {\n"
+			"\t\treturn n * factorial(n - one);\n"
+			"\t} else {\n"
+			"\t\treturn one;\n"
+			"\t}\n"
+			"}\n"
+			"\n"
+			"template<typename T, typename = void>\n"
+			"struct unwrap_type {\n"
+			"\tusing type = T;\n"
+			"};\n"
+			"\n"
+			"template<typename T>\n"
+			"struct unwrap_type<T, std::void_t<typename T::value_type>> {\n"
+			"\tusing type = typename unwrap_type<typename T::value_type>::type;\n"
+			"};\n"
+			"";
+	hppCode += "\n";
+	hppCode += "}\n";
 	hppCode += "\n";
 	hppCode += "enum class Quadrature : int {\n";
 	hppCode += "	gaussLegendre, gaussLobatto\n";
 	hppCode += "};\n";
 	hppCode += "\n";
 	hppCode += indent + "template<int D, int O>\n";
-	hppCode += indent + "constexpr int triangleSize = binco(O + D - 1, D);\n";
+	hppCode += indent + "constexpr int triangleSize = detail::binco(O + D - 1, D);\n";
 	hppCode += indent + "\n";
 	hppCode += indent + "template<int D, int O>\n";
-	hppCode += indent + "constexpr int squareSize = ipow(O, D);\n";
+	hppCode += indent + "constexpr int squareSize = detail::pow<D>(O);\n";
 	hppCode += indent + "\n";
 	int const maxOrder = 4;
 	for (int dim = 1; dim <= maxDim; dim++) {
