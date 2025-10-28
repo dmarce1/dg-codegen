@@ -1,27 +1,11 @@
-#include "Definitions.hpp"
 #include "Indent.hpp"
-#include "stateCodegen.hpp"
 #include "Util.hpp"
-#include "Symbolic.hpp"
 
-#include <algorithm>
 #include <iostream>
-#include <functional>
 #include <numeric>
-#include <map>
-#include <set>
-#include <vector>
-#include <utility>
-#include <string>
 #include <regex>
-#include <map>
 #include <set>
-#include <sstream>
-#include <iostream>
-#include <string>
-#include <regex>
-#include <sstream>
-#include <iostream>
+
 
 int elementCount(std::string const &input, std::string const &arrayName) {
 	std::regex accessRegex(R"(\b)" + arrayName + R"(\[(\d+)\])");
@@ -1204,51 +1188,6 @@ std::string genTrace(int dimensionCount, int modeCount, bool inverse) {
 
 int maxDim = 3;
 
-std::string generateA(int dimCount, int modeCount) {
-	using namespace SymEngine;
-	int nodeCount = modeCount;
-	int const inCount = ipow(nodeCount, dimCount);
-	int const outCount = binco(modeCount + dimCount - 1, dimCount);
-	std::vector<Matrix> factors;
-	for (int dim = 0; dim < dimCount; dim++) {
-		factors.push_back(transformMatrix(dimCount, modeCount, TransformDirection::forward, dim));
-	}
-//	factors[0] = matrixMultiply(massMatrix(dimCount, modeCount, true), factors[0]);
-	std::vector<SymbolicExpression> in(inCount);
-	std::vector<SymbolicExpression> out;
-	std::reverse(factors.begin(), factors.end());
-	for (int i = 0; i < inCount; i++) {
-		std::string name = "input[" + std::to_string(i) + "]";
-		in[i] = symbol(name.c_str());
-	}
-	for (int dim = 0; dim < dimCount; dim++) {
-		auto const &A = factors[dim];
-		int const n = A.size();
-		int const m = A[0].size();
-		out.resize(n);
-		for (int i = 0; i < n; i++) {
-			out[i] = real_double(A[i][0]) * in[0];
-			for (int j = 1; j < m; j++) {
-				out[i] += real_double(A[i][j]) * in[j];
-			}
-		}
-		in = std::move(out);
-	}
-	std::string code;
-	vec_pair subexprs;
-	for (int i = 0; i < outCount; i++) {
-		in[i] = expand(zeroSmallConstants(in[i]));
-	}
-	cse(subexprs, out, in);
-	factorPowersFromSubstitutions(subexprs);
-	for (int i = 0; i < int(subexprs.size()); i++) {
-		code += "T const " + toCxxCode(subexprs[i].first) + " = " + toCxxCode(subexprs[i].second) + ";\n";
-	}
-	for (int i = 0; i < outCount; i++) {
-		code += "output[" + std::to_string(i) + "] = " + toCxxCode(out[i]) + ";\n";
-	}
-	return code;
-}
 
 int main(int, char*[]) {
 	std::string hppCode;
@@ -1558,7 +1497,7 @@ int main(int, char*[]) {
 			"}\n"
 			"";
 
-	toFile(hppCode, "./generated_source/dgTransforms.hpp");
+	toFile(hppCode, "./dgTransforms.hpp");
 	getConstant.reset();
 	return 0;
 }
